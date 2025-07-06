@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { toBase20 } from '../utils/base20';
+import MayanNumeralRenderer from '../components/MayanNumeralRenderer';
 
 /**
  * HomeView is the main input view of the app.
@@ -36,6 +37,8 @@ export default function HomeView() {
         <div>
           <h3>Base-20 Digits:</h3>
           <code style={{ fontSize: '1.2rem' }}>{base20.join(' • ')}</code>
+          <h3>Mayan Numeral:</h3>
+          <MayanNumeralRenderer digits={base20} />
         </div>
       )}
 
