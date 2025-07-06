@@ -5,9 +5,11 @@ type ShellGlyphProps = {
 };
 
 export default function ShellGlyph({ x, y, scale = 1 }: ShellGlyphProps) {
+    const shellWidth = 38.87; // width of glyph - 2 * 44.5 | 38.87
+    const shellHeight = 19.75; // estimated from path range
   return (
     <g
-      transform={`translate(${x - 25 * scale}, ${y - 10 * scale}) scale(${scale})`}
+      transform={`translate(${x - (shellWidth * scale) / 2}, ${y}) scale(${scale})`}
       fill="none"
       stroke="#000"
       strokeLinecap="round"
