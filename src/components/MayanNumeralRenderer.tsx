@@ -40,7 +40,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
           const bars = Math.floor(digit / 5);
           const dots = digit % 5;
 
-          const elements: JSX.Element[] = [];
+          const elements: React.JSX.Element[] = [];
 
           // Add bars
           for (let i = 0; i < bars; i++) {
