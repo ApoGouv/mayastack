@@ -1,9 +1,12 @@
 import React from 'react';
+import DotGlyph from './glyphs/DotGlyph';
+import BarGlyph from './glyphs/BarGlyph';
+import ShellGlyph from './glyphs/ShellGlyph';
 
 type Props = {
   digits: number[]; // e.g. [6, 3] from toBase20()
   heightPerGlyph?: number; // spacing per level
-  size?: number; // dot/bar size
+  scale?: number;
 };
 
 /**
@@ -12,8 +15,8 @@ type Props = {
  */
 const MayanNumeralRenderer: React.FC<Props> = ({
   digits,
-  heightPerGlyph = 80,
-  size = 20,
+  heightPerGlyph = 100,
+  scale = 1,
 }) => {
   return (
     <svg
@@ -22,50 +25,37 @@ const MayanNumeralRenderer: React.FC<Props> = ({
       style={{ background: 'white', border: '1px solid #ccc' }}
     >
       {digits.map((digit, index) => {
-        const yOffset = index * heightPerGlyph;
+        const yOffset = index * heightPerGlyph + 10;
 
         const renderGlyphs = () => {
           if (digit === 0) {
-            return (
-              <circle
-                cx={100}
-                cy={yOffset + size}
-                r={size / 2}
-                fill="lightgray"
-                stroke="black"
-              />
-            );
+            return <ShellGlyph x={100} y={yOffset + 30} scale={scale} />;
           }
 
           const bars = Math.floor(digit / 5);
           const dots = digit % 5;
-
           const elements: React.JSX.Element[] = [];
 
-          // Add bars
+          // Bars stack from bottom upward
           for (let i = 0; i < bars; i++) {
             elements.push(
-              <rect
+              <BarGlyph
                 key={`bar-${i}`}
-                x={50}
-                y={yOffset + i * (size + 2)}
-                width={100}
-                height={size / 2}
-                fill="black"
-                rx={4}
+                x={100}
+                y={yOffset + i * (scale * 14)}
+                scale={scale}
               />
             );
           }
 
-          // Add dots (above bars)
+          // Dots stack above bars
           for (let i = 0; i < dots; i++) {
             elements.push(
-              <circle
+              <DotGlyph
                 key={`dot-${i}`}
-                cx={100}
-                cy={yOffset + bars * (size + 2) + i * (size + 2)}
-                r={size / 2.5}
-                fill="black"
+                x={100}
+                y={yOffset + bars * (scale * 14) + i * (scale * 14)}
+                scale={scale}
               />
             );
           }
