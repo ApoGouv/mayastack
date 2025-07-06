@@ -3,6 +3,12 @@ import DotGlyph from "./glyphs/DotGlyph";
 import BarGlyph from "./glyphs/BarGlyph";
 import ShellGlyph from "./glyphs/ShellGlyph";
 
+import { DOT_HEIGHT } from './glyphs/DotGlyph';
+import { BAR_HEIGHT } from './glyphs/BarGlyph';
+import { SHELL_HEIGHT } from './glyphs/ShellGlyph';
+import { BAR_VALUE } from '../constants/mayan';
+
+
 type Props = {
   digits: number[]; // e.g. [6, 3] from toBase20()
   heightPerGlyphStack?: number; // spacing per level
@@ -10,6 +16,8 @@ type Props = {
   width?: number;
   size?: number; // for dot spacing
 };
+
+const DOT_SPACING  = 2;
 
 /**
  * Renders a vertical stack of base-20 digits using Mayan numeral visuals.
@@ -36,17 +44,17 @@ const MayanNumeralRenderer: React.FC<Props> = ({
 
         const renderGlyphs = () => {
           // Number of bars and dots
-          const bars = Math.floor(digit / 5);
-          const dots = digit % 5;
+          const bars = Math.floor(digit / BAR_VALUE);
+          const dots = digit % BAR_VALUE;
 
-          const dotSpacing = size * 2;
+          const dotSpacing = size * DOT_SPACING;
           const totalDotWidth = (dots - 1) * dotSpacing;
           const dotStartX = centerX - totalDotWidth / 2;
 
           // Estimate individual heights (scaled)
-          const barHeight = scale * 8;
-          const dotHeight = scale * 14;
-          const shellHeight = scale * 19.75; // approx. from earlier
+          const barHeight = scale * BAR_HEIGHT;
+          const dotHeight = scale * DOT_HEIGHT;
+          const shellHeight = scale * SHELL_HEIGHT;
 
           // Total height of this glyph stack
           let totalGlypStackhHeight = 0;

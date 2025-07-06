@@ -4,12 +4,13 @@ type ShellGlyphProps = {
   scale?: number;
 };
 
+export const SHELL_WIDTH = 38.87; // from bounding box
+export const SHELL_HEIGHT = 19.75; // estimated max height from path
+
 export default function ShellGlyph({ x, y, scale = 1 }: ShellGlyphProps) {
-    const shellWidth = 38.87; // width of glyph - 2 * 44.5 | 38.87
-    const shellHeight = 19.75; // estimated from path range
   return (
     <g
-      transform={`translate(${x - (shellWidth * scale) / 2}, ${y}) scale(${scale})`}
+      transform={`translate(${x - (SHELL_WIDTH * scale) / 2}, ${y}) scale(${scale})`}
       fill="none"
       stroke="#000"
       strokeLinecap="round"
