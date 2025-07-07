@@ -1,12 +1,15 @@
 import React from "react";
+import { isDev } from '../utils/env';
 import DotGlyph from "./glyphs/DotGlyph";
 import BarGlyph from "./glyphs/BarGlyph";
 import ShellGlyph from "./glyphs/ShellGlyph";
 
-import { DOT_HEIGHT } from './glyphs/DotGlyph';
+import { DOT_HEIGHT, DOT_WIDTH } from './glyphs/DotGlyph';
 import { BAR_HEIGHT } from './glyphs/BarGlyph';
 import { SHELL_HEIGHT } from './glyphs/ShellGlyph';
 import { BAR_VALUE, SHELL_VALUE } from '../constants/mayan';
+
+import './MayanNumeralRenderer.css';
 
 
 type Props = {
@@ -14,7 +17,7 @@ type Props = {
   heightPerGlyphStack?: number; // spacing per level
   scale?: number;
   width?: number;
-  size?: number; // for dot spacing
+  showGrid?: boolean;
 };
 
 const DOT_SPACING  = 2;
@@ -26,18 +29,21 @@ const DOT_SPACING  = 2;
 const MayanNumeralRenderer: React.FC<Props> = ({
   digits,
   heightPerGlyphStack = 100,
-  scale = 1,
   width,
-  size = 6,
+  scale = 1,
+  showGrid = false,
 }) => {
-  const svgWidth = width ?? 200;
+
+  const gridActive = isDev && showGrid;
+
+  const svgWidth = width ?? 100;
   const centerX = svgWidth / 2;
 
   return (
     <svg
       width={svgWidth}
       height={digits.length * heightPerGlyphStack}
-      style={{ background: "white", border: "1px solid #ccc" }}
+      className={`svg-bg ${gridActive ? 'svg-grid' : ''}`}
     >
       {digits.map((digit, index) => {
         const yOffset = index * heightPerGlyphStack;
@@ -47,7 +53,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
           const bars = Math.floor(digit / BAR_VALUE);
           const dots = digit % BAR_VALUE;
 
-          const dotSpacing = size * DOT_SPACING;
+          const dotSpacing = DOT_WIDTH * DOT_SPACING;
           const totalDotWidth = (dots - 1) * dotSpacing;
           const dotStartX = centerX - totalDotWidth / 2;
 

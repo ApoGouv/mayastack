@@ -8,6 +8,8 @@ import MayanNumeralRenderer from '../components/MayanNumeralRenderer';
  */
 export default function HomeView() {
   const [input, setInput] = useState('');
+  const [showGrid, setShowGrid] = useState(true);
+
   const parsed = parseInt(input, 10);
   const isValid = !isNaN(parsed) && parsed >= 0;
 
@@ -38,7 +40,18 @@ export default function HomeView() {
           <h3>Base-20 Digits:</h3>
           <code style={{ fontSize: '1.2rem' }}>{base20.join(' • ')}</code>
           <h3>Mayan Numeral:</h3>
-          <MayanNumeralRenderer digits={base20} />
+          <label style={{
+              display: 'block',
+              margin: '8px 0'
+            }}>
+            <input
+              type="checkbox"
+              checked={showGrid}
+              onChange={() => setShowGrid(!showGrid)}
+            />
+            Show grid
+          </label>
+          <MayanNumeralRenderer digits={base20} showGrid={showGrid} />
         </div>
       )}
 
