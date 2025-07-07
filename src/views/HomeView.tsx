@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { toBase20 } from '../utils/base20';
-import MayanNumeralRenderer from '../components/MayanNumeralRenderer';
+import { toBase20 } from '@utils/base20';
+import MayanNumeralRenderer from '@components/MayanNumeralRenderer';
 
 /**
  * HomeView is the main input view of the app.

@@ -1,15 +1,12 @@
 import React from "react";
-import { isDev } from '../utils/env';
-import DotGlyph from "./glyphs/DotGlyph";
-import BarGlyph from "./glyphs/BarGlyph";
-import ShellGlyph from "./glyphs/ShellGlyph";
+import { isDev } from '@utils/env';
 
-import { DOT_HEIGHT, DOT_WIDTH } from './glyphs/DotGlyph';
-import { BAR_HEIGHT } from './glyphs/BarGlyph';
-import { SHELL_HEIGHT } from './glyphs/ShellGlyph';
-import { BAR_VALUE, SHELL_VALUE } from '../constants/mayan';
+import DotGlyph, { DOT_HEIGHT, DOT_WIDTH } from '@components/glyphs/DotGlyph';
+import BarGlyph, { BAR_HEIGHT } from '@components/glyphs/BarGlyph';
+import ShellGlyph, { SHELL_HEIGHT } from '@components/glyphs/ShellGlyph';
+import { BAR_VALUE, SHELL_VALUE } from '@constants/mayan';
 
-import './MayanNumeralRenderer.css';
+import '@components/MayanNumeralRenderer.css';
 
 
 type Props = {
