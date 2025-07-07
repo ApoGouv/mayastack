@@ -4,17 +4,21 @@ type ShellGlyphProps = {
   scale?: number;
 };
 
-export const SHELL_WIDTH = 38.87; // from bounding box
-export const SHELL_HEIGHT = 19.75; // estimated max height from path
+export const SHELL_WIDTH = 38.872;   // actual width
+export const SHELL_HEIGHT = 19.749;  // actual height
+export const SHELL_STROKE_WIDTH = 1.5;
+export const SHELL_MARGIN = 9;
+export const VISUAL_SHELL_WIDTH = SHELL_WIDTH + (SHELL_STROKE_WIDTH * 2) + SHELL_MARGIN;   // actual visual width
 
 export default function ShellGlyph({ x, y, scale = 1 }: ShellGlyphProps) {
+
   return (
     <g
-      transform={`translate(${x - (SHELL_WIDTH * scale) / 2}, ${y}) scale(${scale})`}
+      transform={`translate(${x - (VISUAL_SHELL_WIDTH * scale) / 2}, ${y}) scale(${scale})`}
       fill="none"
       stroke="#000"
       strokeLinecap="round"
-      strokeWidth={1.5}
+      strokeWidth={SHELL_STROKE_WIDTH}
     >
       <path d="m44.45 75.628a19.436 9.8745 0 0 1-19.436 9.8745 19.436 9.8745 0 0 1-19.436-9.8745 19.436 9.8745 0 0 1 19.436-9.8745 19.436 9.8745 0 0 1 19.436 9.8745z" />
       <path d="m43.55 72.678c-2.4711 4.0111-9.8462 6.9243-18.552 6.9243-8.6929 0-16.059-2.9043-18.541-6.9059" />
