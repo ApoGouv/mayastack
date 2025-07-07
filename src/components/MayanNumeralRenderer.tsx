@@ -6,7 +6,7 @@ import ShellGlyph from "./glyphs/ShellGlyph";
 import { DOT_HEIGHT } from './glyphs/DotGlyph';
 import { BAR_HEIGHT } from './glyphs/BarGlyph';
 import { SHELL_HEIGHT } from './glyphs/ShellGlyph';
-import { BAR_VALUE } from '../constants/mayan';
+import { BAR_VALUE, SHELL_VALUE } from '../constants/mayan';
 
 
 type Props = {
@@ -59,7 +59,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
           // Total height of this glyph stack
           let totalGlypStackhHeight = 0;
 
-          if (digit === 0) {
+          if (digit === SHELL_VALUE) {
             totalGlypStackhHeight = shellHeight;
           } else {
             totalGlypStackhHeight = Math.max(
@@ -71,7 +71,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
           // Adjust Y so glyph stack is bottom-aligned in its cell
           const glyphStartY = yOffset + heightPerGlyphStack - totalGlypStackhHeight;
 
-          if (digit === 0) {
+          if (digit === SHELL_VALUE) {
             return <ShellGlyph x={centerX} y={yOffset} scale={scale} />;
           }
 
