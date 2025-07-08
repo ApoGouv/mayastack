@@ -39,8 +39,18 @@ const MayanNumeralRenderer: React.FC<Props> = ({
       {digits.map((digit, index) => {
         const yOffset = index * heightPerGlyphStack;
 
+        const exponent = digits.length - index - 1;
+        const multiplier = Math.pow(20, exponent);
+        const digitBase10Value = digit * multiplier;
+
         return (
-          <g key={index}>
+          <g key={index} 
+            data-digit-index={index} 
+            data-digit-value={digit}
+            data-digit-exponent={exponent}
+            data-digit-multiplier={multiplier}
+            data-digit-base10-value={digitBase10Value}
+          >
             <GlyphStack
               digit={digit}
               x={centerX}
