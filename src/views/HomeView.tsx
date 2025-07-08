@@ -48,7 +48,7 @@ export default function HomeView() {
           <code style={{ fontSize: '1.2rem' }}>{toBase20(parsedNumber).join(' • ')}</code>
 
           <h3>Mayan Numeral:</h3>
-          <label style={{ display: 'block', margin: '8px 0' }}>
+          <label>
             <input
               type="checkbox"
               checked={showGrid}
@@ -64,7 +64,7 @@ export default function HomeView() {
       {mode === 'date' && dateParts && (
         <div>
           <h3>Date parts (base-20):</h3>
-          <label style={{ display: 'block', margin: '8px 0' }}>
+          <label>
             <input
               type="checkbox"
               checked={showGrid}
