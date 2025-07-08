@@ -1,10 +1,9 @@
 import React from "react";
-import { isDev } from '@utils/env';
+import { isDev } from "@utils/env";
 
-import GlyphStack from '@components/GlyphStack';
+import GlyphStackGroup from "@components/GlyphStackGroup";
 
-import '@components/MayanNumeralRenderer.css';
-
+import "@components/MayanNumeralRenderer.css";
 
 type Props = {
   digits: number[]; // e.g. [6, 3] from toBase20()
@@ -13,7 +12,6 @@ type Props = {
   width?: number;
   showGrid?: boolean;
 };
-
 
 /**
  * Renders a vertical stack of base-20 digits using Mayan numeral visuals.
@@ -34,33 +32,14 @@ const MayanNumeralRenderer: React.FC<Props> = ({
     <svg
       width={svgWidth}
       height={digits.length * heightPerGlyphStack}
-      className={`svg-bg ${gridActive ? 'svg-grid' : ''}`}
+      className={`svg-bg ${gridActive ? "svg-grid" : ""}`}
     >
-      {digits.map((digit, index) => {
-        const yOffset = index * heightPerGlyphStack;
-
-        const exponent = digits.length - index - 1;
-        const multiplier = Math.pow(20, exponent);
-        const digitBase10Value = digit * multiplier;
-
-        return (
-          <g key={index} 
-            data-digit-index={index} 
-            data-digit-value={digit}
-            data-digit-exponent={exponent}
-            data-digit-multiplier={multiplier}
-            data-digit-base10-value={digitBase10Value}
-          >
-            <GlyphStack
-              digit={digit}
-              x={centerX}
-              y={yOffset}
-              heightPerGlyphStack={heightPerGlyphStack}
-              scale={scale}
-            />
-          </g>
-        );
-      })}
+      <GlyphStackGroup
+        digits={digits}
+        centerX={centerX}
+        heightPerGlyphStack={heightPerGlyphStack}
+        scale={scale}
+      />
     </svg>
   );
 };
