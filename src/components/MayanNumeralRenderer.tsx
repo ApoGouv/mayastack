@@ -26,17 +26,19 @@ const MayanNumeralRenderer: React.FC<Props> = ({
 }) => {
   const gridActive = isDev && showGrid;
   const svgWidth = width ?? 100;
+  const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
 
   return (
     <svg
       width={svgWidth}
-      height={digits.length * heightPerGlyphStack}
+      height={maxHeight}
       className={`svg-bg ${gridActive ? "svg-grid" : ""}`}
     >
       <GlyphStackGroup
         digits={digits}
         centerX={centerX}
+        totalHeight={maxHeight}
         heightPerGlyphStack={heightPerGlyphStack}
         scale={scale}
       />

@@ -41,6 +41,7 @@ const MayanDateRenderer: React.FC<Props> = ({
       <GlyphStackGroup
         digits={dayDigits}
         centerX={widthPerPart / 2}
+        totalHeight={maxHeight}
         heightPerGlyphStack={heightPerGlyphStack}
         scale={scale}
       />
@@ -48,6 +49,7 @@ const MayanDateRenderer: React.FC<Props> = ({
       <GlyphStackGroup
         digits={monthDigits}
         centerX={widthPerPart + spacing + widthPerPart / 2}
+        totalHeight={maxHeight}
         heightPerGlyphStack={heightPerGlyphStack}
         scale={scale}
       />
@@ -55,6 +57,7 @@ const MayanDateRenderer: React.FC<Props> = ({
       <GlyphStackGroup
         digits={yearDigits}
         centerX={2 * (widthPerPart + spacing) + widthPerPart / 2}
+        totalHeight={maxHeight}
         heightPerGlyphStack={heightPerGlyphStack}
         scale={scale}
       />

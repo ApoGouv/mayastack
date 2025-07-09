@@ -5,6 +5,7 @@ import GlyphStack from "@components/GlyphStack";
 type GlyphStackGroupProps = {
   digits: number[];
   centerX: number;
+  totalHeight: number;
   heightPerGlyphStack: number;
   scale?: number;
 };
@@ -12,13 +13,16 @@ type GlyphStackGroupProps = {
 const GlyphStackGroup: React.FC<GlyphStackGroupProps> = ({
   digits,
   centerX,
+  totalHeight,
   heightPerGlyphStack,
   scale = 1,
 }) => {
   return (
     <>
       {digits.map((digit, index) => {
-        const yOffset = index * heightPerGlyphStack;
+        // Compute Y offset for each digit to ensure vertical bottom alignment of stacks
+        // inside the given totalHeight. Each digit stack is rendered upward from this Y.
+        const yOffset = totalHeight - (digits.length - index) * heightPerGlyphStack;
 
         const exponent = digits.length - index - 1;
         const multiplier = Math.pow(20, exponent);
