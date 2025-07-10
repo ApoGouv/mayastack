@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toBase20 } from "@utils/base20";
 import MayanNumeralRenderer from "@components/MayanNumeralRenderer";
 import MayanDateRenderer from "@components/MayanDateRenderer";
+import MayanExportPanel from "@components/MayanExportPanel";
 import RenderModeSwitcher from "@components/inputs/RenderModeSwitcher";
 import type { RenderMode } from "@components/inputs/RenderModeSwitcher";
 import NumberInput from "@components/inputs/NumberInput";
@@ -50,10 +51,11 @@ export default function HomeView() {
             Show grid
           </label>
 
-          <MayanNumeralRenderer
-            digits={toBase20(parsedNumber)}
-            showGrid={showGrid}
-          />
+          <MayanExportPanel filename={`mayan-numeral-number-${parsedNumber}`}>
+            <MayanNumeralRenderer 
+              digits={toBase20(parsedNumber)} 
+              showGrid={showGrid} />
+          </MayanExportPanel>
         </div>
       )}
 
@@ -82,7 +84,9 @@ export default function HomeView() {
           <div
             style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}
           >
-            <MayanDateRenderer dateParts={dateParts} showGrid={showGrid} />
+            <MayanExportPanel filename={`mayan-numeral-date-${dateParts?.day}-${dateParts?.month}-${dateParts?.year}`}>
+              <MayanDateRenderer dateParts={dateParts} showGrid={showGrid} />
+            </MayanExportPanel>
           </div>
         </div>
       )}
