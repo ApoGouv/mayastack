@@ -10,3 +10,18 @@ h2.react-datepicker__current-month {
 .react-datepicker__navigation-icon--next {
     left: auto;
 }
+
+.react-datepicker__close-icon {
+    height: calc(100% - 2px);
+    right: 1px;
+    top: 1px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 6px;
+}
+
+.react-datepicker__close-icon::after {
+    padding: 1px;
+    background-color: #EF5350;
+}
