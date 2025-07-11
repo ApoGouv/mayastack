@@ -2,8 +2,6 @@ import React from "react";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
 
-import "@components/MayanNumeralRenderer.css";
-
 type Props = {
   digits: number[]; // e.g. [6, 3] from toBase20()
   heightPerGlyphStack?: number; // spacing per level
@@ -29,7 +27,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
     <svg
       width={svgWidth}
       height={maxHeight}
-      className="svg-bg"
+      className="mep-svg"
     >
       <GlyphStackGroup
         digits={digits}

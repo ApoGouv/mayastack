@@ -34,6 +34,7 @@ const MayanDateRenderer: React.FC<Props> = ({
     <svg
       width={totalWidth}
       height={maxHeight}
+      viewBox={`0 0 ${totalWidth} ${maxHeight}`}
       className="svg-bg"
     >
       {/* Day */}

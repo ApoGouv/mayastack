@@ -10,3 +10,10 @@
   linear-gradient(90deg, #ddd 1px, transparent 1px);
   background-size: 20px 20px;
 }
+
+.mep-svg {
+  background: transparent;
+  width: 100%;
+  height: auto;
+  display: block;
+}
