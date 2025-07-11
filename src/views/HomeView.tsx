@@ -24,6 +24,15 @@ export default function HomeView() {
 
   const [showGrid, setShowGrid] = useState(true);
 
+  const handleNumberInputChange = (value: string) => {
+    setNumberInput(value);
+  };
+
+  const handleDateInputChange = (parsed: DateParts, raw: string) => {
+    setDateParts(parsed);
+    setDateInputRaw(raw);
+  };
+
   return (
     <div>
       <h1>🌄 Convert to Mayan Numerals</h1>
@@ -31,7 +40,7 @@ export default function HomeView() {
       <RenderModeSwitcher mode={mode} onChange={setMode} />
 
       {mode === "number" && (
-        <NumberInput value={numberInput} onChange={setNumberInput} />
+        <NumberInput value={numberInput} onChange={handleNumberInputChange} />
       )}
 
       {mode === "number" && isValidNumber && (
@@ -61,13 +70,7 @@ export default function HomeView() {
       )}
 
       {mode === "date" && (
-        <DateInput
-          value={dateInputRaw}
-          onChange={(parsed, raw) => {
-            setDateParts(parsed);
-            setDateInputRaw(raw);
-          }}
-        />
+        <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
       )}
 
       {mode === "date" && dateParts && (
