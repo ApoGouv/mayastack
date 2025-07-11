@@ -19,7 +19,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
   width,
   scale = 1,
 }) => {
-  const svgWidth = width ?? 100;
+  const svgWidth = width ?? 340;
   const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
 
@@ -27,6 +27,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
     <svg
       width={svgWidth}
       height={maxHeight}
+      viewBox={`0 0 ${svgWidth} ${maxHeight}`}
       className="mep-svg"
     >
       <GlyphStackGroup
