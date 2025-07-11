@@ -13,7 +13,11 @@ type GlyphStackProps = {
   scale?: number;
 };
 
+// Horizontal spacing between dots
 const DOT_PADDING_FACTOR = 2;
+
+// Vertical spacing between bars and dots when both are present
+const DOT_BAR_VERTICAL_SPACING = 5;
 
 const GlyphStack: React.FC<GlyphStackProps> = ({
   digit,
@@ -42,7 +46,8 @@ const GlyphStack: React.FC<GlyphStackProps> = ({
   const startY = y + heightPerGlyphStack - glyphHeight;
 
   if (digit === SHELL_VALUE) {
-    return <ShellGlyph x={x} y={y} scale={scale} />;
+    // Align shell glyph to bottom of its stack using calculated startY
+    return <ShellGlyph x={x} y={startY} scale={scale} />;
   }
 
   const elements: React.ReactElement[] = [];
@@ -59,8 +64,12 @@ const GlyphStack: React.FC<GlyphStackProps> = ({
     );
   }
 
-  // Dots sit above the bars
-  const dotsY = startY - dotHeight;
+  // Dots sit above bars, add spacing between bars and dots
+  const dotsY =
+  bars > 0 && dots > 0
+    ? startY - dotHeight - DOT_BAR_VERTICAL_SPACING
+    : startY - dotHeight;
+
   for (let i = 0; i < dots; i++) {
     elements.push(
       <DotGlyph

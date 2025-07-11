@@ -9,12 +9,13 @@ export const SHELL_HEIGHT = 19.749;  // actual height
 export const SHELL_STROKE_WIDTH = 1.5;
 export const SHELL_MARGIN = 9;
 export const VISUAL_SHELL_WIDTH = SHELL_WIDTH + (SHELL_STROKE_WIDTH * 2) + SHELL_MARGIN;   // actual visual width
+export const SHELL_VISUAL_Y_OFFSET = 72.678; // This is the starting Y of the <path>
 
 export default function ShellGlyph({ x, y, scale = 1 }: ShellGlyphProps) {
 
   return (
     <g
-      transform={`translate(${x - (VISUAL_SHELL_WIDTH * scale) / 2}, ${y}) scale(${scale})`}
+      transform={`translate(${x - (VISUAL_SHELL_WIDTH * scale) / 2}, ${y - SHELL_VISUAL_Y_OFFSET}) scale(${scale})`}
       fill="none"
       stroke="#000"
       strokeLinecap="round"
