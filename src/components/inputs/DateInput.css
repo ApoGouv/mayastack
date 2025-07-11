@@ -1,0 +1,12 @@
+
+h2.react-datepicker__current-month {
+    height: calc(32px - 4px);
+}
+
+.react-datepicker__navigation-icon--previous {
+    right: auto;
+}
+
+.react-datepicker__navigation-icon--next {
+    left: auto;
+}
