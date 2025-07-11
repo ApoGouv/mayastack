@@ -17,7 +17,6 @@ const MayanDateRenderer: React.FC<Props> = ({
   heightPerGlyphStack = 100,
   scale = 1,
   widthPerPart = 100,
-  showGrid = false,
 }) => {
   if (!dateParts) return null;
 
@@ -35,7 +34,7 @@ const MayanDateRenderer: React.FC<Props> = ({
     <svg
       width={totalWidth}
       height={maxHeight}
-      className={`svg-bg ${showGrid ? "svg-grid" : ""}`}
+      className="svg-bg"
     >
       {/* Day */}
       <GlyphStackGroup

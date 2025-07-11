@@ -51,10 +51,11 @@ export default function HomeView() {
             Show grid
           </label>
 
-          <MayanExportPanel filename={`mayan-numeral-number-${parsedNumber}`}>
-            <MayanNumeralRenderer 
-              digits={toBase20(parsedNumber)} 
-              showGrid={showGrid} />
+          <MayanExportPanel
+            filename={`mayan-numeral-number-${parsedNumber}`}
+            showGrid={showGrid}
+          >
+            <MayanNumeralRenderer digits={toBase20(parsedNumber)} />
           </MayanExportPanel>
         </div>
       )}
@@ -84,8 +85,11 @@ export default function HomeView() {
           <div
             style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}
           >
-            <MayanExportPanel filename={`mayan-numeral-date-${dateParts?.day}-${dateParts?.month}-${dateParts?.year}`}>
-              <MayanDateRenderer dateParts={dateParts} showGrid={showGrid} />
+            <MayanExportPanel
+              filename={`mayan-numeral-date-${dateParts?.day}-${dateParts?.month}-${dateParts?.year}`}
+              showGrid={showGrid}
+            >
+              <MayanDateRenderer dateParts={dateParts} />
             </MayanExportPanel>
           </div>
         </div>

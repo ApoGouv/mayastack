@@ -1,0 +1,12 @@
+.mep-svg-wrapper {
+  display: inline-block;
+  padding: 0.625rem;
+  background-color: white;
+}
+
+.mep-grid {
+  background-image: 
+  linear-gradient(#ddd 1px, transparent 1px),
+  linear-gradient(90deg, #ddd 1px, transparent 1px);
+  background-size: 20px 20px;
+}

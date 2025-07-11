@@ -1,5 +1,4 @@
 import React from "react";
-import { isDev } from "@utils/env";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
 
@@ -10,7 +9,6 @@ type Props = {
   heightPerGlyphStack?: number; // spacing per level
   scale?: number;
   width?: number;
-  showGrid?: boolean;
 };
 
 /**
@@ -22,9 +20,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
   heightPerGlyphStack = 100,
   width,
   scale = 1,
-  showGrid = false,
 }) => {
-  const gridActive = isDev && showGrid;
   const svgWidth = width ?? 100;
   const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
@@ -33,7 +29,7 @@ const MayanNumeralRenderer: React.FC<Props> = ({
     <svg
       width={svgWidth}
       height={maxHeight}
-      className={`svg-bg ${gridActive ? "svg-grid" : ""}`}
+      className="svg-bg"
     >
       <GlyphStackGroup
         digits={digits}

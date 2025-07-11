@@ -1,5 +1,8 @@
 import React, { useRef } from 'react';
 import { toPng, toSvg } from 'html-to-image';
+import { isDev } from "@utils/env";
+
+import "@components/MayanExportPanel.css";
 
 type ExportFormat = 'png' | 'svg';
 
@@ -7,14 +10,17 @@ type Props = {
   children: React.ReactNode;
   filename?: string;
   formats?: ExportFormat[];
+  showGrid?: boolean;
 };
 
 const MayanExportPanel: React.FC<Props> = ({
   children,
   filename = 'mayan-numeral',
   formats = ['png', 'svg'],
+  showGrid = false,
 }) => {
   const exportRef = useRef<HTMLDivElement>(null);
+  const gridActive = isDev && showGrid;
 
   const handleExport = async (format: ExportFormat) => {
     if (!exportRef.current) return;
@@ -38,7 +44,7 @@ const MayanExportPanel: React.FC<Props> = ({
       <div
         ref={exportRef}
         data-exportable
-        style={{ display: 'inline-block', padding: '1rem', background: 'white' }}
+        className={`mep-svg-wrapper ${gridActive ? "mep-grid" : ""}`}
       >
         {children}
       </div>
