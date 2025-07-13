@@ -1,6 +1,8 @@
 import React from "react";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
+import { useColorContext } from "@/context/ColorContext";
+import { rgbaToCss } from "@utils/colors";
 
 type Props = {
   digits: number[]; // e.g. [6, 3] from toBase20()
@@ -23,12 +25,15 @@ const MayanNumeralRenderer: React.FC<Props> = ({
   const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
 
+  const { glyphColor } = useColorContext();
+
   return (
     <svg
       width={svgWidth}
       height={maxHeight}
       viewBox={`0 0 ${svgWidth} ${maxHeight}`}
       className="mep-svg"
+      style={{ color: rgbaToCss(glyphColor) }}
     >
       <GlyphStackGroup
         digits={digits}

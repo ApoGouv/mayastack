@@ -6,10 +6,10 @@ import MayanExportPanel from "@components/MayanExportPanel";
 import RenderModeSwitcher from "@components/inputs/RenderModeSwitcher";
 import type { RenderMode } from "@components/inputs/RenderModeSwitcher";
 import ColorPicker from "@components/inputs/ColorPicker";
-import type { RgbaColor } from "@components/inputs/ColorPicker";
 import NumberInput from "@components/inputs/NumberInput";
 import DateInput from "@components/inputs/DateInput";
 import type { DateParts } from "@components/inputs/DateInput";
+import { useColorContext } from "@context/ColorContext";
 
 /**
  * HomeView is the main input view of the app.
@@ -26,12 +26,13 @@ export default function HomeView() {
 
   const [showGrid, setShowGrid] = useState(true);
 
-  const [bgColor, setBgColor] = useState<RgbaColor>({
-    r: 255,
-    g: 255,
-    b: 255,
-    a: 1,
-  });
+  // 🎨 Use centralized color context
+  const {
+    backgroundColor,
+    setBackgroundColor,
+    glyphColor,
+    setGlyphColor,
+  } = useColorContext();
 
   const handleNumberInputChange = (value: string) => {
     setNumberInput(value);
@@ -52,12 +53,26 @@ export default function HomeView() {
         <NumberInput value={numberInput} onChange={handleNumberInputChange} />
       )}
 
+      {/* Color controls */}
       {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "1rem" }}>
+        <div 
+          style={{ 
+            display: "flex", 
+            gap: "1rem", 
+            alignItems: "center", 
+            marginBottom: "1rem" 
+          }}
+        >
           <ColorPicker
             label="Background color:"
-            value={bgColor}
-            onChange={setBgColor}
+            value={backgroundColor}
+            onChange={setBackgroundColor}
+            showValue={false}
+          />
+          <ColorPicker
+            label="Glyph color:"
+            value={glyphColor}
+            onChange={setGlyphColor}
             showValue={false}
           />
         </div>
@@ -83,7 +98,6 @@ export default function HomeView() {
           <MayanExportPanel
             filename={`mayan-numeral-number-${parsedNumber}`}
             showGrid={showGrid}
-            backgroundColor={`rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, ${bgColor.a})`}
           >
             <MayanNumeralRenderer digits={toBase20(parsedNumber)} />
           </MayanExportPanel>
@@ -112,7 +126,6 @@ export default function HomeView() {
             <MayanExportPanel
               filename={`mayan-numeral-date-${dateParts?.day}-${dateParts?.month}-${dateParts?.year}`}
               showGrid={showGrid}
-              backgroundColor={`rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, ${bgColor.a})`}
             >
               <MayanDateRenderer dateParts={dateParts} />
             </MayanExportPanel>

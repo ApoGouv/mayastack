@@ -1,5 +1,7 @@
 import React, { useRef } from 'react';
 import { toPng, toSvg } from 'html-to-image';
+import { useColorContext } from "@/context/ColorContext";
+import { rgbaToCss } from "@utils/colors";
 import { isDev } from "@utils/env";
 
 import "@components/MayanExportPanel.css";
@@ -11,18 +13,19 @@ type Props = {
   filename?: string;
   formats?: ExportFormat[];
   showGrid?: boolean;
-  backgroundColor?: string;
 };
+
 
 const MayanExportPanel: React.FC<Props> = ({
   children,
   filename = 'mayan-numeral',
   formats = ['png', 'svg'],
   showGrid = false,
-  backgroundColor = 'rgba(255, 255, 255, 1)', // Default to white
 }) => {
   const exportRef = useRef<HTMLDivElement>(null);
   const gridActive = isDev && showGrid;
+
+  const { backgroundColor } = useColorContext();
 
   const handleExport = async (format: ExportFormat) => {
     if (!exportRef.current) return;
@@ -47,7 +50,7 @@ const MayanExportPanel: React.FC<Props> = ({
         ref={exportRef}
         data-exportable
         className={`mep-svg-wrapper ${gridActive ? "mep-grid" : ""}`}
-        style={{ backgroundColor: backgroundColor }}
+        style={{ backgroundColor: rgbaToCss(backgroundColor) }}
       >
         {children}
       </div>

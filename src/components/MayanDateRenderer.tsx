@@ -1,8 +1,11 @@
 import React from "react";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
-import { toBase20 } from "@utils/base20";
 import type { DateParts } from "@components/inputs/DateInput";
+import { useColorContext } from "@/context/ColorContext";
+import { rgbaToCss } from "@utils/colors";
+import { toBase20 } from "@utils/base20";
+
 
 type Props = {
   dateParts: DateParts;
@@ -24,6 +27,8 @@ const MayanDateRenderer: React.FC<Props> = ({
   const monthDigits = toBase20(dateParts.month);
   const yearDigits = toBase20(dateParts.year);
 
+  const { glyphColor } = useColorContext();
+
   const spacing = 20;
   const totalWidth = widthPerPart * 3 + spacing * 2;
   const maxHeight =
@@ -36,6 +41,7 @@ const MayanDateRenderer: React.FC<Props> = ({
       height={maxHeight}
       viewBox={`0 0 ${totalWidth} ${maxHeight}`}
       className="mep-svg"
+      style={{ color: rgbaToCss(glyphColor) }}
     >
       {/* Day */}
       <GlyphStackGroup
