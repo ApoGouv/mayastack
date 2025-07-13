@@ -11,6 +11,7 @@ type Props = {
   filename?: string;
   formats?: ExportFormat[];
   showGrid?: boolean;
+  backgroundColor?: string;
 };
 
 const MayanExportPanel: React.FC<Props> = ({
@@ -18,6 +19,7 @@ const MayanExportPanel: React.FC<Props> = ({
   filename = 'mayan-numeral',
   formats = ['png', 'svg'],
   showGrid = false,
+  backgroundColor = 'rgba(255, 255, 255, 1)', // Default to white
 }) => {
   const exportRef = useRef<HTMLDivElement>(null);
   const gridActive = isDev && showGrid;
@@ -45,6 +47,7 @@ const MayanExportPanel: React.FC<Props> = ({
         ref={exportRef}
         data-exportable
         className={`mep-svg-wrapper ${gridActive ? "mep-grid" : ""}`}
+        style={{ backgroundColor: backgroundColor }}
       >
         {children}
       </div>

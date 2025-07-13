@@ -5,6 +5,8 @@ import MayanDateRenderer from "@components/MayanDateRenderer";
 import MayanExportPanel from "@components/MayanExportPanel";
 import RenderModeSwitcher from "@components/inputs/RenderModeSwitcher";
 import type { RenderMode } from "@components/inputs/RenderModeSwitcher";
+import ColorPicker from "@components/inputs/ColorPicker";
+import type { RgbaColor } from "@components/inputs/ColorPicker";
 import NumberInput from "@components/inputs/NumberInput";
 import DateInput from "@components/inputs/DateInput";
 import type { DateParts } from "@components/inputs/DateInput";
@@ -24,6 +26,13 @@ export default function HomeView() {
 
   const [showGrid, setShowGrid] = useState(true);
 
+  const [bgColor, setBgColor] = useState<RgbaColor>({
+    r: 255,
+    g: 255,
+    b: 255,
+    a: 1,
+  });
+
   const handleNumberInputChange = (value: string) => {
     setNumberInput(value);
   };
@@ -41,6 +50,17 @@ export default function HomeView() {
 
       {mode === "number" && (
         <NumberInput value={numberInput} onChange={handleNumberInputChange} />
+      )}
+
+      {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "1rem" }}>
+          <ColorPicker
+            label="Background color:"
+            value={bgColor}
+            onChange={setBgColor}
+            showValue={false}
+          />
+        </div>
       )}
 
       {mode === "number" && isValidNumber && (
@@ -63,6 +83,7 @@ export default function HomeView() {
           <MayanExportPanel
             filename={`mayan-numeral-number-${parsedNumber}`}
             showGrid={showGrid}
+            backgroundColor={`rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, ${bgColor.a})`}
           >
             <MayanNumeralRenderer digits={toBase20(parsedNumber)} />
           </MayanExportPanel>
@@ -91,6 +112,7 @@ export default function HomeView() {
             <MayanExportPanel
               filename={`mayan-numeral-date-${dateParts?.day}-${dateParts?.month}-${dateParts?.year}`}
               showGrid={showGrid}
+              backgroundColor={`rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, ${bgColor.a})`}
             >
               <MayanDateRenderer dateParts={dateParts} />
             </MayanExportPanel>
