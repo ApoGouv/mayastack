@@ -1,8 +1,8 @@
-type BarGlyphProps = {
+interface BarGlyphProps {
   x: number;
   y: number;
   scale?: number;
-};
+}
 
 export const BAR_HEIGHT = 8;
 export const BAR_WIDTH = 44; // match the <path> length

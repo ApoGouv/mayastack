@@ -7,15 +7,15 @@ import { rgbaToCss } from "@utils/colors";
 import { toBase20 } from "@utils/base20";
 
 
-type Props = {
+interface MayanDateRendererProps {
   dateParts: DateParts;
   heightPerGlyphStack?: number;
   scale?: number;
   widthPerPart?: number;
   showGrid?: boolean;
-};
+}
 
-const MayanDateRenderer: React.FC<Props> = ({
+const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
   dateParts,
   heightPerGlyphStack = 100,
   scale = 1,

@@ -1,8 +1,8 @@
-type ShellGlyphProps = {
+interface ShellGlyphProps {
   x: number;
   y: number;
   scale?: number;
-};
+}
 
 export const SHELL_WIDTH = 38.872;   // actual width
 export const SHELL_HEIGHT = 19.749;  // actual height

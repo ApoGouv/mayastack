@@ -8,15 +8,15 @@ import "@components/MayanExportPanel.css";
 
 type ExportFormat = 'png' | 'svg';
 
-type Props = {
+interface MayanExportPanelProps {
   children: React.ReactNode;
   filename?: string;
   formats?: ExportFormat[];
   showGrid?: boolean;
-};
+}
 
 
-const MayanExportPanel: React.FC<Props> = ({
+const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   children,
   filename = 'mayan-numeral',
   formats = ['png', 'svg'],

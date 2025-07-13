@@ -5,13 +5,13 @@ import BarGlyph, { BAR_HEIGHT } from '@components/glyphs/BarGlyph';
 import ShellGlyph, { SHELL_HEIGHT } from '@components/glyphs/ShellGlyph';
 import { BAR_VALUE, SHELL_VALUE } from '@constants/mayan';
 
-type GlyphStackProps = {
+interface GlyphStackProps {
   digit: number;
   x: number; // horizontal center of the glyph stack
   y: number; // top Y coordinate of the glyph stack "cell"
   heightPerGlyphStack?: number; // for bottom alignment
   scale?: number;
-};
+}
 
 // Horizontal spacing between dots
 const DOT_PADDING_FACTOR = 2;

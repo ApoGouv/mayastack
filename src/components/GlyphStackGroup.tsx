@@ -2,13 +2,13 @@ import React from "react";
 
 import GlyphStack from "@components/GlyphStack";
 
-type GlyphStackGroupProps = {
+interface GlyphStackGroupProps {
   digits: number[];
   centerX: number;
   totalHeight: number;
   heightPerGlyphStack: number;
   scale?: number;
-};
+}
 
 const GlyphStackGroup: React.FC<GlyphStackGroupProps> = ({
   digits,

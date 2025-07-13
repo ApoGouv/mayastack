@@ -4,18 +4,18 @@ import GlyphStackGroup from "@components/GlyphStackGroup";
 import { useColorContext } from "@/context/ColorContext";
 import { rgbaToCss } from "@utils/colors";
 
-type Props = {
+interface MayanNumeralRendererProps {
   digits: number[]; // e.g. [6, 3] from toBase20()
   heightPerGlyphStack?: number; // spacing per level
   scale?: number;
   width?: number;
-};
+}
 
 /**
  * Renders a vertical stack of base-20 digits using Mayan numeral visuals.
  * Dots represent 1, bars represent 5, and a shell (🯰 or ⛶ or circle) represents 0.
  */
-const MayanNumeralRenderer: React.FC<Props> = ({
+const MayanNumeralRenderer: React.FC<MayanNumeralRendererProps> = ({
   digits,
   heightPerGlyphStack = 100,
   width,
