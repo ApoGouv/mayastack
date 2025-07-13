@@ -17,7 +17,7 @@ export default function ShellGlyph({ x, y, scale = 1 }: ShellGlyphProps) {
     <g
       transform={`translate(${x - (VISUAL_SHELL_WIDTH * scale) / 2}, ${y - SHELL_VISUAL_Y_OFFSET}) scale(${scale})`}
       fill="none"
-      stroke="#000"
+      stroke="currentColor"
       strokeLinecap="round"
       strokeWidth={SHELL_STROKE_WIDTH}
     >

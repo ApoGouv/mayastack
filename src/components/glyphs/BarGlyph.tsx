@@ -11,7 +11,7 @@ export default function BarGlyph({ x, y, scale = 1 }: BarGlyphProps) {
   return (
     <path
       d={`M${x - (BAR_WIDTH / 2) * scale} ${y} H${x + (BAR_WIDTH / 2) * scale}`}
-      stroke="#000"
+      stroke="currentColor"
       strokeWidth={6 * scale}
     />
   );
