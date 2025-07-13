@@ -7,6 +7,7 @@ import RenderModeSwitcher from "@components/inputs/RenderModeSwitcher";
 import type { RenderMode } from "@components/inputs/RenderModeSwitcher";
 import ColorPicker from "@components/inputs/ColorPicker";
 import NumberInput from "@components/inputs/NumberInput";
+import ShowGridToggle from "@components/inputs/ShowGridToggle";
 import DateInput from "@components/inputs/DateInput";
 import type { DateParts } from "@components/inputs/DateInput";
 import { useColorContext } from "@context/ColorContext";
@@ -75,6 +76,7 @@ export default function HomeView() {
             onChange={setGlyphColor}
             showValue={false}
           />
+          <ShowGridToggle value={showGrid} onChange={setShowGrid} />
         </div>
       )}
 
@@ -86,14 +88,6 @@ export default function HomeView() {
           </code>
 
           <h3>Mayan Numeral:</h3>
-          <label>
-            <input
-              type="checkbox"
-              checked={showGrid}
-              onChange={() => setShowGrid(!showGrid)}
-            />
-            Show grid
-          </label>
 
           <MayanExportPanel
             filename={`mayan-numeral-number-${parsedNumber}`}
@@ -110,15 +104,11 @@ export default function HomeView() {
 
       {mode === "date" && dateParts && (
         <div>
-          <h3>Date parts (base-20):</h3>
-          <label>
-            <input
-              type="checkbox"
-              checked={showGrid}
-              onChange={() => setShowGrid(!showGrid)}
-            />
-            Show grid
-          </label>
+          <h3>Base-20 Date parts:</h3>
+          <code style={{ fontSize: "1.2rem" }}>
+            {toBase20(dateParts?.day).join(" • ")} | {toBase20(dateParts?.month).join(" • ")} | {toBase20(dateParts?.year).join(" • ")}
+          </code>
+          <h3>Mayan Numeral Date:</h3>
 
           <div
             style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}
