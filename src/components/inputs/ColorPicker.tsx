@@ -1,14 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { RgbaColorPicker } from "react-colorful";
 
-import "@components/inputs/ColorPicker.css";
+import type { RgbaColor } from "@/types/colors";
 
-export type RgbaColor = {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-};
+import "@components/inputs/ColorPicker.css";
 
 interface ColorPickerProps {
   label?: string;
