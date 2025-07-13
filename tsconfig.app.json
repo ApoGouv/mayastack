@@ -30,6 +30,7 @@
       "@constants/*": ["src/constants/*"],
       "@utils/*": ["src/utils/*"],
       "@views/*": ["src/views/*"],
+      "@context/*": ["src/context/*"],
     }
   },
   "include": ["src"]

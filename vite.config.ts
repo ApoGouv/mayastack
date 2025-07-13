@@ -12,6 +12,7 @@ export default defineConfig({
       '@constants': path.resolve(__dirname, 'src/constants'),
       '@utils': path.resolve(__dirname, 'src/utils'),
       '@views': path.resolve(__dirname, 'src/views'),
+      '@context': path.resolve(__dirname, 'src/context'),
     },
   },
 });
