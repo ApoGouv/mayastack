@@ -45,25 +45,26 @@ export default function HomeView() {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold">🌄 Convert to Mayan Numerals</h1>
+    <div className="space-y-6">
+      <h1 className="text-3xl sm:text-4xl font-bold text-ms-brand-500">
+        🌄 Convert to Mayan Numerals
+      </h1>
 
+      {/* Mode Switcher */}
       <RenderModeSwitcher mode={mode} onChange={setMode} />
 
+      {/* Input based on mode */}
       {mode === "number" && (
         <NumberInput value={numberInput} onChange={handleNumberInputChange} />
       )}
 
-      {/* Color controls */}
+      {mode === "date" && (
+        <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
+      )}
+
+      {/* Color Pickers + Show Grid Toggle */}
       {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
-        <div 
-          style={{ 
-            display: "flex", 
-            gap: "1rem", 
-            alignItems: "center", 
-            marginBottom: "1rem" 
-          }}
-        >
+        <div className="flex flex-wrap items-center gap-4">
           <ColorPicker
             label="Background color:"
             value={backgroundColor}
@@ -80,45 +81,50 @@ export default function HomeView() {
         </div>
       )}
 
+      {/* Number Mode Output */}
       {mode === "number" && isValidNumber && (
-        <div>
-          <h3>Base-20 Digits:</h3>
-          <code style={{ fontSize: "1.2rem" }}>
-            {toBase20(parsedNumber).join(" • ")}
-          </code>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Base-20 Digits</h3>
+            <code className="text-sm sm:text-base block p-2 bg-gray-100 dark:bg-gray-800 rounded">
+              {toBase20(parsedNumber).join(" • ")}
+            </code>
+          </div>
 
-          <h3>Mayan Numeral:</h3>
-
-          <MayanExportPanel
-            filename={`mayan-numeral-number-${parsedNumber}`}
-            showGrid={showGrid}
-          >
-            <MayanNumeralRenderer digits={toBase20(parsedNumber)} />
-          </MayanExportPanel>
+          <div>
+            <h3 className="text-lg font-semibold">Mayan Numeral</h3>
+            <MayanExportPanel
+              filename={`mayan-numeral-number-${parsedNumber}`}
+              showGrid={showGrid}
+            >
+              <MayanNumeralRenderer digits={toBase20(parsedNumber)} />
+            </MayanExportPanel>
+          </div>
         </div>
       )}
 
-      {mode === "date" && (
-        <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
-      )}
-
+      {/* Date Mode Output */}
       {mode === "date" && dateParts && (
-        <div>
-          <h3>Base-20 Date parts:</h3>
-          <code style={{ fontSize: "1.2rem" }}>
-            {toBase20(dateParts?.day).join(" • ")} | {toBase20(dateParts?.month).join(" • ")} | {toBase20(dateParts?.year).join(" • ")}
-          </code>
-          <h3>Mayan Numeral Date:</h3>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Base-20 Date Parts</h3>
+            <code className="text-sm sm:text-base block p-2 bg-gray-100 dark:bg-gray-800 rounded">
+              {toBase20(dateParts.day).join(" • ")} |{" "}
+              {toBase20(dateParts.month).join(" • ")} |{" "}
+              {toBase20(dateParts.year).join(" • ")}
+            </code>
+          </div>
 
-          <div
-            style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}
-          >
-            <MayanExportPanel
-              filename={`mayan-numeral-date-${dateParts?.day}-${dateParts?.month}-${dateParts?.year}`}
-              showGrid={showGrid}
-            >
-              <MayanDateRenderer dateParts={dateParts} />
-            </MayanExportPanel>
+          <div>
+            <h3 className="text-lg font-semibold">Mayan Numeral Date</h3>
+            <div className="flex flex-wrap gap-4">
+              <MayanExportPanel
+                filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
+                showGrid={showGrid}
+              >
+                <MayanDateRenderer dateParts={dateParts} />
+              </MayanExportPanel>
+            </div>
           </div>
         </div>
       )}
