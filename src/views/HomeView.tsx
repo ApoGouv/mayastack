@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toBase20 } from "@utils/base20";
+import { toBase20, toBase20String } from "@utils/base20";
 import MayanNumeralRenderer from "@components/MayanNumeralRenderer";
 import MayanDateRenderer from "@components/MayanDateRenderer";
 import MayanExportPanel from "@components/MayanExportPanel";
@@ -21,6 +21,9 @@ export default function HomeView() {
   const [numberInput, setNumberInput] = useState("");
   const parsedNumber = parseInt(numberInput, 10);
   const isValidNumber = !isNaN(parsedNumber) && parsedNumber >= 0;
+
+  // Store the parsed digits once
+  const base20Digits = isValidNumber ? toBase20(parsedNumber) : [];
 
   const [dateInputRaw, setDateInputRaw] = useState("");
   const [dateParts, setDateParts] = useState<DateParts>(null);
@@ -84,11 +87,33 @@ export default function HomeView() {
       {/* Number Mode Output */}
       {mode === "number" && isValidNumber && (
         <div className="space-y-4">
+
+          {/* Base-20 Digits */}
           <div>
-            <h3 className="text-lg font-semibold">Base-20 Digits</h3>
-            <code className="text-sm sm:text-base block p-2 bg-gray-100 dark:bg-gray-800 rounded">
-              {toBase20(parsedNumber).join(" • ")}
-            </code>
+            <h3 className="text-lg font-semibold">Base-20 Representation</h3>
+             <div className="flex flex-col sm:flex-row gap-4">
+                {/* Notation Form */}
+                <div className="flex-1 max-w-sm">
+                  <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Notation</div>
+                  <code
+                    className="block text-sm sm:text-base p-3 rounded bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    dangerouslySetInnerHTML={{
+                      __html: toBase20String(base20Digits, 'notation'),
+                    }}
+                  />
+                </div>
+
+                {/* Expanded Form */}
+                <div className="flex-1 max-w-sm">
+                  <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Expanded</div>
+                  <code
+                    className="block text-sm sm:text-base p-3 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                    dangerouslySetInnerHTML={{
+                      __html: toBase20String(base20Digits, 'expanded'),
+                    }}
+                  />
+                </div>
+              </div>
           </div>
 
           <div>
@@ -97,7 +122,7 @@ export default function HomeView() {
               filename={`mayan-numeral-number-${parsedNumber}`}
               showGrid={showGrid}
             >
-              <MayanNumeralRenderer digits={toBase20(parsedNumber)} />
+              <MayanNumeralRenderer digits={base20Digits} />
             </MayanExportPanel>
           </div>
         </div>
