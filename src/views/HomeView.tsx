@@ -46,7 +46,7 @@ export default function HomeView() {
 
   return (
     <div>
-      <h1>🌄 Convert to Mayan Numerals</h1>
+      <h1 className="text-3xl font-bold">🌄 Convert to Mayan Numerals</h1>
 
       <RenderModeSwitcher mode={mode} onChange={setMode} />
 
