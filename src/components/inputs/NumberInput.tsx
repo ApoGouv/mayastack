@@ -13,7 +13,7 @@ const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder 
   };
 
   return (
-    <div className="relative flex items-center max-w-xs w-full">
+    <div className="relative flex items-center max-w-sm w-full">
       <input
         type="number"
         value={value}
