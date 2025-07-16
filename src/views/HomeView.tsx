@@ -67,21 +67,26 @@ export default function HomeView() {
 
       {/* Color Pickers + Show Grid Toggle */}
       {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
-        <div className="flex flex-wrap items-center gap-4">
-          <ColorPicker
-            label="Background color:"
-            value={backgroundColor}
-            onChange={setBackgroundColor}
-            showValue={false}
-          />
-          <ColorPicker
-            label="Glyph color:"
-            value={glyphColor}
-            onChange={setGlyphColor}
-            showValue={false}
-          />
-          <ShowGridToggle value={showGrid} onChange={setShowGrid} />
-        </div>
+        <fieldset className="border border-gray-300 dark:border-gray-700 rounded-md p-4 space-y-4 max-w-3xl w-full">
+          <legend className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-2">
+            SVG Display Settings
+          </legend>
+          <div className="flex flex-wrap items-center gap-4">
+            <ColorPicker
+              label="Background color:"
+              value={backgroundColor}
+              onChange={setBackgroundColor}
+              showValue={false}
+            />
+            <ColorPicker
+              label="Glyph color:"
+              value={glyphColor}
+              onChange={setGlyphColor}
+              showValue={false}
+            />
+            <ShowGridToggle value={showGrid} onChange={setShowGrid} />
+          </div>
+        </fieldset>
       )}
 
       {/* Number Mode Output */}
