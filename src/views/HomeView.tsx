@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { toBase20, toBase20String } from "@utils/base20";
+import { toBase20 } from "@utils/base20";
 import MayanNumeralRenderer from "@components/MayanNumeralRenderer";
 import MayanDateRenderer from "@components/MayanDateRenderer";
 import MayanExportPanel from "@components/MayanExportPanel";
+import Base20Display from "@components/Base20Display";
 import RenderModeSwitcher from "@components/inputs/RenderModeSwitcher";
 import type { RenderMode } from "@components/inputs/RenderModeSwitcher";
 import ColorPicker from "@components/inputs/ColorPicker";
@@ -94,31 +95,9 @@ export default function HomeView() {
         <div className="space-y-4">
 
           {/* Base-20 Digits */}
-          <div>
-            <h3 className="text-lg font-semibold">Base-20 Representation</h3>
-             <div className="flex flex-col sm:flex-row gap-4">
-                {/* Notation Form */}
-                <div className="flex-1 max-w-sm">
-                  <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Notation</div>
-                  <code
-                    className="block text-sm sm:text-base p-3 rounded bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    dangerouslySetInnerHTML={{
-                      __html: toBase20String(base20Digits, 'notation'),
-                    }}
-                  />
-                </div>
-
-                {/* Expanded Form */}
-                <div className="flex-1 max-w-sm">
-                  <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Expanded</div>
-                  <code
-                    className="block text-sm sm:text-base p-3 rounded bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                    dangerouslySetInnerHTML={{
-                      __html: toBase20String(base20Digits, 'expanded'),
-                    }}
-                  />
-                </div>
-              </div>
+          <div className="max-w-3xl w-full space-y-2">
+            <h3 className="text-lg font-semibold">Input to Base-20 Representation</h3>
+            <Base20Display label="Number" digits={base20Digits} />
           </div>
 
           <div>
@@ -136,13 +115,13 @@ export default function HomeView() {
       {/* Date Mode Output */}
       {mode === "date" && dateParts && (
         <div className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold">Base-20 Date Parts</h3>
-            <code className="text-sm sm:text-base block p-2 bg-gray-100 dark:bg-gray-800 rounded">
-              {toBase20(dateParts.day).join(" • ")} |{" "}
-              {toBase20(dateParts.month).join(" • ")} |{" "}
-              {toBase20(dateParts.year).join(" • ")}
-            </code>
+          <div className="max-w-3xl w-full space-y-2">
+            <h3 className="text-lg font-semibold">Input to Base-20 Representation</h3>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <Base20Display label="Day" digits={toBase20(dateParts.day)} />
+              <Base20Display label="Month" digits={toBase20(dateParts.month)} />
+              <Base20Display label="Year" digits={toBase20(dateParts.year)} />
+            </div>
           </div>
 
           <div>
