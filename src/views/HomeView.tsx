@@ -100,14 +100,22 @@ export default function HomeView() {
             <Base20Display label="Number" digits={base20Digits} />
           </div>
 
-          <div>
+          <div className="max-w-3xl w-full space-y-2">
             <h3 className="text-lg font-semibold">Mayan Numeral</h3>
+            <div className="flex flex-wrap gap-4">
             <MayanExportPanel
               filename={`mayan-numeral-number-${parsedNumber}`}
               showGrid={showGrid}
             >
-              <MayanNumeralRenderer digits={base20Digits} />
+              {(ref, gridActive) => (
+                <MayanNumeralRenderer 
+                  digits={base20Digits} 
+                  exportRef={ref} 
+                  showGrid={gridActive}
+                />
+              )}
             </MayanExportPanel>
+            </div>
           </div>
         </div>
       )}
@@ -131,7 +139,7 @@ export default function HomeView() {
                 filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
                 showGrid={showGrid}
               >
-                <MayanDateRenderer dateParts={dateParts} />
+                {(ref) => <MayanDateRenderer dateParts={dateParts} exportRef={ref} />}
               </MayanExportPanel>
             </div>
           </div>

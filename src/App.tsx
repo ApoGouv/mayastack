@@ -1,4 +1,5 @@
 import { Outlet, Link } from "react-router-dom";
+import { Toaster } from 'react-hot-toast';
 import Logo from "@components/icons/Logo";
 
 export default function App() {
@@ -38,6 +39,11 @@ export default function App() {
       <main className="container mx-auto px-4 py-6">
         <Outlet />
       </main>
+
+      <Toaster
+        position="bottom-right"
+        reverseOrder={false}
+      />
     </div>
   );
 }

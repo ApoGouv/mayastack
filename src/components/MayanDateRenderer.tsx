@@ -12,6 +12,7 @@ interface MayanDateRendererProps {
   heightPerGlyphStack?: number;
   scale?: number;
   widthPerPart?: number;
+  exportRef?: React.RefObject<SVGSVGElement | null>;
   showGrid?: boolean;
 }
 
@@ -20,6 +21,8 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
   heightPerGlyphStack = 100,
   scale = 1,
   widthPerPart = 100,
+  exportRef,
+  showGrid=false,
 }) => {
   if (!dateParts) return null;
 
@@ -27,7 +30,7 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
   const monthDigits = toBase20(dateParts.month);
   const yearDigits = toBase20(dateParts.year);
 
-  const { glyphColor } = useColorContext();
+  const { backgroundColor, glyphColor } = useColorContext();
 
   const spacing = 20;
   const totalWidth = widthPerPart * 3 + spacing * 2;
@@ -37,11 +40,12 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
 
   return (
     <svg
+      ref={exportRef}
       width={totalWidth}
       height={maxHeight}
       viewBox={`0 0 ${totalWidth} ${maxHeight}`}
-      className="mep-svg"
-      style={{ color: rgbaToCss(glyphColor) }}
+      className={`mep-svg ${showGrid ? "mep-grid" : ""}`}
+      style={{ backgroundColor: rgbaToCss(backgroundColor), color: rgbaToCss(glyphColor) }}
     >
       {/* Day */}
       <GlyphStackGroup

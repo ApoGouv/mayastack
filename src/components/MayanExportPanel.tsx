@@ -1,63 +1,74 @@
-import React, { useRef } from 'react';
-import { toPng, toSvg } from 'html-to-image';
-import { useColorContext } from "@/context/ColorContext";
-import { rgbaToCss } from "@utils/colors";
+import React, { useRef } from "react";
+import { toPng } from "html-to-image";
+import toast from "react-hot-toast";
+import { downloadDataUrl, downloadSvg } from "@/utils/exportUtils";
 import { isDev } from "@utils/env";
 
 import "@components/MayanExportPanel.css";
 
-type ExportFormat = 'png' | 'svg';
+type ExportFormat = "png" | "svg";
 
 interface MayanExportPanelProps {
-  children: React.ReactNode;
+  children: (
+    ref: React.RefObject<SVGSVGElement | null>,
+    gridActive: boolean
+  ) => React.ReactNode;
   filename?: string;
   formats?: ExportFormat[];
   showGrid?: boolean;
 }
 
-
 const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   children,
-  filename = 'mayan-numeral',
-  formats = ['png', 'svg'],
+  filename = "mayan-numeral",
+  formats = ["png", "svg"],
   showGrid = false,
 }) => {
-  const exportRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<SVGSVGElement>(null);
   const gridActive = isDev && showGrid;
-
-  const { backgroundColor } = useColorContext();
 
   const handleExport = async (format: ExportFormat) => {
     if (!exportRef.current) return;
 
     try {
-      let dataUrl = '';
-      if (format === 'svg') dataUrl = await toSvg(exportRef.current);
-      if (format === 'png') dataUrl = await toPng(exportRef.current);
+      const node = exportRef.current as unknown as HTMLElement | null;
+      if (!node) return;
 
-      const link = document.createElement('a');
-      link.download = `${filename}.${format}`;
-      link.href = dataUrl;
-      link.click();
+      if (format === "svg") {
+        downloadSvg(exportRef.current, `${filename}.svg`);
+        toast.success("SVG exported! Check your downloads.");
+        return;
+      }
+
+      if (format === "png") {
+        const dataUrl = await toPng(node);
+        downloadDataUrl(dataUrl, `${filename}.png`);
+        toast.success("PNG exported! Check your downloads.");
+        return;
+      }
     } catch (err) {
-      console.error('Export failed:', err);
+      console.error("Export failed:", err);
+      toast.error("Export failed. Please try again.");
     }
   };
 
   return (
-    <div>
+    <div className="mt-6">
       <div
-        ref={exportRef}
         data-exportable
-        className={`mep-svg-wrapper ${gridActive ? "mep-grid" : ""}`}
-        style={{ backgroundColor: rgbaToCss(backgroundColor) }}
+        className={`mep-svg-wrapper bg-white dark:bg-gray-900 p-4 rounded-xs w-full`}
       >
-        {children}
+        {children(exportRef, gridActive)}
       </div>
 
-      <div style={{ marginTop: '1rem' }}>
+      <div className="mt-4 flex gap-3">
         {formats.map((format) => (
-          <button key={format} onClick={() => handleExport(format)} style={{ marginRight: '0.5rem' }}>
+          <button
+            key={format}
+            onClick={() => handleExport(format)}
+            className="px-4 py-2 bg-ms-clay-500 text-white rounded hover:bg-ms-amber-500 transition cursor-pointer"
+            role="button"
+          >
             Export as {format.toUpperCase()}
           </button>
         ))}

@@ -9,6 +9,8 @@ interface MayanNumeralRendererProps {
   heightPerGlyphStack?: number; // spacing per level
   scale?: number;
   width?: number;
+  exportRef?: React.RefObject<SVGSVGElement | null>;
+  showGrid?: boolean;
 }
 
 /**
@@ -20,20 +22,23 @@ const MayanNumeralRenderer: React.FC<MayanNumeralRendererProps> = ({
   heightPerGlyphStack = 100,
   width,
   scale = 1,
+  exportRef,
+  showGrid=false,
 }) => {
   const svgWidth = width ?? 340;
   const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
 
-  const { glyphColor } = useColorContext();
+  const { backgroundColor, glyphColor } = useColorContext();
 
   return (
     <svg
+      ref={exportRef}
       width={svgWidth}
       height={maxHeight}
       viewBox={`0 0 ${svgWidth} ${maxHeight}`}
-      className="mep-svg"
-      style={{ color: rgbaToCss(glyphColor) }}
+      className={`mep-svg ${showGrid ? "mep-grid" : ""}`}
+      style={{ backgroundColor: rgbaToCss(backgroundColor), color: rgbaToCss(glyphColor) }}
     >
       <GlyphStackGroup
         digits={digits}
