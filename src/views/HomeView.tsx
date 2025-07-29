@@ -139,7 +139,13 @@ export default function HomeView() {
                 filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
                 showGrid={showGrid}
               >
-                {(ref) => <MayanDateRenderer dateParts={dateParts} exportRef={ref} />}
+                {(ref, gridActive) => (
+                  <MayanDateRenderer 
+                    dateParts={dateParts}
+                    exportRef={ref} 
+                    showGrid={gridActive}
+                  />
+                )}
               </MayanExportPanel>
             </div>
           </div>
