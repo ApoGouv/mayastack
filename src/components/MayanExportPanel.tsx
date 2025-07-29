@@ -1,10 +1,8 @@
 import React, { useRef } from "react";
 import { toPng } from "html-to-image";
 import toast from "react-hot-toast";
-import { downloadDataUrl, downloadSvg } from "@/utils/exportUtils";
+import { prepareSvgCloneForExport, downloadDataUrl, downloadSvg } from "@/utils/exportUtils";
 import { isDev } from "@utils/env";
-
-import "@components/MayanExportPanel.css";
 
 type ExportFormat = "png" | "svg";
 
@@ -24,31 +22,55 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   formats = ["png", "svg"],
   showGrid = false,
 }) => {
+  const exportPlaceholderRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<SVGSVGElement>(null);
   const gridActive = isDev && showGrid;
 
   const handleExport = async (format: ExportFormat) => {
     if (!exportRef.current) return;
 
+    const svgOriginalNode = exportRef.current;
+    const exportPlaceholder = exportPlaceholderRef.current;
+
+    if (!svgOriginalNode || !exportPlaceholder) return;
+
     try {
-      const node = exportRef.current as unknown as HTMLElement | null;
-      if (!node) return;
+
+      // Clone the original SVG to the export placeholder
+      const svgClone = prepareSvgCloneForExport(
+        svgOriginalNode,
+        svgOriginalNode.clientWidth,
+        svgOriginalNode.clientHeight,
+        exportPlaceholder
+      );
+
+      // return;
+      if (!svgClone) {
+        toast.error("Export failed during SVG preparation.");
+        return;
+      }
 
       if (format === "svg") {
-        downloadSvg(exportRef.current, `${filename}.svg`);
+
+        downloadSvg(svgClone, `${filename}.svg`);
         toast.success("SVG exported! Check your downloads.");
+        exportPlaceholder?.replaceChildren();
         return;
       }
 
       if (format === "png") {
-        const dataUrl = await toPng(node);
+        const dataUrl = await toPng(svgOriginalNode as unknown as HTMLElement);
         downloadDataUrl(dataUrl, `${filename}.png`);
         toast.success("PNG exported! Check your downloads.");
+        exportPlaceholder?.replaceChildren();
         return;
       }
     } catch (err) {
       console.error("Export failed:", err);
       toast.error("Export failed. Please try again.");
+    } finally {
+      // Always clean up placeholder contents
+      // exportPlaceholder.replaceChildren();
     }
   };
 
@@ -61,7 +83,7 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
         {children(exportRef, gridActive)}
       </div>
 
-      <div className="mt-4 flex gap-3">
+      <div className="my-4 flex gap-3">
         {formats.map((format) => (
           <button
             key={format}
@@ -73,6 +95,13 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
           </button>
         ))}
       </div>
+
+      <div 
+        ref={exportPlaceholderRef}
+        className="absolute -z-10 w-0 h-0 overflow-hidden pointer-events-none" 
+        aria-hidden="true" 
+      />
+
     </div>
   );
 };
