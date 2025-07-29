@@ -1,6 +1,8 @@
 import React from "react";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
+import SvgBackground from "@/components/svg/SvgBackground";
+import SvgGrid from "@/components/svg/SvgGrid";
 import { useColorContext } from "@/context/ColorContext";
 import { rgbaToCss } from "@utils/colors";
 
@@ -37,9 +39,13 @@ const MayanNumeralRenderer: React.FC<MayanNumeralRendererProps> = ({
       width={svgWidth}
       height={maxHeight}
       viewBox={`0 0 ${svgWidth} ${maxHeight}`}
-      className={`mep-svg ${showGrid ? "mep-grid" : ""}`}
-      style={{ backgroundColor: rgbaToCss(backgroundColor), color: rgbaToCss(glyphColor) }}
+      xmlns="http://www.w3.org/2000/svg"
+      xmlnsXlink="http://www.w3.org/1999/xlink"
+      className='mep-svg'
+      style={{ color: rgbaToCss(glyphColor) }}
     >
+      <SvgBackground fill={rgbaToCss(backgroundColor)} />
+      <SvgGrid show={showGrid} />
       <GlyphStackGroup
         digits={digits}
         centerX={centerX}

@@ -2,6 +2,8 @@ import React from "react";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
 import type { DateParts } from "@components/inputs/DateInput";
+import SvgBackground from "@/components/svg/SvgBackground";
+import SvgGrid from "@/components/svg/SvgGrid";
 import { useColorContext } from "@/context/ColorContext";
 import { rgbaToCss } from "@utils/colors";
 import { toBase20 } from "@utils/base20";
@@ -24,13 +26,14 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
   exportRef,
   showGrid=false,
 }) => {
+  const { backgroundColor, glyphColor } = useColorContext();
+
   if (!dateParts) return null;
 
   const dayDigits = toBase20(dateParts.day);
   const monthDigits = toBase20(dateParts.month);
   const yearDigits = toBase20(dateParts.year);
 
-  const { backgroundColor, glyphColor } = useColorContext();
 
   const spacing = 20;
   const totalWidth = widthPerPart * 3 + spacing * 2;
@@ -44,9 +47,15 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
       width={totalWidth}
       height={maxHeight}
       viewBox={`0 0 ${totalWidth} ${maxHeight}`}
-      className={`mep-svg ${showGrid ? "mep-grid" : ""}`}
-      style={{ backgroundColor: rgbaToCss(backgroundColor), color: rgbaToCss(glyphColor) }}
+      xmlns="http://www.w3.org/2000/svg"
+      xmlnsXlink="http://www.w3.org/1999/xlink"
+      className='mep-svg'
+      style={{ color: rgbaToCss(glyphColor) }}
     >
+      <SvgBackground fill={rgbaToCss(backgroundColor)} />
+      
+      <SvgGrid show={showGrid} />
+
       {/* Day */}
       <GlyphStackGroup
         digits={dayDigits}
