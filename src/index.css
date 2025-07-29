@@ -28,3 +28,11 @@
   --color-ms-sand-500: #d89d5f;
   --color-ms-amber-500: #cc8e4d;
 }
+
+.mep-svg {
+  background: transparent;
+  width: 100%;
+  height: auto;
+  display: block;
+  color: #000000;
+}
