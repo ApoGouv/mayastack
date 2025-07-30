@@ -23,6 +23,12 @@ const SvgGrid: React.FC<SvgGridProps> = ({
 
   const inset = 2 * strokeWidth;
 
+  // Helper function to calculate dimensions
+  const calculateDimension = (dim: number | string) => {
+    if (typeof dim === "number") return `${dim}px`;
+    return dim;
+  };
+
   return (
     <>
       <defs>
@@ -37,14 +43,15 @@ const SvgGrid: React.FC<SvgGridProps> = ({
             fill="none"
             stroke={stroke}
             strokeWidth={strokeWidth}
+            
           />
         </pattern>
       </defs>
       <rect 
         x={inset}
         y={inset}
-        width={`calc(100% - ${inset * 2}px)`}
-        height={`calc(100% - ${inset * 2}px)`}
+        width={`calc(${calculateDimension(width)} - ${inset * 2}px)`}
+        height={`calc(${calculateDimension(height)} - ${inset * 2}px)`}
         fill={`url(#${id})`}
       />
     </>
