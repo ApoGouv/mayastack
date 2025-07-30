@@ -1,7 +1,6 @@
 import React, { useRef } from "react";
-import { toPng } from "html-to-image";
 import toast from "react-hot-toast";
-import { prepareSvgCloneForExport, downloadDataUrl, downloadSvg } from "@/utils/exportUtils";
+import { prepareSvgCloneForExport, exportSvg, exportPng } from "@/utils/exportUtils";
 import { isDev } from "@utils/env";
 
 type ExportFormat = "png" | "svg";
@@ -27,7 +26,7 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   const gridActive = isDev && showGrid;
 
   const handleExport = async (format: ExportFormat) => {
-    if (!exportRef.current) return;
+    if (!exportRef.current || !exportPlaceholderRef.current) return;
 
     const svgOriginalNode = exportRef.current;
     const exportPlaceholder = exportPlaceholderRef.current;
@@ -51,26 +50,18 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
       }
 
       if (format === "svg") {
-
-        downloadSvg(svgClone, `${filename}.svg`);
+        await exportSvg(svgClone, `${filename}.svg`);
         toast.success("SVG exported! Check your downloads.");
-        exportPlaceholder?.replaceChildren();
-        return;
-      }
-
-      if (format === "png") {
-        const dataUrl = await toPng(svgOriginalNode as unknown as HTMLElement);
-        downloadDataUrl(dataUrl, `${filename}.png`);
+      } else if (format === "png") {
+        await exportPng(svgClone, `${filename}.png`);
         toast.success("PNG exported! Check your downloads.");
-        exportPlaceholder?.replaceChildren();
-        return;
       }
     } catch (err) {
       console.error("Export failed:", err);
       toast.error("Export failed. Please try again.");
     } finally {
       // Always clean up placeholder contents
-      // exportPlaceholder.replaceChildren();
+      exportPlaceholder.replaceChildren();
     }
   };
 
