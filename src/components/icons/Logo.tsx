@@ -1,21 +1,31 @@
-import React from "react";
+import React from 'react';
 
-const Logo: React.FC<{ className?: string }> = ({ className }) => (
+interface LogoProps {
+  className?: string;
+  size?: number; // Optional size prop
+  color?: string; // Optional explicit color override
+}
+
+const Logo: React.FC<LogoProps> = ({
+  className,
+  size = 40,
+  color = 'currentColor',
+}) => (
   <svg
-    viewBox="0 0 360 320" // ← Update this if needed based on your SVG
+    viewBox="0 0 60 60"
     xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
     className={className}
-    fill="currentColor"
+    fill={color}
+    aria-label="Mayan numeral logo"
+    role="img"
   >
-    <g data-digit-index="0" data-digit-value="5" data-digit-exponent="2" data-digit-multiplier="400" data-digit-base10-value="2000">
-        <path d="M148 92 H192" stroke="currentColor" stroke-width="6"/>
-    </g>
-    <g data-digit-index="1" data-digit-value="1" data-digit-exponent="1" data-digit-multiplier="20" data-digit-base10-value="20">
-        <circle cx="170" cy="190" r="5" fill="currentColor"/>
-    </g>
-    <g data-digit-index="2" data-digit-value="5" data-digit-exponent="0" data-digit-multiplier="1" data-digit-base10-value="5">
-        <path d="M148 292 H192" stroke="currentColor" stroke-width="6"/>
-    </g>
+    <path d="M15 10 H45" stroke={color} strokeWidth="4" strokeLinecap="round" />
+
+    <circle cx="30" cy="30" r="3" fill={color} />
+
+    <path d="M15 50 H45" stroke={color} strokeWidth="4" strokeLinecap="round" />
   </svg>
 );
 
