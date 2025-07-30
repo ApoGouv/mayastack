@@ -1,6 +1,7 @@
-import { Outlet, Link } from "react-router-dom";
+import { Outlet, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import Logo from "@components/icons/Logo";
+import Logo from '@components/icons/Logo';
+import { ThemeSelector } from '@/components/ThemeSelector';
 
 export default function App() {
   return (
@@ -10,27 +11,28 @@ export default function App() {
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           {/* Left: Logo + Title */}
           <div className="flex items-center space-x-3">
-              <Logo className="w-10 h-10 text-blue-600 dark:text-blue-400" />
-              <span className="font-bold text-xl tracking-tight">
-                <span className="">Maya</span>
-                <span className="text-ms-brand-500">Stack</span>
-              </span>
+            <Logo className="w-10 h-10 text-ms-deep-teal-500 dark:text-ms-moss-500" />
+            <span className="font-bold text-xl tracking-tight">
+              <span className="">Maya</span>
+              <span className="text-ms-brand-500">Stack</span>
+            </span>
           </div>
 
           {/* Right: Links */}
           <div className="space-x-6">
             <Link
-                to="/"
-                className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition"
-              >
-                Convert
-              </Link>
-              <Link
-                to="/learn"
-                className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition"
-              >
-                Learn
-              </Link>
+              to="/"
+              className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition"
+            >
+              Convert
+            </Link>
+            <Link
+              to="/learn"
+              className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition"
+            >
+              Learn
+            </Link>
+            <ThemeSelector />
           </div>
         </div>
       </nav>
@@ -40,10 +42,7 @@ export default function App() {
         <Outlet />
       </main>
 
-      <Toaster
-        position="bottom-right"
-        reverseOrder={false}
-      />
+      <Toaster position="bottom-right" reverseOrder={false} />
     </div>
   );
 }

@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-/**/
+/** @see https://tailwindcss.com/docs/dark-mode#toggling-dark-mode-manually */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/** */
 
 @theme {
   /* Brand Color */
