@@ -17,7 +17,7 @@ const Logo: React.FC<LogoProps> = ({
   tooltipId,
 }) => {
   const generatedId = useId();
-  const logoTooltipId = `logo-tooltip-${generatedId}`;
+  const logoTooltipId = tooltipId ?? `logo-tooltip-${generatedId}`;
   const logoTooltipContent = 'a.k.a. 2025'
 
   
