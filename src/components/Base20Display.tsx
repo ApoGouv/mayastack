@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
 import { Tooltip } from 'react-tooltip';
-import { toBase20String } from '@/utils/base20';
+import { toBase20String } from '@utils/base20';
 
 interface Base20DisplayProps {
   label?: string;

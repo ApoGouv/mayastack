@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import toast from "react-hot-toast";
-import { prepareSvgCloneForExport, exportSvg, exportPng } from "@/utils/exportUtils";
+import { prepareSvgCloneForExport, exportSvg, exportPng } from "@utils/exportUtils";
 import { isDev } from "@utils/env";
 
 type ExportFormat = "png" | "svg";
