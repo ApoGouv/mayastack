@@ -1,7 +1,7 @@
-import { Outlet, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Logo from '@components/icons/Logo';
 import { ThemeSelector } from '@components/ThemeSelector';
+import HomeView from '@views/HomeView';
 
 export default function App() {
   return (
@@ -20,18 +20,6 @@ export default function App() {
 
           {/* Right: Links */}
           <div className="space-x-6">
-            <Link
-              to="/"
-              className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition"
-            >
-              Convert
-            </Link>
-            <Link
-              to="/learn"
-              className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white transition"
-            >
-              Learn
-            </Link>
             <ThemeSelector />
           </div>
         </div>
@@ -39,7 +27,7 @@ export default function App() {
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-6">
-        <Outlet />
+        <HomeView />
       </main>
 
       <Toaster position="bottom-right" reverseOrder={false} />
