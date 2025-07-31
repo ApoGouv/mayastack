@@ -31,6 +31,7 @@
       "@utils/*": ["src/utils/*"],
       "@views/*": ["src/views/*"],
       "@context/*": ["src/context/*"],
+      "@hooks/*": ["src/hooks/*"],
     }
   },
   "include": ["src"]
