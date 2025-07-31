@@ -1,27 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ColorContext } from '@context/color-context-value';
 import type { RgbaColor, ColorTheme } from '@/types/colors';
-
-/**
- * Describes the shape of the ColorContext, including current
- * background and glyph colors, along with their setters.
- */
-export interface ColorContextType {
-  backgroundColor: RgbaColor;
-  setBackgroundColor: (color: RgbaColor) => void;
-  glyphColor: RgbaColor;
-  setGlyphColor: (color: RgbaColor) => void;
-  theme: ColorTheme;
-  resolvedTheme: 'light' | 'dark'; // Actual computed theme
-  toggleTheme: () => void;
-  setTheme: (theme: ColorTheme) => void;
-}
 
 // Default color values
 const defaultBackgroundColor: RgbaColor = { r: 255, g: 255, b: 255, a: 1 }; // white
 const defaultGlyphColor: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }; // black
-
-// Create the context with initial undefined (to ensure it's used within a provider)
-const ColorContext = createContext<ColorContextType | undefined>(undefined);
 
 /**
  * Provides shared color state for background and glyph colors
@@ -113,15 +96,4 @@ export const ColorProvider: React.FC<{ children: React.ReactNode }> = ({
       {children}
     </ColorContext.Provider>
   );
-};
-
-/**
- * Custom hook to access the ColorContext.
- * Throws an error if used outside of a ColorProvider.
- */
-export const useColorContext = (): ColorContextType => {
-  const ctx = useContext(ColorContext);
-  if (!ctx)
-    throw new Error('useColorContext must be used within a ColorProvider');
-  return ctx;
 };
