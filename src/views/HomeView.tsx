@@ -11,7 +11,7 @@ import NumberInput from "@components/inputs/NumberInput";
 import ShowGridToggle from "@components/inputs/ShowGridToggle";
 import DateInput from "@components/inputs/DateInput";
 import type { DateParts } from "@components/inputs/DateInput";
-import { useColorContext } from "@context/ColorContext";
+import { useColorContext } from "@hooks/useColorContext";
 
 /**
  * HomeView is the main input view of the app.

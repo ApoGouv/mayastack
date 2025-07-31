@@ -1,9 +1,9 @@
 // src/components/ThemeSelector.tsx
 import React, { useState } from 'react';
-import { useColorContext } from '@/context/ColorContext';
-import LightTheme from '@/components/icons/LightTheme';
-import DarkTheme from '@/components/icons/DarkTheme';
-import SystemTheme from '@/components/icons/SystemTheme';
+import { useColorContext } from "@hooks/useColorContext";
+import LightTheme from '@components/icons/LightTheme';
+import DarkTheme from '@components/icons/DarkTheme';
+import SystemTheme from '@components/icons/SystemTheme';
 
 export const ThemeSelector: React.FC = () => {
   const { theme, setTheme } = useColorContext();

@@ -1,7 +1,7 @@
 import { Outlet, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Logo from '@components/icons/Logo';
-import { ThemeSelector } from '@/components/ThemeSelector';
+import { ThemeSelector } from '@components/ThemeSelector';
 
 export default function App() {
   return (

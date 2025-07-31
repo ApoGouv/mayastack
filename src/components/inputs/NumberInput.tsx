@@ -1,5 +1,5 @@
 import React from 'react';
-import { Numbers } from '@/components/icons/Numbers';
+import { Numbers } from '@components/icons/Numbers';
 
 interface NumberInputProps {
   value: string;

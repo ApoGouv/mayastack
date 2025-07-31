@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react';
 import DatePicker from "react-datepicker";
 import { format } from "date-fns";
-import { CalendarMonth } from '@/components/icons/CalendarMonth';
+import { CalendarMonth } from '@components/icons/CalendarMonth';
 
 import "react-datepicker/dist/react-datepicker.css";
 import "@components/inputs/DateInput.css";

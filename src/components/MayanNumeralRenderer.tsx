@@ -1,9 +1,9 @@
 import React from "react";
 
 import GlyphStackGroup from "@components/GlyphStackGroup";
-import SvgBackground from "@/components/svg/SvgBackground";
-import SvgGrid from "@/components/svg/SvgGrid";
-import { useColorContext } from "@/context/ColorContext";
+import SvgBackground from "@components/svg/SvgBackground";
+import SvgGrid from "@components/svg/SvgGrid";
+import { useColorContext } from "@hooks/useColorContext";
 import { rgbaToCss } from "@utils/colors";
 
 interface MayanNumeralRendererProps {
