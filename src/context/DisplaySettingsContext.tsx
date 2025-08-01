@@ -5,6 +5,7 @@ import type { RgbaColor, ColorTheme } from '@/types/colors';
 // Default color values
 const defaultBackgroundColor: RgbaColor = { r: 255, g: 255, b: 255, a: 1 }; // white
 const defaultGlyphColor: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }; // black
+const defaultShowGrid = false; // Hide grid by default
 
 /**
  * Provides shared display settings state to the application via React Context.
@@ -19,6 +20,7 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     defaultBackgroundColor
   );
   const [glyphColor, setGlyphColor] = useState<RgbaColor>(defaultGlyphColor);
+  const [showGrid, setShowGrid] = useState<boolean>(defaultShowGrid);
 
   // Get system preference and watch for changes
   useEffect(() => {
@@ -36,11 +38,17 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     };
   }, []);
 
-  // Initialize theme from localStorage
+  // Initialize theme. grid visibility from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as ColorTheme | null;
+    const savedShowGrid = localStorage.getItem('showGrid');
+
     if (savedTheme) {
       setTheme(savedTheme);
+    }
+
+    if (savedShowGrid) {
+      setShowGrid(savedShowGrid === 'true');
     }
   }, []);
 
@@ -71,6 +79,11 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     }
   }, [theme, resolvedTheme]);
 
+  // Persist grid visibility setting
+  useEffect(() => {
+    localStorage.setItem('showGrid', String(showGrid));
+  }, [showGrid]);
+
   const toggleTheme = () => {
     setTheme(prev => {
       if (prev === 'light') return 'dark';
@@ -89,7 +102,9 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         theme,
         resolvedTheme,
         toggleTheme,
-        setTheme
+        setTheme,
+        showGrid,
+        setShowGrid
       }}
     >
       {children}

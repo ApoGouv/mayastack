@@ -16,4 +16,8 @@ export interface DisplaySettingsContextType {
   resolvedTheme: 'light' | 'dark';
   toggleTheme: () => void;
   setTheme: (theme: ColorTheme) => void;
+
+  // Grid visibility setting
+  showGrid: boolean;
+  setShowGrid: (show: boolean) => void;
 }
