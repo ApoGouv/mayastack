@@ -1,10 +1,6 @@
 export interface MayanExportPanelProps {
-  children: (
-    ref: React.RefObject<SVGSVGElement | null>,
-    gridActive: boolean
-  ) => React.ReactNode;
+  children: (ref: React.RefObject<SVGSVGElement | null>) => React.ReactNode;
   filename?: string;
-  showGrid?: boolean;
 }
 
 export interface Dimensions {

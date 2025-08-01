@@ -15,7 +15,6 @@ interface MayanDateRendererProps {
   scale?: number;
   widthPerPart?: number;
   exportRef?: React.RefObject<SVGSVGElement | null>;
-  showGrid?: boolean;
 }
 
 const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
@@ -24,9 +23,8 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
   scale = 1,
   widthPerPart = 100,
   exportRef,
-  showGrid=false,
 }) => {
-  const { backgroundColor, glyphColor } = useDisplaySettings();
+  const { backgroundColor, glyphColor, showGrid } = useDisplaySettings();
 
   if (!dateParts) return null;
 

@@ -12,7 +12,6 @@ interface MayanNumeralRendererProps {
   scale?: number;
   width?: number;
   exportRef?: React.RefObject<SVGSVGElement | null>;
-  showGrid?: boolean;
 }
 
 /**
@@ -25,13 +24,12 @@ const MayanNumeralRenderer: React.FC<MayanNumeralRendererProps> = ({
   width,
   scale = 1,
   exportRef,
-  showGrid=false,
 }) => {
   const svgWidth = width ?? 340;
   const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
 
-  const { backgroundColor, glyphColor } = useDisplaySettings();
+  const { backgroundColor, glyphColor, showGrid } = useDisplaySettings();
 
   return (
     <svg

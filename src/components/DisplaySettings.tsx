@@ -2,12 +2,14 @@ import { useDisplaySettings } from "@/hooks/useDisplaySettings";
 import ColorPicker from "@components/inputs/ColorPicker";
 import ShowGridToggle from "@components/inputs/ShowGridToggle";
 
-export default function DisplayOptions() {
+export default function DisplaySettings() {
   const {
     backgroundColor,
     setBackgroundColor,
     glyphColor,
     setGlyphColor,
+    showGrid,
+    setShowGrid
   } = useDisplaySettings();
 
   return (

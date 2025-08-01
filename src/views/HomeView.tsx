@@ -1,43 +1,31 @@
-import { useState } from "react";
-import { toBase20 } from "@utils/base20";
-import MayanNumeralRenderer from "@components/MayanNumeralRenderer";
-import MayanDateRenderer from "@components/MayanDateRenderer";
-import MayanExportPanel from "@components/MayanExportPanel";
-import Base20Display from "@components/Base20Display";
-import RenderModeSwitcher from "@components/inputs/RenderModeSwitcher";
-import type { RenderMode } from "@components/inputs/RenderModeSwitcher";
-import ColorPicker from "@components/inputs/ColorPicker";
-import NumberInput from "@components/inputs/NumberInput";
-import ShowGridToggle from "@components/inputs/ShowGridToggle";
-import DateInput from "@components/inputs/DateInput";
-import type { DateParts } from "@components/inputs/DateInput";
-import { useDisplaySettings } from "@/hooks/useDisplaySettings";
+import { useState } from 'react';
+import { toBase20 } from '@utils/base20';
+import MayanNumeralRenderer from '@components/MayanNumeralRenderer';
+import MayanDateRenderer from '@components/MayanDateRenderer';
+import MayanExportPanel from '@components/MayanExportPanel';
+import Base20Display from '@components/Base20Display';
+import RenderModeSwitcher from '@components/inputs/RenderModeSwitcher';
+import type { RenderMode } from '@components/inputs/RenderModeSwitcher';
+import DisplaySettings from '@components/DisplaySettings';
+import NumberInput from '@components/inputs/NumberInput';
+import DateInput from '@components/inputs/DateInput';
+import type { DateParts } from '@components/inputs/DateInput';
 
 /**
  * HomeView is the main input view of the app.
  *  Users can convert either a number or a date to Mayan numeral glyphs.
  */
 export default function HomeView() {
-  const [mode, setMode] = useState<RenderMode>("number");
-  const [numberInput, setNumberInput] = useState("");
+  const [mode, setMode] = useState<RenderMode>('number');
+  const [numberInput, setNumberInput] = useState('');
   const parsedNumber = parseInt(numberInput, 10);
   const isValidNumber = !isNaN(parsedNumber) && parsedNumber >= 0;
 
   // Store the parsed digits once
   const base20Digits = isValidNumber ? toBase20(parsedNumber) : [];
 
-  const [dateInputRaw, setDateInputRaw] = useState("");
+  const [dateInputRaw, setDateInputRaw] = useState('');
   const [dateParts, setDateParts] = useState<DateParts>(null);
-
-  const [showGrid, setShowGrid] = useState(true);
-
-  // 🎨 Use centralized color context
-  const {
-    backgroundColor,
-    setBackgroundColor,
-    glyphColor,
-    setGlyphColor,
-  } = useDisplaySettings();
 
   const handleNumberInputChange = (value: string) => {
     setNumberInput(value);
@@ -62,40 +50,20 @@ export default function HomeView() {
         {/* Mode Switcher */}
         <RenderModeSwitcher mode={mode} onChange={setMode} />
 
-        {mode === "number" ? (
+        {mode === 'number' ? (
           <NumberInput value={numberInput} onChange={handleNumberInputChange} />
         ) : (
           <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
         )}
       </section>
-      
+
       {/* Display Options */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
         {/* Color pickers and grid toggle */}
-        {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
-          <fieldset className="border border-gray-200 dark:border-gray-700 rounded-md p-5 space-y-4">
-            <legend className="px-3 font-medium text-gray-700 dark:text-gray-300">
-              SVG Display Options
-            </legend>
-            <div className="flex flex-wrap items-center gap-4">
-              <ColorPicker
-                label="Background color:"
-                value={backgroundColor}
-                onChange={setBackgroundColor}
-                showValue={false}
-              />
-              <ColorPicker
-                label="Glyph color:"
-                value={glyphColor}
-                onChange={setGlyphColor}
-                showValue={false}
-              />
-              <ShowGridToggle value={showGrid} onChange={setShowGrid} />
-            </div>
-          </fieldset>
-        )}
+        {((mode === 'number' && isValidNumber) ||
+          (mode === 'date' && dateParts)) && <DisplaySettings />}
       </div>
-      
+
       {/* Results Section */}
       <div className="grid gap-8 md:grid-cols-2">
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
@@ -103,12 +71,12 @@ export default function HomeView() {
           {/* Base20Display components */}
 
           {/* Number Mode Output */}
-          {mode === "number" && isValidNumber && (
+          {mode === 'number' && isValidNumber && (
             <Base20Display label="Number" digits={base20Digits} />
           )}
 
           {/* Date Mode Output */}
-          {mode === "date" && dateParts && (
+          {mode === 'date' && dateParts && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Base20Display label="Day" digits={toBase20(dateParts.day)} />
               <Base20Display label="Month" digits={toBase20(dateParts.month)} />
@@ -121,39 +89,26 @@ export default function HomeView() {
           {/* MayanRenderer and ExportPanel */}
 
           {/* Number Mode Output */}
-          {mode === "number" && isValidNumber && (
-            <MayanExportPanel
-              filename={`mayan-numeral-number-${parsedNumber}`}
-              showGrid={showGrid}
-            >
-              {(ref, gridActive) => (
-                <MayanNumeralRenderer 
-                  digits={base20Digits} 
-                  exportRef={ref} 
-                  showGrid={gridActive}
-                />
+          {mode === 'number' && isValidNumber && (
+            <MayanExportPanel filename={`mayan-numeral-number-${parsedNumber}`}>
+              {(ref) => (
+                <MayanNumeralRenderer digits={base20Digits} exportRef={ref} />
               )}
             </MayanExportPanel>
           )}
 
           {/* Date Mode Output */}
-          {mode === "date" && dateParts && (
+          {mode === 'date' && dateParts && (
             <MayanExportPanel
               filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
-              showGrid={showGrid}
             >
-              {(ref, gridActive) => (
-                <MayanDateRenderer 
-                  dateParts={dateParts}
-                  exportRef={ref} 
-                  showGrid={gridActive}
-                />
+              {(ref) => (
+                <MayanDateRenderer dateParts={dateParts} exportRef={ref} />
               )}
             </MayanExportPanel>
           )}
         </div>
       </div>
-      
     </div>
   );
 }

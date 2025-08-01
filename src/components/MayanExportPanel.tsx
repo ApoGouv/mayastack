@@ -10,17 +10,13 @@ import {
 } from '@utils/exportUtils';
 import {getSizePresets} from '@utils/exportPresets';
 import type { MayanExportPanelProps, Dimensions, ExportSize, ExportFormat } from '@/types/exportTypes';
-import { isDev } from '@utils/env';
-
 
 const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   children,
   filename = 'mayan-numeral',
-  showGrid = false,
 }) => {
   const exportPlaceholderRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<SVGSVGElement | null>(null);
-  const gridActive = isDev && showGrid;
 
   const [format, setFormat] = useState<ExportFormat>('svg');
   const [sizeOption, setSizeOption] = useState<ExportSize>('original');
@@ -74,7 +70,7 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
       <div
         className={`mep-svg-wrapper bg-gray-200 dark:bg-gray-900 p-4 rounded-xs w-full max-w-sm`}
       >
-        {children(exportRef, gridActive)}
+        {children(exportRef)}
       </div>
 
       <div className="my-4 space-y-4">
