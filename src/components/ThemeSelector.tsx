@@ -1,12 +1,12 @@
 // src/components/ThemeSelector.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useColorContext } from '@hooks/useColorContext';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import LightTheme from '@components/icons/LightTheme';
 import DarkTheme from '@components/icons/DarkTheme';
 import SystemTheme from '@components/icons/SystemTheme';
 
 export const ThemeSelector: React.FC = () => {
-  const { theme, setTheme } = useColorContext();
+  const { theme, setTheme } = useDisplaySettings();
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);

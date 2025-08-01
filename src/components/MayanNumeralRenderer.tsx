@@ -3,7 +3,7 @@ import React from "react";
 import GlyphStackGroup from "@components/GlyphStackGroup";
 import SvgBackground from "@components/svg/SvgBackground";
 import SvgGrid from "@components/svg/SvgGrid";
-import { useColorContext } from "@hooks/useColorContext";
+import { useDisplaySettings } from "@/hooks/useDisplaySettings";
 import { rgbaToCss } from "@utils/colors";
 
 interface MayanNumeralRendererProps {
@@ -31,7 +31,7 @@ const MayanNumeralRenderer: React.FC<MayanNumeralRendererProps> = ({
   const maxHeight = digits.length * heightPerGlyphStack;
   const centerX = svgWidth / 2;
 
-  const { backgroundColor, glyphColor } = useColorContext();
+  const { backgroundColor, glyphColor } = useDisplaySettings();
 
   return (
     <svg

@@ -26,7 +26,7 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-3">
         <HomeView />
       </main>
 

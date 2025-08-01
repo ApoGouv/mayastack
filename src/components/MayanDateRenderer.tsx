@@ -4,7 +4,7 @@ import GlyphStackGroup from "@components/GlyphStackGroup";
 import type { DateParts } from "@components/inputs/DateInput";
 import SvgBackground from "@components/svg/SvgBackground";
 import SvgGrid from "@components/svg/SvgGrid";
-import { useColorContext } from "@hooks/useColorContext";
+import { useDisplaySettings } from "@/hooks/useDisplaySettings";
 import { rgbaToCss } from "@utils/colors";
 import { toBase20 } from "@utils/base20";
 
@@ -26,7 +26,7 @@ const MayanDateRenderer: React.FC<MayanDateRendererProps> = ({
   exportRef,
   showGrid=false,
 }) => {
-  const { backgroundColor, glyphColor } = useColorContext();
+  const { backgroundColor, glyphColor } = useDisplaySettings();
 
   if (!dateParts) return null;
 

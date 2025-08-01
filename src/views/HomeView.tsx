@@ -11,7 +11,7 @@ import NumberInput from "@components/inputs/NumberInput";
 import ShowGridToggle from "@components/inputs/ShowGridToggle";
 import DateInput from "@components/inputs/DateInput";
 import type { DateParts } from "@components/inputs/DateInput";
-import { useColorContext } from "@hooks/useColorContext";
+import { useDisplaySettings } from "@/hooks/useDisplaySettings";
 
 /**
  * HomeView is the main input view of the app.
@@ -37,7 +37,7 @@ export default function HomeView() {
     setBackgroundColor,
     glyphColor,
     setGlyphColor,
-  } = useColorContext();
+  } = useDisplaySettings();
 
   const handleNumberInputChange = (value: string) => {
     setNumberInput(value);
@@ -49,60 +49,79 @@ export default function HomeView() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl sm:text-4xl font-bold text-ms-brand-500">
-        🌄 Convert to Mayan Numerals
-      </h1>
+    <div className="grid grid-cols-1 gap-8 max-w-4xl mx-auto">
+      {/* Header Section */}
+      <header className="space-y-4">
+        <h1 className="text-3xl sm:text-4xl font-bold text-ms-brand-500">
+          🌄 Convert to Mayan Numerals
+        </h1>
+      </header>
 
-      {/* Mode Switcher */}
-      <RenderModeSwitcher mode={mode} onChange={setMode} />
+      {/* Input Section */}
+      <section className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm space-y-4">
+        {/* Mode Switcher */}
+        <RenderModeSwitcher mode={mode} onChange={setMode} />
 
-      {/* Input based on mode */}
-      {mode === "number" && (
-        <NumberInput value={numberInput} onChange={handleNumberInputChange} />
-      )}
+        {mode === "number" ? (
+          <NumberInput value={numberInput} onChange={handleNumberInputChange} />
+        ) : (
+          <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
+        )}
+      </section>
+      
+      {/* Display Options */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+        {/* Color pickers and grid toggle */}
+        {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
+          <fieldset className="border border-gray-200 dark:border-gray-700 rounded-md p-5 space-y-4">
+            <legend className="px-3 font-medium text-gray-700 dark:text-gray-300">
+              SVG Display Options
+            </legend>
+            <div className="flex flex-wrap items-center gap-4">
+              <ColorPicker
+                label="Background color:"
+                value={backgroundColor}
+                onChange={setBackgroundColor}
+                showValue={false}
+              />
+              <ColorPicker
+                label="Glyph color:"
+                value={glyphColor}
+                onChange={setGlyphColor}
+                showValue={false}
+              />
+              <ShowGridToggle value={showGrid} onChange={setShowGrid} />
+            </div>
+          </fieldset>
+        )}
+      </div>
+      
+      {/* Results Section */}
+      <div className="grid gap-8 md:grid-cols-2">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4">Base-20 Representation</h3>
+          {/* Base20Display components */}
 
-      {mode === "date" && (
-        <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
-      )}
-
-      {/* Color Pickers + Show Grid Toggle */}
-      {((mode === "number" && isValidNumber) || (mode === "date" && dateParts)) && (
-        <fieldset className="border border-gray-300 dark:border-gray-700 rounded-md p-4 space-y-4 max-w-3xl w-full">
-          <legend className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-2">
-            SVG Display Settings
-          </legend>
-          <div className="flex flex-wrap items-center gap-4">
-            <ColorPicker
-              label="Background color:"
-              value={backgroundColor}
-              onChange={setBackgroundColor}
-              showValue={false}
-            />
-            <ColorPicker
-              label="Glyph color:"
-              value={glyphColor}
-              onChange={setGlyphColor}
-              showValue={false}
-            />
-            <ShowGridToggle value={showGrid} onChange={setShowGrid} />
-          </div>
-        </fieldset>
-      )}
-
-      {/* Number Mode Output */}
-      {mode === "number" && isValidNumber && (
-        <div className="space-y-4">
-
-          {/* Base-20 Digits */}
-          <div className="max-w-3xl w-full space-y-2">
-            <h3 className="text-lg font-semibold">Input to Base-20 Representation</h3>
+          {/* Number Mode Output */}
+          {mode === "number" && isValidNumber && (
             <Base20Display label="Number" digits={base20Digits} />
-          </div>
+          )}
 
-          <div className="max-w-3xl w-full space-y-2">
-            <h3 className="text-lg font-semibold">Mayan Numeral</h3>
-            <div className="flex flex-wrap gap-4">
+          {/* Date Mode Output */}
+          {mode === "date" && dateParts && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Base20Display label="Day" digits={toBase20(dateParts.day)} />
+              <Base20Display label="Month" digits={toBase20(dateParts.month)} />
+              <Base20Display label="Year" digits={toBase20(dateParts.year)} />
+            </div>
+          )}
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
+          {/* MayanRenderer and ExportPanel */}
+
+          {/* Number Mode Output */}
+          {mode === "number" && isValidNumber && (
             <MayanExportPanel
               filename={`mayan-numeral-number-${parsedNumber}`}
               showGrid={showGrid}
@@ -115,42 +134,26 @@ export default function HomeView() {
                 />
               )}
             </MayanExportPanel>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Date Mode Output */}
-      {mode === "date" && dateParts && (
-        <div className="space-y-4">
-          <div className="max-w-3xl w-full space-y-2">
-            <h3 className="text-lg font-semibold">Input to Base-20 Representation</h3>
-            <div className="grid sm:grid-cols-3 gap-4">
-              <Base20Display label="Day" digits={toBase20(dateParts.day)} />
-              <Base20Display label="Month" digits={toBase20(dateParts.month)} />
-              <Base20Display label="Year" digits={toBase20(dateParts.year)} />
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold">Mayan Numeral Date</h3>
-            <div className="flex flex-wrap gap-4">
-              <MayanExportPanel
-                filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
-                showGrid={showGrid}
-              >
-                {(ref, gridActive) => (
-                  <MayanDateRenderer 
-                    dateParts={dateParts}
-                    exportRef={ref} 
-                    showGrid={gridActive}
-                  />
-                )}
-              </MayanExportPanel>
-            </div>
-          </div>
+          {/* Date Mode Output */}
+          {mode === "date" && dateParts && (
+            <MayanExportPanel
+              filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
+              showGrid={showGrid}
+            >
+              {(ref, gridActive) => (
+                <MayanDateRenderer 
+                  dateParts={dateParts}
+                  exportRef={ref} 
+                  showGrid={gridActive}
+                />
+              )}
+            </MayanExportPanel>
+          )}
         </div>
-      )}
+      </div>
+      
     </div>
   );
 }

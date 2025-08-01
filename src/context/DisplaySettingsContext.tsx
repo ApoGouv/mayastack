@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ColorContext } from '@context/color-context-value';
+import { DisplaySettingsContext } from '@/context/display-settings-context-value';
 import type { RgbaColor, ColorTheme } from '@/types/colors';
 
 // Default color values
@@ -7,15 +7,14 @@ const defaultBackgroundColor: RgbaColor = { r: 255, g: 255, b: 255, a: 1 }; // w
 const defaultGlyphColor: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }; // black
 
 /**
- * Provides shared color state for background and glyph colors
- * to the rest of the application via React Context.
+ * Provides shared display settings state to the application via React Context.
+ * Includes color themes, color settings, and other display preferences.
  */
-export const ColorProvider: React.FC<{ children: React.ReactNode }> = ({
+export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [theme, setTheme] = useState<ColorTheme>('system');
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
-
   const [backgroundColor, setBackgroundColor] = useState<RgbaColor>(
     defaultBackgroundColor
   );
@@ -81,7 +80,7 @@ export const ColorProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   return (
-    <ColorContext.Provider
+    <DisplaySettingsContext.Provider
       value={{
         backgroundColor,
         setBackgroundColor,
@@ -94,6 +93,6 @@ export const ColorProvider: React.FC<{ children: React.ReactNode }> = ({
       }}
     >
       {children}
-    </ColorContext.Provider>
+    </DisplaySettingsContext.Provider>
   );
 };
