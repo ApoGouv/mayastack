@@ -45,16 +45,37 @@ export default function HomeView() {
         </h1>
       </header>
 
-      {/* Input Section */}
+      {/* Input & Base-20 Section */}
       <section className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm space-y-4">
-        {/* Mode Switcher */}
-        <RenderModeSwitcher mode={mode} onChange={setMode} />
+        <div className="grid md:grid-cols-2 gap-6 items-start">
+          {/* Left: Render Mode + Input */}
+          <div className="space-y-4">
+            <RenderModeSwitcher mode={mode} onChange={setMode} />
 
-        {mode === 'number' ? (
-          <NumberInput value={numberInput} onChange={handleNumberInputChange} />
-        ) : (
-          <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
-        )}
+            {mode === 'number' ? (
+              <NumberInput value={numberInput} onChange={handleNumberInputChange} />
+            ) : (
+              <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
+            )}
+          </div>
+
+          {/* Right: Base-20 Display */}
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Base-20 Representation</h3>
+
+            {mode === 'number' && isValidNumber && (
+              <Base20Display label="Number" digits={base20Digits} />
+            )}
+
+            {mode === 'date' && dateParts && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Base20Display label="Day" digits={toBase20(dateParts.day)} />
+                <Base20Display label="Month" digits={toBase20(dateParts.month)} />
+                <Base20Display label="Year" digits={toBase20(dateParts.year)} />
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* Display Options */}
@@ -66,24 +87,6 @@ export default function HomeView() {
 
       {/* Results Section */}
       <div className="grid gap-8 md:grid-cols-2">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">Base-20 Representation</h3>
-          {/* Base20Display components */}
-
-          {/* Number Mode Output */}
-          {mode === 'number' && isValidNumber && (
-            <Base20Display label="Number" digits={base20Digits} />
-          )}
-
-          {/* Date Mode Output */}
-          {mode === 'date' && dateParts && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Base20Display label="Day" digits={toBase20(dateParts.day)} />
-              <Base20Display label="Month" digits={toBase20(dateParts.month)} />
-              <Base20Display label="Year" digits={toBase20(dateParts.year)} />
-            </div>
-          )}
-        </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
           <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
           {/* MayanRenderer and ExportPanel */}
