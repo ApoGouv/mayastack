@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toBase20 } from '@utils/base20';
 import MayanNumeralRenderer from '@components/MayanNumeralRenderer';
 import MayanDateRenderer from '@components/MayanDateRenderer';
@@ -10,6 +10,7 @@ import DisplaySettings from '@components/DisplaySettings';
 import NumberInput from '@components/inputs/NumberInput';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
+import type { MayanExportPanelProps } from '@/types/exportTypes';
 
 /**
  * HomeView is the main input view of the app.
@@ -18,23 +19,57 @@ import type { DateParts } from '@components/inputs/DateInput';
 export default function HomeView() {
   const [mode, setMode] = useState<RenderMode>('number');
   const [numberInput, setNumberInput] = useState('');
-  const parsedNumber = parseInt(numberInput, 10);
-  const isValidNumber = !isNaN(parsedNumber) && parsedNumber >= 0;
-
-  // Store the parsed digits once
-  const base20Digits = isValidNumber ? toBase20(parsedNumber) : [];
-
   const [dateInputRaw, setDateInputRaw] = useState('');
-  const [dateParts, setDateParts] = useState<DateParts>(null);
+  const [dateParts, setDateParts] = useState<DateParts | null>(null);
 
-  const handleNumberInputChange = (value: string) => {
+  // Derived values
+  const parsedNumber: number = parseInt(numberInput, 10);
+  const isValidNumber: boolean = !isNaN(parsedNumber) && parsedNumber >= 0;
+  const base20Digits: number[] = useMemo(() => {
+    // Store the parsed digits once
+    return isValidNumber ? toBase20(parsedNumber) : []
+  }, [isValidNumber, parsedNumber]);
+
+  // Validation flags
+  const hasValidNumberInput: boolean = mode === 'number' && isValidNumber;
+  const hasValidDateInput: boolean = mode === 'date' && dateParts !== null;
+  const hasValidinput: boolean = hasValidNumberInput || hasValidDateInput;
+
+  // Event handlers
+  const handleNumberInputChange = (value: string): void => {
     setNumberInput(value);
   };
 
-  const handleDateInputChange = (parsed: DateParts, raw: string) => {
+  const handleDateInputChange = (parsed: DateParts, raw: string): void => {
     setDateParts(parsed);
     setDateInputRaw(raw);
   };
+
+  const exportConfig = useMemo<MayanExportPanelProps | null>(() => {
+    if (!hasValidinput) return null;
+
+    {/* Number Mode Output */}
+    if (hasValidNumberInput) {
+      return {
+        filename: `mayan-numeral-number-${parsedNumber}`,
+        children: (ref) => (
+          <MayanNumeralRenderer digits={base20Digits} exportRef={ref} />
+        ),
+      };
+    }
+
+    {/* Date Mode Output */}
+    if (hasValidDateInput && dateParts) {
+      return {
+        filename: `mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`,
+        children: (ref) => (
+          <MayanDateRenderer dateParts={dateParts} exportRef={ref} />
+        ),
+      };
+    }
+
+    return null;
+  }, [hasValidinput, hasValidNumberInput, hasValidDateInput, dateParts, base20Digits, parsedNumber]);
 
   return (
     <div className="grid grid-cols-1 gap-8 max-w-4xl mx-auto">
@@ -53,65 +88,69 @@ export default function HomeView() {
             <RenderModeSwitcher mode={mode} onChange={setMode} />
 
             {mode === 'number' ? (
-              <NumberInput value={numberInput} onChange={handleNumberInputChange} />
+              <NumberInput
+                value={numberInput}
+                onChange={handleNumberInputChange}
+              />
             ) : (
-              <DateInput value={dateInputRaw} onChange={handleDateInputChange} />
+              <DateInput
+                value={dateInputRaw}
+                onChange={handleDateInputChange}
+              />
             )}
           </div>
 
           {/* Right: Base-20 Display */}
-          <div>
-            <h3 className="text-lg font-semibold mb-2">Base-20 Representation</h3>
+          {hasValidinput && (
+            <div>
+              <h3 className="text-lg font-semibold mb-2">
+                Base-20 Representation
+              </h3>
 
-            {mode === 'number' && isValidNumber && (
-              <Base20Display label="Number" digits={base20Digits} />
-            )}
+              {hasValidNumberInput && (
+                <Base20Display label="Number" digits={base20Digits} />
+              )}
 
-            {mode === 'date' && dateParts && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Base20Display label="Day" digits={toBase20(dateParts.day)} />
-                <Base20Display label="Month" digits={toBase20(dateParts.month)} />
-                <Base20Display label="Year" digits={toBase20(dateParts.year)} />
-              </div>
-            )}
-          </div>
+              {hasValidDateInput && dateParts && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Base20Display label="Day" digits={toBase20(dateParts.day)} />
+                  <Base20Display
+                    label="Month"
+                    digits={toBase20(dateParts.month)}
+                  />
+                  <Base20Display
+                    label="Year"
+                    digits={toBase20(dateParts.year)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
       {/* Display Options */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-        {/* Color pickers and grid toggle */}
-        {((mode === 'number' && isValidNumber) ||
-          (mode === 'date' && dateParts)) && <DisplaySettings />}
-      </div>
+      {hasValidinput && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+          {/* Color pickers and grid toggle */}
+          <DisplaySettings />
+        </div>
+      )}
 
       {/* Results Section */}
-      <div className="grid gap-8 md:grid-cols-2">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
-          {/* MayanRenderer and ExportPanel */}
-
-          {/* Number Mode Output */}
-          {mode === 'number' && isValidNumber && (
-            <MayanExportPanel filename={`mayan-numeral-number-${parsedNumber}`}>
+      {exportConfig && (
+        <div className="grid gap-8 md:grid-cols-2">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+            <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
+            {/* MayanRenderer and ExportPanel */}
+            <MayanExportPanel filename={exportConfig.filename}>
               {(ref) => (
-                <MayanNumeralRenderer digits={base20Digits} exportRef={ref} />
+                  exportConfig.children(ref)
               )}
             </MayanExportPanel>
-          )}
-
-          {/* Date Mode Output */}
-          {mode === 'date' && dateParts && (
-            <MayanExportPanel
-              filename={`mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`}
-            >
-              {(ref) => (
-                <MayanDateRenderer dateParts={dateParts} exportRef={ref} />
-              )}
-            </MayanExportPanel>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
