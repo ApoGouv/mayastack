@@ -129,28 +129,26 @@ export default function HomeView() {
         </div>
       </section>
 
-      {/* Display Options */}
-      {hasValidinput && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-          {/* Color pickers and grid toggle */}
-          <DisplaySettings />
-        </div>
-      )}
+      {hasValidinput && exportConfig && (
+        <div className="grid gap-6 md:grid-cols-[30%_1fr]">
+          {/* Left: Display Settings */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+            <h3 className="text-lg font-semibold mb-4">Display Options</h3>
+            {/* Color pickers and grid toggle */}
+            <DisplaySettings />
+          </div>
 
-      {/* Results Section */}
-      {exportConfig && (
-        <div className="grid gap-8 md:grid-cols-2">
+          {/* Right: Results Section */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
             <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
             {/* MayanRenderer and ExportPanel */}
             <MayanExportPanel filename={exportConfig.filename}>
-              {(ref) => (
-                  exportConfig.children(ref)
-              )}
+              {(ref) => exportConfig.children(ref)}
             </MayanExportPanel>
           </div>
         </div>
       )}
+      
     </div>
   );
 }
