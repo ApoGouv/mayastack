@@ -1,6 +1,7 @@
 // src/components/ThemeSelector.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import { useClickOutside } from '@hooks/useClickOutside';
 import LightTheme from '@components/icons/LightTheme';
 import DarkTheme from '@components/icons/DarkTheme';
 import SystemTheme from '@components/icons/SystemTheme';
@@ -32,30 +33,14 @@ export const ThemeSelector: React.FC = () => {
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
 
   return (
     <div className="relative" ref={dropdownRef} data-current-theme={theme}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
+          cursor-pointer
           relative flex items-center space-x-2 p-2 rounded-full 
           ring-2 ring-inset ring-current
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ms-brand-500 dark:focus:ring-offset-gray-800
