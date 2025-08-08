@@ -133,7 +133,6 @@ export default function HomeView() {
         <div className="grid gap-6 md:grid-cols-[30%_1fr]">
           {/* Left: Display Settings */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold mb-4">Display Options</h3>
             {/* Color pickers and grid toggle */}
             <DisplaySettings />
           </div>

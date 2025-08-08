@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { ExportFormat, ExportSize, Dimensions } from '@/types/exportTypes';
 import type { SizePreset } from '@utils/exportPresets';
-import { useClickOutside } from '@hooks/useClickOutside';
+import { useDismissOnOutsideOrEsc } from "@hooks/useDismissOnOutsideOrEsc";
 
 interface FloatingExportMenuProps {
   format: ExportFormat;
@@ -36,7 +36,7 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
 
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
-  useClickOutside(exportMenuRef, () => setIsOpen(false), isOpen);
+  useDismissOnOutsideOrEsc(exportMenuRef, () => setIsOpen(false), isOpen, true);
 
   return (
     <div ref={exportMenuRef} className="fixed bottom-4 right-4 z-50">

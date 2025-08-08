@@ -1,7 +1,7 @@
 // src/components/ThemeSelector.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { useClickOutside } from '@hooks/useClickOutside';
+import { useDismissOnOutsideOrEsc } from "@hooks/useDismissOnOutsideOrEsc";
 import LightTheme from '@components/icons/LightTheme';
 import DarkTheme from '@components/icons/DarkTheme';
 import SystemTheme from '@components/icons/SystemTheme';
@@ -33,7 +33,7 @@ export const ThemeSelector: React.FC = () => {
     }
   }, [isOpen]);
 
-  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
+  useDismissOnOutsideOrEsc(dropdownRef, () => setIsOpen(false), isOpen, false);
 
   return (
     <div className="relative" ref={dropdownRef} data-current-theme={theme}>
