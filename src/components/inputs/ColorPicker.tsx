@@ -15,7 +15,7 @@ interface ColorPickerProps {
 }
 
 const ColorPicker: React.FC<ColorPickerProps> = ({
-  label = "Color",
+  label = "Color:",
   value,
   onChange,
   showValue = false,
@@ -36,21 +36,26 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   return (
     <div
       ref={pickerRef}
-      className="relative inline-flex items-center justify-start gap-[0.7rem] my-[0.625rem] select-none"
+      className="relative inline-flex items-center justify-start gap-[0.7rem] my-[0.625rem] select-none w-full max-w-md"
     >
-      <div className="flex items-center justify-between gap-4">
-        {label && <label className="block text-[0.9rem]">{label}</label>}
+      <div className="flex items-center justify-between gap-4 w-full">
+        {label && (
+          <label className="text-sm text-gray-700 dark:text-gray-300 select-none">
+            {label}
+          </label>
+        )}
+
         <div
+          onClick={togglePicker}
           className={`${
               showValue
-                ? "min-w-[215px] h-[36px] px-[0.6rem] py-[0.4rem]"
-                : "w-[26px] h-[26px] p-0 inline-block"
-            } flex items-center justify-between border border-gray-300 bg-white font-mono text-[0.85rem] leading-[1.2rem] rounded cursor-pointer text-center select-none transition-all duration-200 ease-in-out`}        
+                ? "min-w-[215px] h-[34px] px-[0.6rem] py-[0.4rem] font-mono text-[0.85rem] leading-[1.2rem] text-center"
+                : "w-[24px] h-[24px] p-0 inline-block"
+            } flex items-center justify-between border border-gray-300 bg-white rounded cursor-pointer select-none transition-all duration-200 ease-in-out color-preview`}        
           style={{
             backgroundColor: rgbaString,
             color: textColor
           }}
-          onClick={togglePicker}
         >
           {showValue && rgbaString}
         </div>

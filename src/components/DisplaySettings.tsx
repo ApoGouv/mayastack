@@ -13,7 +13,7 @@ export default function DisplaySettings() {
   } = useDisplaySettings();
 
   return (
-    <fieldset className="border border-gray-200 dark:border-gray-700 rounded-md p-5 space-y-4">
+    <fieldset className="border border-gray-200 dark:border-gray-700 rounded-md py-5 px-3 space-y-4">
       <legend className="px-3 font-medium text-gray-700 dark:text-gray-300">
         SVG Display Settings
       </legend>
@@ -30,7 +30,11 @@ export default function DisplaySettings() {
           onChange={setGlyphColor}
           showValue={false}
         />
-        <ShowGridToggle value={showGrid} onChange={setShowGrid} />
+        <ShowGridToggle 
+          label="Show Grid:"
+          value={showGrid} 
+          onChange={setShowGrid} 
+        />
       </div>
     </fieldset>
   );
