@@ -39,10 +39,11 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   useDismissOnOutsideOrEsc(exportMenuRef, () => setIsOpen(false), isOpen, true);
 
   return (
-    <div ref={exportMenuRef} className="fixed bottom-4 right-4 z-50">
+    <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="cursor-pointer bg-ms-clay-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-ms-amber-500"
+        className="cursor-pointer bg-ms-clay-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-ms-amber-500 hover:shadow-lg 
+hover:shadow-ms-clay-500/50 transition duration-300"
       >
         📦 Export
       </button>
