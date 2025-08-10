@@ -7,6 +7,7 @@ interface Base20DisplayProps {
   digits: number[];
   tooltip?: boolean;
   tooltipId?: string;
+  className?: string;
 }
 
 
@@ -15,6 +16,7 @@ const Base20Display: React.FC<Base20DisplayProps> = ({
   digits,
   tooltip = true,
   tooltipId,
+  className = '',
 }) => {
   const generatedId = useId();
   const id = tooltipId || `base20-tooltip-${generatedId}`;
@@ -22,7 +24,7 @@ const Base20Display: React.FC<Base20DisplayProps> = ({
   const notation = 'Notation: ' + toBase20String(digits, 'notation');
 
   return (
-    <div className="w-full max-w-sm space-y-1">
+    <div className={`w-full max-w-sm space-y-1 ${className}`}>
       {label && (
         <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
           {label}

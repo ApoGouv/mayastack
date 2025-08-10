@@ -112,15 +112,21 @@ export default function HomeView() {
               )}
 
               {hasValidDateInput && dateParts && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Base20Display label="Day" digits={toBase20(dateParts.day)} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
+                  <Base20Display
+                    label="Day"
+                    digits={toBase20(dateParts.day)}
+                    className="sm:col-span-1"
+                  />
                   <Base20Display
                     label="Month"
                     digits={toBase20(dateParts.month)}
+                    className="sm:col-span-1"
                   />
                   <Base20Display
                     label="Year"
                     digits={toBase20(dateParts.year)}
+                    className="sm:col-span-2"
                   />
                 </div>
               )}
