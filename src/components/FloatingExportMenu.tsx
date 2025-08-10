@@ -51,7 +51,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
       {/* Floating Panel */}
       {isOpen && (
         <div
-          className="fixed bottom-20 right-4 z-40 bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-[350px] max-h-[80vh] overflow-y-auto"
+          className="fixed bottom-20 sm:bottom-30 right-4 z-40 bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-[350px] max-h-[80vh] overflow-y-auto"
         >
           <div className="flex flex-wrap gap-4">
             {/* Format Selector */}
