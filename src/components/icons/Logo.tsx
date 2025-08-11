@@ -7,6 +7,7 @@ interface LogoProps {
   color?: string; // Optional explicit color override
   tooltip?: boolean;
   tooltipId?: string;
+  showBackground?: boolean;
 }
 
 const Logo: React.FC<LogoProps> = ({
@@ -15,6 +16,7 @@ const Logo: React.FC<LogoProps> = ({
   color = 'currentColor',
   tooltip = true,
   tooltipId,
+  showBackground = true,
 }) => {
   const generatedId = useId();
   const logoTooltipId = tooltipId ?? `logo-tooltip-${generatedId}`;
@@ -35,11 +37,13 @@ const Logo: React.FC<LogoProps> = ({
         data-tooltip-id={tooltip ? logoTooltipId : undefined}
         data-tooltip-html={tooltip ? logoTooltipContent : undefined}
       >
-        <path d="M15 10 H45" stroke={color} strokeWidth="4" strokeLinecap="round" />
+        {showBackground && (
+          <circle cx="30" cy="30" r="28" fill="#b3482e" />
+        )}
 
-        <circle cx="30" cy="30" r="3" fill={color} />
-
-        <path d="M15 50 H45" stroke={color} strokeWidth="4" strokeLinecap="round" />
+        <path d="M15 15 H45" stroke={color} strokeWidth="5" strokeLinecap="round" />
+        <circle cx="30" cy="30" r="6" fill={color} />
+        <path d="M15 45 H45" stroke={color} strokeWidth="5" strokeLinecap="round" />
       </svg>
       {tooltip && (
         <Tooltip

@@ -1,7 +1,7 @@
 {
   "name": "mayastack",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "homepage": "https://apogouv.github.io/mayastack",
   "type": "module",
   "scripts": {

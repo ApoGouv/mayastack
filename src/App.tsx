@@ -11,7 +11,7 @@ export default function App() {
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           {/* Left: Logo + Title */}
           <div className="flex items-center space-x-3">
-            <Logo className="w-10 h-10 text-ms-deep-teal-500 dark:text-ms-moss-500" />
+            <Logo className="w-10 h-10 text-ms-sand-500 dark:text-ms-sand-500" />
             <span className="font-bold text-xl tracking-tight">
               <span className="">Maya</span>
               <span className="text-ms-brand-500">Stack</span>
