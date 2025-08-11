@@ -1,69 +1,80 @@
-# React + TypeScript + Vite
+# MayaStack
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+![MayaStack Logo](./favicon.svg)
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub issues](https://img.shields.io/github/issues/ApoGouv/mayastack)](https://github.com/ApoGouv/mayastack/issues)
+[![GitHub last commit](https://img.shields.io/github/last-commit/ApoGouv/mayastack)](https://github.com/ApoGouv/mayastack/commits/main)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Visit-blue?logo=github&logoColor=white)](https://apogouv.github.io/mayastack/)
 
-## Expanding the ESLint configuration
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+**MayaStack – Dot. Bar. Shell. Stack your numbers the Mayan way.**
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Explore and convert numbers or dates into Mayan numeral glyphs. MayaStack brings ancient math to life with visual dot, bar, and shell stacks, letting you dive into the fascinating Mayan numeral system interactively.
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 🚀 Features
+
+- Convert numbers and dates into authentic Mayan numeral representations
+- Interactive visual stacks using dots, bars, and shells
+- Export numeral stacks as SVG or PNG for sharing or printing
+- Supports custom export sizes and flexible display options
+- Dark mode support for comfortable viewing
+- Lightweight, modern React + Vite stack with TypeScript
+
+---
+
+## 🌐 Demo
+
+Try it live here: [https://apogouv.github.io/mayastack/](https://apogouv.github.io/mayastack/)
+
+---
+
+## ⚙️ Installation & Development
+
+```bash
+git clone https://github.com/ApoGouv/mayastack.git
+cd mayastack
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open [http://localhost:5173](http://localhost:5173) in your browser to see the app during development.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 📦 Build & Deploy
+
+```bash
+npm run deploy
 ```
+
+This will build the app and deploy it to GitHub Pages using the `gh-pages` package.
+
+---
+
+## 🛠️ Technologies and Packages Used
+
+* React 19
+* TypeScript
+* Vite
+* Tailwind CSS
+* React Colorful
+* React Date Picker
+* React Hot Toast
+* React Tooltip
+* And more...
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
+
+---
+
+## 📄 License
+
+MIT © 2025 MayaStack by Apostolos Gouvalas
