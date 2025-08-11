@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { toBase20 } from '@utils/base20';
-import MayanNumeralRenderer from '@components/MayanNumeralRenderer';
-import MayanDateRenderer from '@components/MayanDateRenderer';
+import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
 import RenderModeSwitcher from '@components/inputs/RenderModeSwitcher';
@@ -10,7 +9,13 @@ import DisplaySettings from '@components/DisplaySettings';
 import NumberInput from '@components/inputs/NumberInput';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
-import type { MayanExportPanelProps } from '@/types/exportTypes';
+
+type DigitGroup = { label: string; digits: number[] };
+
+type MayanRenderData = {
+  filename: string;
+  digitGroups: DigitGroup[];
+};
 
 /**
  * HomeView is the main input view of the app.
@@ -25,15 +30,35 @@ export default function HomeView() {
   // Derived values
   const parsedNumber: number = parseInt(numberInput, 10);
   const isValidNumber: boolean = !isNaN(parsedNumber) && parsedNumber >= 0;
-  const base20Digits: number[] = useMemo(() => {
-    // Store the parsed digits once
-    return isValidNumber ? toBase20(parsedNumber) : []
-  }, [isValidNumber, parsedNumber]);
 
   // Validation flags
   const hasValidNumberInput: boolean = mode === 'number' && isValidNumber;
   const hasValidDateInput: boolean = mode === 'date' && dateParts !== null;
   const hasValidinput: boolean = hasValidNumberInput || hasValidDateInput;
+
+  const mayanData: MayanRenderData | null = useMemo(() => {
+    if (mode === 'number' && isValidNumber) {
+      return {
+        filename: `mayan-numeral-number-${parsedNumber}`,
+        digitGroups: [
+          { label: 'Number', digits: toBase20(parsedNumber) }
+        ]
+      };
+    }
+
+    if (mode === 'date' && dateParts) {
+      return {
+        filename: `mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`,
+        digitGroups: [
+          { label: 'Day', digits: toBase20(dateParts.day) },
+          { label: 'Month', digits: toBase20(dateParts.month) },
+          { label: 'Year', digits: toBase20(dateParts.year) }
+        ]
+      };
+    }
+
+    return null;
+  }, [mode, isValidNumber, parsedNumber, dateParts]);
 
   // Event handlers
   const handleNumberInputChange = (value: string): void => {
@@ -44,32 +69,6 @@ export default function HomeView() {
     setDateParts(parsed);
     setDateInputRaw(raw);
   };
-
-  const exportConfig = useMemo<MayanExportPanelProps | null>(() => {
-    if (!hasValidinput) return null;
-
-    {/* Number Mode Output */}
-    if (hasValidNumberInput) {
-      return {
-        filename: `mayan-numeral-number-${parsedNumber}`,
-        children: (ref) => (
-          <MayanNumeralRenderer digits={base20Digits} exportRef={ref} />
-        ),
-      };
-    }
-
-    {/* Date Mode Output */}
-    if (hasValidDateInput && dateParts) {
-      return {
-        filename: `mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`,
-        children: (ref) => (
-          <MayanDateRenderer dateParts={dateParts} exportRef={ref} />
-        ),
-      };
-    }
-
-    return null;
-  }, [hasValidinput, hasValidNumberInput, hasValidDateInput, dateParts, base20Digits, parsedNumber]);
 
   return (
     <div className="grid grid-cols-1 gap-8 max-w-4xl mx-auto">
@@ -107,35 +106,33 @@ export default function HomeView() {
                 Base-20 Representation
               </h3>
 
-              {hasValidNumberInput && (
-                <Base20Display label="Number" digits={base20Digits} />
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
+                {mayanData?.digitGroups.map((group) => {
+                  let extraClass = '';
 
-              {hasValidDateInput && dateParts && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
-                  <Base20Display
-                    label="Day"
-                    digits={toBase20(dateParts.day)}
-                    className="sm:col-span-1"
-                  />
-                  <Base20Display
-                    label="Month"
-                    digits={toBase20(dateParts.month)}
-                    className="sm:col-span-1"
-                  />
-                  <Base20Display
-                    label="Year"
-                    digits={toBase20(dateParts.year)}
-                    className="sm:col-span-2"
-                  />
-                </div>
-              )}
+                  if (mode === 'date') {
+                    if (group.label === 'Year') extraClass = 'sm:col-span-2';
+                    else extraClass = 'sm:col-span-1';
+                  } else if (mode === 'number') {
+                    extraClass = 'sm:col-span-2';
+                  }
+
+                  return (
+                    <Base20Display
+                      key={group.label}
+                      label={group.label}
+                      digits={group.digits}
+                      className={extraClass}
+                    />
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
       </section>
 
-      {hasValidinput && exportConfig && (
+      {hasValidinput && mayanData && (
         <div className="grid gap-6 md:grid-cols-[30%_1fr]">
           {/* Left: Display Settings */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
@@ -147,8 +144,17 @@ export default function HomeView() {
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
             <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
             {/* MayanRenderer and ExportPanel */}
-            <MayanExportPanel filename={exportConfig.filename}>
-              {(ref) => exportConfig.children(ref)}
+            <MayanExportPanel filename={mayanData?.filename ?? ''}>
+              {(ref) => 
+                <MayanRenderer
+                  digitGroups={mayanData?.digitGroups.map(g => g.digits) ?? []}
+                  heightPerGlyphStack={80}
+                  widthPerGroup={mode === 'number' ? 350 : 100}
+                  spacing={25}
+                  scale={1}
+                  exportRef={ref}
+                />
+              }
             </MayanExportPanel>
           </div>
         </div>
