@@ -42,6 +42,9 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
     <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        aria-controls="floating-export-menu-panel"
         className="cursor-pointer bg-ms-clay-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-ms-amber-500 hover:shadow-lg 
 hover:shadow-ms-clay-500/50 transition duration-300"
       >
@@ -51,15 +54,23 @@ hover:shadow-ms-clay-500/50 transition duration-300"
       {/* Floating Panel */}
       {isOpen && (
         <div
-          className="fixed bottom-18 sm:bottom-30 right-4 z-40 bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-[350px] max-h-[80vh] overflow-y-auto"
+          id="floating-export-menu-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="export-menu-heading"
+          className="fixed bottom-18 sm:bottom-30 right-4 z-40 bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg max-w-[350px] max-h-[80vh] overflow-y-auto"
+          style={{ width: 'calc(100% - 2*var(--spacing) * 4)' }}
         >
           <div className="flex flex-wrap gap-4">
+            <h2 id="export-menu-heading" className="sr-only">Export Options</h2>
+
             {/* Format Selector */}
             <div className="flex-1 min-w-[250px]">
-              <label className="block text-sm font-medium mb-1">
+              <label htmlFor="export-format-select" className="block text-sm font-medium mb-1">
                 Export Format
               </label>
               <select
+                id="export-format-select"
                 value={format}
                 onChange={(e) => setFormat(e.target.value as ExportFormat)}
                 className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
@@ -71,10 +82,11 @@ hover:shadow-ms-clay-500/50 transition duration-300"
 
             {/* Size Preset Selector */}
             <div className="flex-1 min-w-[250px]">
-              <label className="block text-sm font-medium mb-1">
+              <label htmlFor="size-preset-select" className="block text-sm font-medium mb-1">
                 Size Preset
               </label>
               <select
+                id="size-preset-select"
                 value={sizeOption}
                 onChange={(e) => setSizeOption(e.target.value as ExportSize)}
                 className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
@@ -107,10 +119,11 @@ hover:shadow-ms-clay-500/50 transition duration-300"
 
               <div className="flex flex-wrap gap-4">
                 <div className="flex-1 min-w-[250px]">
-                  <label className="block text-sm font-medium mb-1">
+                  <label htmlFor="size-custom-width" className="block text-sm font-medium mb-1">
                     Width (px)
                   </label>
                   <input
+                    id="size-custom-width"
                     type="number"
                     value={customWidth}
                     onChange={(e) => {
@@ -132,10 +145,11 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                   />
                 </div>
                 <div className="flex-1 min-w-[250px]">
-                  <label className="block text-sm font-medium mb-1">
+                  <label htmlFor="size-custom-height" className="block text-sm font-medium mb-1">
                     Height (px)
                   </label>
                   <input
+                    id="size-custom-height"
                     type="number"
                     value={customHeight}
                     onChange={(e) => {
@@ -163,6 +177,8 @@ hover:shadow-ms-clay-500/50 transition duration-300"
           <button
             onClick={handleExport}
             className="cursor-pointer w-full mt-2 px-4 py-2 bg-ms-clay-500 text-white rounded hover:bg-ms-amber-500 transition"
+            aria-label={`Export ${format.toUpperCase()} image with size ${sizePresets[sizeOption].label} (${sizePresets[sizeOption].getDimensions().width} by ${sizePresets[sizeOption].getDimensions().height} pixels)`}
+
           >
             Export {format.toUpperCase()} ({sizePresets[sizeOption].label}:{' '}
             {sizePresets[sizeOption].getDimensions().width}×

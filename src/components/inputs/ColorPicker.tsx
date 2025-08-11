@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useId } from "react";
 import { RgbaColorPicker } from "react-colorful";
 
 import type { RgbaColor } from "@/types/colors";
@@ -8,6 +8,7 @@ import { useDismissOnOutsideOrEsc } from "@hooks/useDismissOnOutsideOrEsc";
 import "@components/inputs/ColorPicker.css";
 
 interface ColorPickerProps {
+  id?: string;
   label?: string;
   value: RgbaColor;
   onChange: (color: RgbaColor) => void;
@@ -15,6 +16,7 @@ interface ColorPickerProps {
 }
 
 const ColorPicker: React.FC<ColorPickerProps> = ({
+  id,
   label = "Color:",
   value,
   onChange,
@@ -22,6 +24,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+
+  const generatedId = useId();
+  const buttonId = id ?? `color-picker-button-${generatedId}`;
 
   const rgbaString = `rgba(${value.r}, ${value.g}, ${
     value.b
@@ -40,12 +45,14 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     >
       <div className="flex items-center justify-between gap-4 w-full">
         {label && (
-          <label className="text-sm text-gray-700 dark:text-gray-300 select-none">
+          <label htmlFor={buttonId} className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
             {label}
           </label>
         )}
 
-        <div
+        <button
+          id={buttonId}
+          type="button"
           onClick={togglePicker}
           className={`${
               showValue
@@ -56,9 +63,12 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
             backgroundColor: rgbaString,
             color: textColor
           }}
+          aria-label={label}
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
         >
           {showValue && rgbaString}
-        </div>
+        </button>
       </div>
 
       {isOpen && (

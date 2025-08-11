@@ -1,6 +1,6 @@
 import { useDisplaySettings } from "@/hooks/useDisplaySettings";
 import ColorPicker from "@components/inputs/ColorPicker";
-import ShowGridToggle from "@components/inputs/ShowGridToggle";
+import ToggleSwitch from "@/components/inputs/ToggleSwitch";
 
 export default function DisplaySettings() {
   const {
@@ -19,18 +19,20 @@ export default function DisplaySettings() {
       </legend>
       <div className="flex flex-wrap items-center gap-4">
         <ColorPicker
+          id="background-color-picker-button"
           label="Background color:"
           value={backgroundColor}
           onChange={setBackgroundColor}
           showValue={false}
         />
         <ColorPicker
+          id="glyph-color-picker-button"
           label="Glyph color:"
           value={glyphColor}
           onChange={setGlyphColor}
           showValue={false}
         />
-        <ShowGridToggle 
+        <ToggleSwitch 
           label="Show Grid:"
           value={showGrid} 
           onChange={setShowGrid} 

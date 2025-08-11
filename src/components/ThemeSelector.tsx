@@ -46,6 +46,8 @@ export const ThemeSelector: React.FC = () => {
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ms-brand-500 dark:focus:ring-offset-gray-800
           transition-all
         `}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
         aria-label={`Theme selector (current: ${theme})`}
         data-theme={theme}
       >
@@ -56,6 +58,7 @@ export const ThemeSelector: React.FC = () => {
       {/* Override animation duration [animation-duration:_.5s] */}
       {shouldRender && (
         <div
+          role="menu"
           className={`absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 
           ${isOpen ? 'animate-fade-in' : 'animate-fade-out'}
         `}
@@ -63,6 +66,8 @@ export const ThemeSelector: React.FC = () => {
           {themes.map((themeOption) => (
             <button
               key={themeOption.id}
+              role="menuitem"
+              aria-current={theme === themeOption.id ? 'true' : undefined}
               onClick={() => {
                 setTheme(themeOption.id as 'light' | 'dark' | 'system');
                 setIsOpen(false);

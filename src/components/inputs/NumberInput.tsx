@@ -14,7 +14,9 @@ const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder 
 
   return (
     <div className="relative flex items-center max-w-sm w-full">
+      <label htmlFor="number-input" className="sr-only">Number input</label>
       <input
+        id="number-input"
         type="number"
         value={value}
         onChange={handleChange}

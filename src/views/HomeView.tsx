@@ -3,8 +3,8 @@ import { toBase20 } from '@utils/base20';
 import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
-import RenderModeSwitcher from '@components/inputs/RenderModeSwitcher';
-import type { RenderMode } from '@components/inputs/RenderModeSwitcher';
+import RenderModeSelector from '@/components/inputs/RenderModeSelector';
+import type { RenderMode } from '@/components/inputs/RenderModeSelector';
 import DisplaySettings from '@components/DisplaySettings';
 import NumberInput from '@components/inputs/NumberInput';
 import DateInput from '@components/inputs/DateInput';
@@ -84,7 +84,7 @@ export default function HomeView() {
         <div className="grid md:grid-cols-2 gap-6 items-start">
           {/* Left: Render Mode + Input */}
           <div className="space-y-4">
-            <RenderModeSwitcher mode={mode} onChange={setMode} />
+            <RenderModeSelector mode={mode} onChange={setMode} />
 
             {mode === 'number' ? (
               <NumberInput
