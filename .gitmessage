@@ -1,0 +1,30 @@
+# <type>(optional scope): short summary
+#
+# Common types:
+# feat:      new feature (e.g. renderer, export, UI mode)
+# fix:       bug fix
+# chore:     tooling, dependencies, configs
+# docs:      updates to documentation or README
+# style:     formatting or styling only (no logic change)
+# refactor:  cleanup, rename, or non-breaking logic change
+# test:      add or fix tests
+#
+# Examples:
+# feat: add MayanNumeralRenderer component
+# chore: setup React Router with routes
+# docs: add usage instructions to README
+#
+# Full example with optional scope, body, and footer:
+# feat(renderer): add support for shell glyph at 0
+#
+# - Uses a circle to visually represent 0
+# - Will later be replaced with a custom SVG shell icon
+#
+# Closes #5
+#
+# ---------------------------------------------------------
+# <body> (optional)
+# Explain what and why. Use bullet points if needed.
+#
+# <footer> (optional)
+# Closes #123, relates to #456
