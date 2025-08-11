@@ -9,7 +9,15 @@ interface NumberInputProps {
 
 const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder = 'Enter a number' }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
+    // Remove any non-digit characters
+    const sanitized = e.target.value.replace(/[^\d]/g, '');
+    onChange(sanitized);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+      e.preventDefault();
+    }
   };
 
   return (
@@ -20,11 +28,13 @@ const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder 
         type="number"
         value={value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         aria-label="Number input"
         min="0"
         step="1"
         pattern="\d*"
+        inputMode="numeric"
         className="w-full pl-10 pr-4 py-2 rounded-md px-4 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ms-moss-500 transition"
       />
       <Numbers className="absolute left-3 w-5 h-5 text-ms-moss-500 pointer-events-none" />
