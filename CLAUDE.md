@@ -170,19 +170,45 @@ A proper Mayan Long Count calendar implementation is planned for a later phase. 
 
 This roadmap provides context and does not authorize Claude to implement every item automatically. Work only on the task explicitly requested.
 
-## 10. Git and Safety
+## 10. Git, Branches, and Safety
 
-- Never discard, overwrite, or include pre-existing user changes without authorization.
-- Do not use destructive Git operations, such as resetting or cleaning the working tree, without explicit authorization.
-- Do not create commits or push changes unless explicitly authorized for the current task.
-- Do not rebase, amend existing commits, force-push, or rewrite shared history without explicit authorization.
-- Do not deploy the application or run deployment commands unless explicitly authorized.
-- Before committing, review the staged diff and ensure it contains only the intended changes.
+### Repository Synchronization
+
+- Before starting a task, inspect the current branch, working tree, recent commits, and upstream tracking configuration.
+- Fetch the latest changes from the configured remote before beginning new work.
+- Check whether the local branch is behind, ahead of, or diverged from its upstream branch.
+- Update a branch using a fast-forward-only operation when the working tree is clean and the update is safe.
+- Never pull blindly into a dirty working tree or a branch that has diverged from its upstream.
+- If synchronization is unsafe or the repository state is unexpected, stop and report the situation before proceeding.
+- Never discard, overwrite, or abandon pre-existing user changes.
+
+### Branch Workflow
+
+- Use a dedicated Git branch for each new implementation task, keeping changes isolated from `main`.
+- Create task branches from the latest `main` only after verifying that the branch and working tree are in a safe state.
+- Use short, descriptive branch names with the appropriate prefix:
+  - `fix/...` for bug fixes.
+  - `test/...` for testing infrastructure or test-only changes.
+  - `feat/...` for new features.
+  - `chore/...` for maintenance and tooling.
+  - `docs/...` for documentation-only changes.
+- Keep each branch focused on the current task. A single task may contain multiple related changes or commits when appropriate.
+- Do not switch branches with uncommitted changes unless their safety has been assessed and no existing work will be lost or mixed.
+- Do not create a new branch if doing so would abandon, overwrite, or interfere with existing work.
+- If the current task is already in progress on another branch, do not switch branches or move changes without first assessing the current state.
+
+### Commits, Pushes, and Merges
+
+- Do not create commits, push changes, merge branches, open pull requests, or deploy the application without explicit authorization for the relevant action.
+- Treat committing, pushing, merging, and deploying as separate actions requiring separate authorization.
+- Before committing, inspect the staged diff and ensure it contains only the intended changes.
 - Keep commits focused and use clear, descriptive commit messages.
-- Never include secrets, credentials, local environment files, or unrelated generated artifacts in a commit.
-- Do not assume that a clean working tree or a particular branch is guaranteed. Inspect the actual state before acting.
+- Do not rebase, amend existing commits, force-push, reset, clean the working tree, or rewrite shared Git history without explicit authorization.
+- Never include secrets, credentials, local environment files, unrelated user changes, or unintended generated artifacts in a commit.
+- After completing a task, report the current branch, changes made, validation results, and Git status.
+- Integrate completed task branches into `main` only after the changes have been reviewed and approved.
 
-Committing, pushing, and deploying are separate actions and require their own authorization.
+When the repository state is unexpected, the working tree is dirty, or an operation could affect existing work, stop and explain the situation before proceeding.
 
 ## 11. Documentation
 
