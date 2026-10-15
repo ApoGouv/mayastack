@@ -17,13 +17,13 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
-      '@components': path.resolve(__dirname, 'src/components'),
-      '@constants': path.resolve(__dirname, 'src/constants'),
-      '@utils': path.resolve(__dirname, 'src/utils'),
-      '@views': path.resolve(__dirname, 'src/views'),
-      '@context': path.resolve(__dirname, 'src/context'),
-      '@hooks': path.resolve(__dirname, 'src/hooks'),
+      '@': path.resolve(import.meta.dirname, 'src'),
+      '@components': path.resolve(import.meta.dirname, 'src/components'),
+      '@constants': path.resolve(import.meta.dirname, 'src/constants'),
+      '@utils': path.resolve(import.meta.dirname, 'src/utils'),
+      '@views': path.resolve(import.meta.dirname, 'src/views'),
+      '@context': path.resolve(import.meta.dirname, 'src/context'),
+      '@hooks': path.resolve(import.meta.dirname, 'src/hooks'),
     },
   },
 });

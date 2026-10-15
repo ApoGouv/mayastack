@@ -1,6 +1,30 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { DisplaySettingsContext } from '@/context/display-settings-context-value';
 import type { RgbaColor, ColorTheme } from '@/types/colors';
+
+const THEMES: ColorTheme[] = ['light', 'dark', 'system'];
+const DARK_QUERY = '(prefers-color-scheme: dark)';
+
+// Read the saved theme once, on first render (ignore invalid values)
+const readSavedTheme = (): ColorTheme => {
+  const saved = localStorage.getItem('theme') as ColorTheme | null;
+  return saved && THEMES.includes(saved) ? saved : 'system';
+};
+
+// Read the saved grid visibility once, on first render
+const readSavedShowGrid = (): boolean => {
+  const saved = localStorage.getItem('showGrid');
+  return saved === null ? defaultShowGrid : saved === 'true';
+};
+
+// Subscribe to OS dark-mode changes (used by useSyncExternalStore)
+const subscribeToSystemTheme = (onChange: () => void) => {
+  const mediaQuery = window.matchMedia(DARK_QUERY);
+  mediaQuery.addEventListener('change', onChange);
+  return () => mediaQuery.removeEventListener('change', onChange);
+};
+
+const getSystemPrefersDark = () => window.matchMedia(DARK_QUERY).matches;
 
 // Default color values
 const defaultBackgroundColor: RgbaColor = { r: 255, g: 255, b: 255, a: 1 }; // white
@@ -14,43 +38,19 @@ const defaultShowGrid = false; // Hide grid by default
 export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [theme, setTheme] = useState<ColorTheme>('system');
-  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+  const [theme, setTheme] = useState<ColorTheme>(readSavedTheme);
+
+  const systemPrefersDark = useSyncExternalStore(
+    subscribeToSystemTheme,
+    getSystemPrefersDark
+  );
+
   const [backgroundColor, setBackgroundColor] = useState<RgbaColor>(
     defaultBackgroundColor
   );
   const [glyphColor, setGlyphColor] = useState<RgbaColor>(defaultGlyphColor);
-  const [showGrid, setShowGrid] = useState<boolean>(defaultShowGrid);
 
-  // Get system preference and watch for changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-
-    setSystemPrefersDark(mediaQuery.matches);
-    mediaQuery.addEventListener('change', handleSystemThemeChange);
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleSystemThemeChange);
-    };
-  }, []);
-
-  // Initialize theme. grid visibility from localStorage
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as ColorTheme | null;
-    const savedShowGrid = localStorage.getItem('showGrid');
-
-    if (savedTheme) {
-      setTheme(savedTheme);
-    }
-
-    if (savedShowGrid) {
-      setShowGrid(savedShowGrid === 'true');
-    }
-  }, []);
+  const [showGrid, setShowGrid] = useState<boolean>(readSavedShowGrid);
 
   // Calculate resolved theme (actual theme being used)
   const resolvedTheme = useMemo(() => {

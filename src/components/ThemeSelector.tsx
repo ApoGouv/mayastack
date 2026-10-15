@@ -24,21 +24,23 @@ export const ThemeSelector: React.FC = () => {
   );
 
   useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-    } else {
-      // Delay actual unmount to allow fade-out
-      const timeout = setTimeout(() => setShouldRender(false), 300); // match animation duration
-      return () => clearTimeout(timeout);
-    }
+    if (isOpen) return;
+    // Delay actual unmount to allow fade-out
+    const timeout = setTimeout(() => setShouldRender(false), 300); // match animation duration
+    return () => clearTimeout(timeout);
   }, [isOpen]);
+
+  const toggleMenu = () => {
+    if (!isOpen) setShouldRender(true);
+    setIsOpen(!isOpen);
+  };
 
   useDismissOnOutsideOrEsc(dropdownRef, () => setIsOpen(false), isOpen, false);
 
   return (
     <div className="relative" ref={dropdownRef} data-current-theme={theme}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleMenu}
         className={`
           cursor-pointer
           relative flex items-center space-x-2 p-2 rounded-full 

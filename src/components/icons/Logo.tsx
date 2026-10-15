@@ -35,7 +35,7 @@ const Logo: React.FC<LogoProps> = ({
         aria-label="Mayan numeral logo"
         role="img"
         data-tooltip-id={tooltip ? logoTooltipId : undefined}
-        data-tooltip-html={tooltip ? logoTooltipContent : undefined}
+        data-tooltip-content={tooltip ? logoTooltipContent : undefined}
       >
         {showBackground && (
           <circle cx="30" cy="30" r="28" fill="#b3482e" />
@@ -48,7 +48,7 @@ const Logo: React.FC<LogoProps> = ({
       {tooltip && (
         <Tooltip
           id={logoTooltipId}
-          className="z-50 !max-w-sm !bg-gray-800 !text-white !text-sm !rounded !p-2"
+          className="z-50 max-w-sm! bg-gray-800! text-white! text-sm! rounded! p-2!"
           place="bottom"
           offset={10}
         />
