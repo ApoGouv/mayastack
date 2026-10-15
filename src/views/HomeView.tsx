@@ -27,9 +27,12 @@ export default function HomeView() {
   const [dateInputRaw, setDateInputRaw] = useState('');
   const [dateParts, setDateParts] = useState<DateParts | null>(null);
 
-  // Derived values
-  const parsedNumber: number = parseInt(numberInput, 10);
-  const isValidNumber: boolean = !isNaN(parsedNumber) && parsedNumber >= 0;
+  // Derived values: parse the digits exactly as a bigint
+  // (parseInt would lose precision beyond Number.MAX_SAFE_INTEGER)
+  const parsedNumber: bigint | null = /^\d+$/.test(numberInput)
+    ? BigInt(numberInput)
+    : null;
+  const isValidNumber: boolean = parsedNumber !== null;
 
   // Validation flags
   const hasValidNumberInput: boolean = mode === 'number' && isValidNumber;
@@ -37,7 +40,7 @@ export default function HomeView() {
   const hasValidinput: boolean = hasValidNumberInput || hasValidDateInput;
 
   const mayanData: MayanRenderData | null = useMemo(() => {
-    if (mode === 'number' && isValidNumber) {
+    if (mode === 'number' && parsedNumber !== null) {
       return {
         filename: `mayan-numeral-number-${parsedNumber}`,
         digitGroups: [
@@ -58,7 +61,7 @@ export default function HomeView() {
     }
 
     return null;
-  }, [mode, isValidNumber, parsedNumber, dateParts]);
+  }, [mode, parsedNumber, dateParts]);
 
   // Event handlers
   const handleNumberInputChange = (value: string): void => {
