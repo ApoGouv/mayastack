@@ -1,6 +1,7 @@
 import React from "react";
 
 import GlyphStack from "@components/GlyphStack";
+import { getPlaceValues } from "@utils/base20";
 
 interface GlyphStackGroupProps {
   digits: number[];
@@ -19,14 +20,10 @@ const GlyphStackGroup: React.FC<GlyphStackGroupProps> = ({
 }) => {
   return (
     <>
-      {digits.map((digit, index) => {
+      {getPlaceValues(digits).map(({ digit, exponent, multiplier, value }, index) => {
         // Compute Y offset for each digit to ensure vertical bottom alignment of stacks
         // inside the given totalHeight. Each digit stack is rendered upward from this Y.
         const yOffset = totalHeight - (digits.length - index) * heightPerGlyphStack;
-
-        const exponent = digits.length - index - 1;
-        const multiplier = Math.pow(20, exponent);
-        const digitBase10Value = digit * multiplier;
 
         return (
           <g
@@ -34,8 +31,9 @@ const GlyphStackGroup: React.FC<GlyphStackGroupProps> = ({
             data-digit-index={index}
             data-digit-value={digit}
             data-digit-exponent={exponent}
-            data-digit-multiplier={multiplier}
-            data-digit-base10-value={digitBase10Value}
+            // Exact integer strings (bigint), never rounded or in exponent notation
+            data-digit-multiplier={multiplier.toString()}
+            data-digit-base10-value={value.toString()}
           >
             <GlyphStack
               digit={digit}

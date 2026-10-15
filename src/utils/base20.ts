@@ -39,31 +39,102 @@ export function toBase20String(
 }
 
 /**
+ * The base as a bigint, for exact integer arithmetic.
+ */
+const BASE_20_BIGINT = BigInt(BASE_20);
+
+/**
+ * Validates a value and returns it as an exact, non-negative bigint.
+ *
+ * Numbers must be safe integers: beyond Number.MAX_SAFE_INTEGER a number may
+ * already have lost precision (e.g. 9007199254740993 becomes 9007199254740992),
+ * so larger values must be passed as a bigint.
+ *
+ * @throws RangeError for negative, fractional, NaN, infinite or unsafe values
+ */
+function toExactNonNegativeInteger(value: number | bigint): bigint {
+  if (typeof value === "number" && !Number.isSafeInteger(value)) {
+    throw new RangeError(
+      `Expected a safe integer, received ${value}. Use a bigint for larger values.`
+    );
+  }
+
+  const integer = BigInt(value);
+  if (integer < 0n) {
+    throw new RangeError(`Expected a non-negative integer, received ${value}.`);
+  }
+
+  return integer;
+}
+
+/**
  * Converts a decimal number (base-10) to an array of digits in base-20.
  *
  * This is the core utility for transforming a number into Mayan-style numeric
  * representation. Each element in the returned array is a base-20 digit (0–19),
  * starting from the highest place value down to the lowest.
  *
- * Example:
- *   toBase20(0)   => [0]
- *   toBase20(7)   => [7]
- *   toBase20(123) => [6, 3]  // 6×20 + 3 = 123
+ * The conversion uses bigint arithmetic, so integers larger than
+ * Number.MAX_SAFE_INTEGER are converted exactly when passed as a bigint.
  *
- * @param n - A non-negative integer in base-10
+ * Example:
+ *   toBase20(0)    => [0]
+ *   toBase20(7)    => [7]
+ *   toBase20(123)  => [6, 3]  // 6×20 + 3 = 123
+ *   toBase20(9007199254740993n) => [2, 3, 19, 12, 3, 14, 8, 7, 2, 2, 12, 9, 13]
+ *
+ * @param value - A non-negative integer: a safe-integer number or a bigint
  * @returns An array of base-20 digits, most significant digit first
+ * @throws RangeError for negative, fractional, NaN, infinite or unsafe numbers
  */
-export function toBase20(n: number): number[] {
-  if (n === 0) return [0]; // Mayan 0 is represented by the shell symbol
+export function toBase20(value: number | bigint): number[] {
+  let n = toExactNonNegativeInteger(value);
+
+  if (n === 0n) return [0]; // Mayan 0 is represented by the shell symbol
 
   const digits: number[] = [];
 
   // Repeatedly divide by 20 and collect remainders
-  while (n > 0) {
-    const remainder = n % BASE_20;
-    digits.unshift(remainder); // Add digit to the front (MSD first)
-    n = Math.floor(n / BASE_20); // Move to next place value
+  while (n > 0n) {
+    const remainder = n % BASE_20_BIGINT;
+    digits.unshift(Number(remainder)); // Add digit to the front (MSD first); always 0–19
+    n /= BASE_20_BIGINT; // bigint division truncates: move to next place value
   }
 
   return digits;
+}
+
+/**
+ * The exact positional value of one base-20 digit.
+ */
+export interface PlaceValue {
+  /** The base-20 digit (0–19) */
+  digit: number;
+  /** Position of the digit: 0 for the lowest place */
+  exponent: number;
+  /** 20 raised to the exponent */
+  multiplier: bigint;
+  /** digit × multiplier, the digit's contribution in base-10 */
+  value: bigint;
+}
+
+/**
+ * Calculates the exact place value of each base-20 digit.
+ *
+ * Example:
+ *   getPlaceValues([6, 3]) => [
+ *     { digit: 6, exponent: 1, multiplier: 20n, value: 120n },
+ *     { digit: 3, exponent: 0, multiplier: 1n, value: 3n },
+ *   ]
+ *
+ * @param digits - Base-20 digits, most significant digit first
+ * @returns The place value of each digit, in the same order
+ */
+export function getPlaceValues(digits: number[]): PlaceValue[] {
+  return digits.map((digit, index) => {
+    const exponent = digits.length - index - 1;
+    const multiplier = BASE_20_BIGINT ** BigInt(exponent);
+
+    return { digit, exponent, multiplier, value: BigInt(digit) * multiplier };
+  });
 }
