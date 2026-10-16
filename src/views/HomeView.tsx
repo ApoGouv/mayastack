@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { toBase20 } from '@utils/base20';
+import { validateNumberInput } from '@utils/numberInput';
 import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
@@ -27,11 +28,11 @@ export default function HomeView() {
   const [dateInputRaw, setDateInputRaw] = useState('');
   const [dateParts, setDateParts] = useState<DateParts | null>(null);
 
-  // Derived values: parse the digits exactly as a bigint
-  // (parseInt would lose precision beyond Number.MAX_SAFE_INTEGER)
-  const parsedNumber: bigint | null = /^\d+$/.test(numberInput)
-    ? BigInt(numberInput)
-    : null;
+  // Derived values: the exact bigint value, or null while the input is empty or invalid
+  // (NumberInput shows the validation message from the same validateNumberInput)
+  const numberValidation = validateNumberInput(numberInput);
+  const parsedNumber: bigint | null =
+    numberValidation.status === 'valid' ? numberValidation.value : null;
   const isValidNumber: boolean = parsedNumber !== null;
 
   // Validation flags

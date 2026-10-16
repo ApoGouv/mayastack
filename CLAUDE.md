@@ -126,6 +126,14 @@ When fixing a bug, add regression coverage where practical. When introducing a n
 
 For rendering and export changes, verify that the output preserves the intended glyphs, dimensions, and layout. Consider SVG compatibility beyond browser-only rendering when relevant.
 
+### Test Organization
+
+- Co-locate unit and component tests with the source files they test, named `<file>.test.ts` or `<file>.test.tsx` (for example, `src/utils/base20.ts` and `src/utils/base20.test.ts`).
+- Keep test locations aligned with the source directory structure.
+- Put shared test helpers in a dedicated location only when they are genuinely reused by several test files.
+- Introduce separate directories for integration or end-to-end tests only when the testing setup and scope justify them.
+- Do not reorganize existing tests merely for stylistic consistency.
+
 ## 7. Dependencies and Configuration
 
 - Avoid unnecessary dependency changes.
