@@ -14,11 +14,13 @@ const renderHomeView = () => {
   );
   const input = screen.getByLabelText('Number input') as HTMLInputElement;
   const enter = (text: string) => fireEvent.change(input, { target: { value: text } });
-  /** The base-10 place value of each rendered digit stack, from its data attribute */
+  /** The base-10 place value (digit × 20^exponent) of each rendered digit stack */
   const renderedPlaceValues = () =>
-    [...container.querySelectorAll('svg.mep-svg g[data-digit-index]')].map(
-      (group) => group.getAttribute('data-digit-base10-value') ?? ''
-    );
+    [...container.querySelectorAll('svg.mep-svg g[data-digit-index]')].map((group) => {
+      const digit = BigInt(group.getAttribute('data-digit-value') ?? '');
+      const exponent = BigInt(group.getAttribute('data-digit-exponent') ?? '');
+      return (digit * 20n ** exponent).toString();
+    });
 
   return { enter, renderedPlaceValues };
 };
@@ -59,5 +61,23 @@ describe('HomeView number mode', () => {
     // The rendered place values add up to exactly the entered number
     const total = renderedPlaceValues().reduce((sum, value) => sum + BigInt(value), 0n);
     expect(total).toBe(123456789012345678901234567890n);
+  });
+
+  it('renders the largest integer within the 500-digit limit exactly', () => {
+    const { enter, renderedPlaceValues } = renderHomeView();
+    const maxDigits = '9'.repeat(500);
+    enter(maxDigits);
+
+    const placeValues = renderedPlaceValues();
+    expect(placeValues).toHaveLength(385);
+    expect(placeValues.reduce((sum, value) => sum + BigInt(value), 0n)).toBe(BigInt(maxDigits));
+  });
+
+  it('renders no glyphs for integers beyond the limits', () => {
+    const { enter, renderedPlaceValues } = renderHomeView();
+    for (const text of ['9'.repeat(501), '0'.repeat(1001)]) {
+      enter(text);
+      expect(renderedPlaceValues()).toEqual([]);
+    }
   });
 });

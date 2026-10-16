@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateNumberInput } from './numberInput';
+import { MAX_INPUT_LENGTH, MAX_SIGNIFICANT_DIGITS, validateNumberInput } from './numberInput';
 
 describe('validateNumberInput', () => {
   it('accepts positive integers', () => {
@@ -64,5 +64,55 @@ describe('validateNumberInput', () => {
     '\u0663', // "٣", the Arabic-Indic digit three: only the digits 0–9 are accepted
   ])('rejects the malformed value "%s"', (text) => {
     expect(validateNumberInput(text)).toEqual({ status: 'invalid', reason: 'invalid-characters' });
+  });
+});
+
+describe('validateNumberInput size limits', () => {
+  const maxDigits = '9'.repeat(MAX_SIGNIFICANT_DIGITS);
+
+  it('uses a 500-digit limit and a 1000-character input limit', () => {
+    expect(MAX_SIGNIFICANT_DIGITS).toBe(500);
+    expect(MAX_INPUT_LENGTH).toBe(1000);
+  });
+
+  it('accepts an integer with exactly the maximum number of digits, exactly', () => {
+    expect(validateNumberInput(maxDigits)).toEqual({ status: 'valid', value: BigInt(maxDigits) });
+  });
+
+  it('rejects an integer with one digit more than the maximum', () => {
+    expect(validateNumberInput('1' + maxDigits)).toEqual({
+      status: 'invalid',
+      reason: 'too-many-digits',
+    });
+  });
+
+  it('does not count leading zeros or surrounding whitespace as digits', () => {
+    expect(validateNumberInput('000' + maxDigits)).toEqual({ status: 'valid', value: BigInt(maxDigits) });
+    expect(validateNumberInput(`  ${maxDigits}  `)).toEqual({ status: 'valid', value: BigInt(maxDigits) });
+    expect(validateNumberInput('0'.repeat(MAX_INPUT_LENGTH))).toEqual({ status: 'valid', value: 0n });
+  });
+
+  it('accepts text of exactly the maximum length and rejects one character more', () => {
+    const atLimit = '0'.repeat(MAX_INPUT_LENGTH - 1) + '7';
+    expect(validateNumberInput(atLimit)).toEqual({ status: 'valid', value: 7n });
+    expect(validateNumberInput('0' + atLimit)).toEqual({ status: 'invalid', reason: 'too-long' });
+  });
+
+  it('rejects over-long text of any kind, including whitespace, without parsing it', () => {
+    expect(validateNumberInput('9'.repeat(1_000_000))).toEqual({ status: 'invalid', reason: 'too-long' });
+    expect(validateNumberInput(' '.repeat(MAX_INPUT_LENGTH + 1))).toEqual({
+      status: 'invalid',
+      reason: 'too-long',
+    });
+  });
+
+  it('keeps the existing reasons for long text that is invalid for another reason', () => {
+    const longDigits = '1'.repeat(600);
+    expect(validateNumberInput('-' + longDigits)).toEqual({ status: 'invalid', reason: 'negative' });
+    expect(validateNumberInput(longDigits + '.5')).toEqual({ status: 'invalid', reason: 'decimal' });
+    expect(validateNumberInput(longDigits + 'a')).toEqual({
+      status: 'invalid',
+      reason: 'invalid-characters',
+    });
   });
 });

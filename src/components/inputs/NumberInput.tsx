@@ -1,6 +1,6 @@
 import React from 'react';
 import { Numbers } from '@components/icons/Numbers';
-import { validateNumberInput } from '@utils/numberInput';
+import { MAX_INPUT_LENGTH, MAX_SIGNIFICANT_DIGITS, validateNumberInput } from '@utils/numberInput';
 import type { NumberInputError } from '@utils/numberInput';
 
 interface NumberInputProps {
@@ -15,6 +15,8 @@ const ERROR_MESSAGES: Record<NumberInputError, string> = {
   negative: 'Negative numbers can’t be converted. Enter a whole number of 0 or more.',
   decimal: 'Decimal numbers can’t be converted. Enter a whole number without a decimal point.',
   'invalid-characters': 'Use digits 0–9 only, without spaces, separators or other symbols.',
+  'too-many-digits': `Numbers can have at most ${MAX_SIGNIFICANT_DIGITS} digits, not counting leading zeros.`,
+  'too-long': `The input can be at most ${MAX_INPUT_LENGTH} characters long, including spaces and leading zeros.`,
 };
 
 const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder = 'Enter a number' }) => {

@@ -18,6 +18,7 @@ Explore and convert numbers or dates into Mayan numeral glyphs. MayaStack brings
 ## 🚀 Features
 
 - Convert numbers and dates into authentic Mayan numeral representations
+- Convert whole numbers of up to 500 digits exactly (leading zeros aside; the input itself can be at most 1,000 characters)
 - Interactive visual stacks using dots, bars, and shells
 - Export numeral stacks as SVG or PNG for sharing or printing
 - Supports custom export sizes and flexible display options
