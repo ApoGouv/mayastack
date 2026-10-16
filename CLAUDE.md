@@ -218,6 +218,14 @@ This roadmap provides context and does not authorize Claude to implement every i
 
 When the repository state is unexpected, the working tree is dirty, or an operation could affect existing work, stop and explain the situation before proceeding.
 
+### Commit Messages and Pull Request Descriptions
+
+- Do not include Claude Code session URLs, `Claude-Session` trailers, or other AI-session links in commit messages, commit trailers, pull request titles, or pull request descriptions unless explicitly requested by the user.
+- Keep commit messages focused on the change. Preserve relevant conventional commit prefixes and meaningful descriptions.
+- Do not add or remove other attribution trailers, such as `Co-Authored-By`, unless explicitly requested or required by the user's instructions.
+- Before creating a commit or pull request, inspect the proposed message or description and remove any session URL or session-link trailer.
+- After creating a commit or pull request, verify that its message or description does not contain a Claude session URL. If the environment automatically injects one, investigate the applicable configuration or report the limitation rather than silently accepting it.
+
 ## 11. Documentation
 
 - Keep documentation consistent with the actual implementation.
