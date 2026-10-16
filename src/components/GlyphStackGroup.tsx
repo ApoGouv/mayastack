@@ -1,7 +1,6 @@
 import React from "react";
 
 import GlyphStack from "@components/GlyphStack";
-import { getPlaceValues } from "@utils/base20";
 
 interface GlyphStackGroupProps {
   digits: number[];
@@ -20,20 +19,21 @@ const GlyphStackGroup: React.FC<GlyphStackGroupProps> = ({
 }) => {
   return (
     <>
-      {getPlaceValues(digits).map(({ digit, exponent, multiplier, value }, index) => {
+      {digits.map((digit, index) => {
         // Compute Y offset for each digit to ensure vertical bottom alignment of stacks
         // inside the given totalHeight. Each digit stack is rendered upward from this Y.
         const yOffset = totalHeight - (digits.length - index) * heightPerGlyphStack;
+        const exponent = digits.length - index - 1;
 
+        // The digit and its exponent fully determine its place value (digit × 20^exponent).
+        // The place value itself is not written out: its text grows with the exponent,
+        // which made the SVG grow quadratically with the number of digits.
         return (
           <g
             key={`${index}-${digit}-${exponent}`}
             data-digit-index={index}
             data-digit-value={digit}
             data-digit-exponent={exponent}
-            // Exact integer strings (bigint), never rounded or in exponent notation
-            data-digit-multiplier={multiplier.toString()}
-            data-digit-base10-value={value.toString()}
           >
             <GlyphStack
               digit={digit}

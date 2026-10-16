@@ -70,6 +70,14 @@ describe('toBase20', () => {
     }
   });
 
+  it('converts the largest 500-digit integer, the number input limit, exactly', () => {
+    const largest500Digit = 10n ** 500n - 1n;
+    const digits = toBase20(largest500Digit);
+
+    expect(digits).toHaveLength(385);
+    expect(fromBase20Digits(digits)).toBe(largest500Digit);
+  });
+
   it('rejects negative values', () => {
     expect(() => toBase20(-1)).toThrow(RangeError);
     expect(() => toBase20(-1n)).toThrow(RangeError);

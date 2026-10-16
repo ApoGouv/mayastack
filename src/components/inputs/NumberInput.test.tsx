@@ -105,6 +105,41 @@ describe('NumberInput', () => {
     expect(input.getAttribute('aria-invalid')).toBe('false');
   });
 
+  it('accepts an integer with the maximum number of digits without a message', () => {
+    const input = renderNumberInput();
+    enterText(input, '9'.repeat(500));
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+    expect(validationMessage(input)).toBe('');
+  });
+
+  it('flags an integer with too many digits without shortening it', () => {
+    const input = renderNumberInput();
+    const tooManyDigits = '9'.repeat(501);
+    enterText(input, tooManyDigits);
+    expect(input.value).toBe(tooManyDigits);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(validationMessage(input)).toContain('at most 500 digits');
+  });
+
+  it('flags over-long text without truncating it', () => {
+    const input = renderNumberInput();
+    const tooLong = '0'.repeat(1001);
+    enterText(input, tooLong);
+    expect(input.value).toBe(tooLong);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(validationMessage(input)).toContain('at most 1000 characters');
+  });
+
+  it('removes the too-many-digits message once the input is shortened', () => {
+    const input = renderNumberInput();
+    enterText(input, '9'.repeat(501));
+    expect(validationMessage(input)).toContain('at most 500 digits');
+
+    enterText(input, '9'.repeat(500));
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+    expect(validationMessage(input)).toBe('');
+  });
+
   it('removes the message once the input is corrected', () => {
     const input = renderNumberInput();
     enterText(input, '12.5');
