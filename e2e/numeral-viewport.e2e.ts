@@ -209,3 +209,67 @@ test.describe('export with the viewport', () => {
     expect(after.data.equals(before.data)).toBe(true);
   });
 });
+
+test.describe('PNG export size limits', () => {
+  /** Opens the Export menu with the given format selected */
+  async function openExportMenu(page: Page, format: 'svg' | 'png') {
+    await page.getByRole('button', { name: '📦 Export' }).click();
+    await page.getByLabel('Export Format').selectOption(format);
+  }
+
+  test('marks PNG sizes that are too large, before they can be chosen', async ({ page }) => {
+    await showNumber(page, MAX_DIGITS);
+    await openExportMenu(page, 'png');
+
+    const sizes = page.getByLabel('Size Preset');
+    await expect(sizes.getByRole('option', { name: /^Original Size \(350×30800px\)$/ })).toBeEnabled();
+    await expect(sizes.getByRole('option', { name: /^Custom Size/ })).toBeEnabled();
+    for (const name of [/^Small .* – PNG too large$/, /^Medium .* – PNG too large$/, /^Large .* – PNG too large$/]) {
+      await expect(sizes.getByRole('option', { name })).toBeDisabled();
+    }
+  });
+
+  test('explains an unsupported PNG size and still exports it as SVG', async ({ page }) => {
+    await showNumber(page, MAX_DIGITS);
+    await openExportMenu(page, 'svg');
+    await page.getByLabel('Size Preset').selectOption('large');
+
+    // Switching to PNG keeps the chosen size, explains why it is unavailable and blocks the export
+    await page.getByLabel('Export Format').selectOption('png');
+    await expect(page.getByRole('alert')).toHaveText(
+      'PNG isn’t available at this size. PNG export is limited to 32,767 px in width and height, the most some browsers can draw; this one would be 2,400 × 211,200 px. Choose a smaller size, or export as SVG.'
+    );
+    await expect(page.getByRole('button', { name: /^Export PNG image/ })).toBeDisabled();
+
+    // The same size as SVG exports the complete numeral at that size
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      (async () => {
+        await page.getByLabel('Export Format').selectOption('svg');
+        await page.getByRole('button', { name: /^Export SVG image/ }).click();
+      })(),
+    ]);
+    const svg = (await readFile(await download.path())).toString('utf-8');
+    expect(svg).toContain('width="2400" height="211200" viewBox="0 0 350 30800"');
+    expect(svg.match(/data-digit-index=/g)).toHaveLength(385);
+  });
+
+  test('offers the real sizes immediately after a number is entered, with no transient 0 × 0', async ({ page }) => {
+    await page.getByLabel('Number input').fill(FIFTY_DIGITS);
+    await openExportMenu(page, 'png');
+
+    const sizes = page.getByLabel('Size Preset');
+    await expect(sizes.getByRole('option', { name: 'Original Size (350×3040px)' })).toBeEnabled();
+    await expect(sizes.getByRole('option', { name: 'Small (600×5211px)' })).toBeEnabled();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Export PNG image/ })).toBeEnabled();
+  });
+
+  test('exports the complete PNG of the largest number at its original size', async ({ page }) => {
+    await showNumber(page, MAX_DIGITS);
+    const png = await exportFile(page, 'png');
+
+    expect(png.name).toBe(`mayan-numeral-number-${MAX_DIGITS}.png`);
+    expect(pngSize(png.data)).toEqual({ width: 350, height: 30800 });
+  });
+});

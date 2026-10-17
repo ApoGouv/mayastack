@@ -104,6 +104,67 @@ function createSvgDataUrl(svgEl: SVGSVGElement): string {
 // =============================================
 
 /**
+ * Largest PNG width or height. Browsers cannot draw larger canvases: 32,767 px is
+ * Firefox's limit, the strictest of the major desktop browsers (Chromium allows 65,535).
+ */
+export const MAX_PNG_SIDE = 32_767;
+
+/**
+ * Largest PNG area: 8,192 × 8,192 pixels, about 256 MB of canvas pixel memory.
+ * Larger canvases need far more memory (in Chromium, about 0.5 GB at 125 million pixels
+ * and 1 GB at 268 million) and fail outright in some browsers.
+ *
+ * Passing this check does not guarantee success: some browsers, notably iOS Safari,
+ * allow less, so a conversion can still fail and must be reported.
+ */
+export const MAX_PNG_AREA = 8192 * 8192;
+
+const formatNumber = (n: number) => n.toLocaleString('en-US');
+
+/** Whether a PNG of the given size can be attempted, and if not, why */
+export type PngSizeCheck = { supported: true } | { supported: false; reason: string };
+
+/**
+ * Checks a PNG size against the app's PNG size policy (MAX_PNG_SIDE and MAX_PNG_AREA)
+ * before any canvas is allocated, so a size likely to fail is refused quickly instead
+ * of being attempted. A supported size can still fail in a particular browser or device.
+ */
+export function checkPngSize(width: number, height: number): PngSizeCheck {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) {
+    return { supported: false, reason: `${width} × ${height} px is not a valid image size.` };
+  }
+  if (width > MAX_PNG_SIDE || height > MAX_PNG_SIDE) {
+    return {
+      supported: false,
+      reason: `PNG export is limited to ${formatNumber(MAX_PNG_SIDE)} px in width and height, the most some browsers can draw; this one would be ${formatNumber(width)} × ${formatNumber(height)} px.`,
+    };
+  }
+  if (width * height > MAX_PNG_AREA) {
+    return {
+      supported: false,
+      reason: `PNG export is limited to ${formatNumber(MAX_PNG_AREA)} pixels (8,192 × 8,192) to keep memory use safe; this one would have ${formatNumber(width * height)}.`,
+    };
+  }
+  return { supported: true };
+}
+
+/** A PNG export refused before conversion by the app's PNG size policy (checkPngSize) */
+export class PngSizeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PngSizeError';
+  }
+}
+
+/** The pixel size of the PNG for an SVG at the given scale */
+function getPngSize(svgEl: SVGSVGElement, scale: number) {
+  return {
+    width: parseInt(svgEl.getAttribute('width') || '0') * scale,
+    height: parseInt(svgEl.getAttribute('height') || '0') * scale,
+  };
+}
+
+/**
  * Creates and configures a canvas for SVG rendering
  *
  * @param svgEl - Source SVG element for dimension reference
@@ -122,10 +183,9 @@ function createCanvasForSvg(
 
   if (!ctx) throw new Error('Could not get canvas context');
 
-  const width = parseInt(svgEl.getAttribute('width') || '0');
-  const height = parseInt(svgEl.getAttribute('height') || '0');
-  canvas.width = width * scale;
-  canvas.height = height * scale;
+  const { width, height } = getPngSize(svgEl, scale);
+  canvas.width = width;
+  canvas.height = height;
 
   return { canvas, ctx };
 }
@@ -213,12 +273,18 @@ export async function exportSvg(
  * @param svgEl - SVG element to export
  * @param filename - Name for the exported file (default: 'export.png')
  * @param scale - Scaling factor for the output (default: 1)
+ *
+ * @throws PngSizeError, before any canvas is created, if the size fails checkPngSize
  */
 export async function exportPng(
   svgEl: SVGSVGElement,
   filename = 'export.png',
   scale = 1
 ): Promise<void> {
+  const { width, height } = getPngSize(svgEl, scale);
+  const sizeCheck = checkPngSize(width, height);
+  if (!sizeCheck.supported) throw new PngSizeError(sizeCheck.reason);
+
   const { canvas, ctx } = createCanvasForSvg(svgEl, scale);
   await renderSvgToCanvas(svgEl, canvas, ctx);
   const blob = await canvasToPngBlob(canvas);

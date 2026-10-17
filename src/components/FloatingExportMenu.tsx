@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useId } from 'react';
 import type { ExportFormat, ExportSize, Dimensions } from '@/types/exportTypes';
 import type { SizePreset } from '@utils/exportPresets';
 import { useDismissOnOutsideOrEsc } from "@hooks/useDismissOnOutsideOrEsc";
+import { checkPngSize } from '@utils/exportUtils';
 
 interface FloatingExportMenuProps {
   format: ExportFormat;
@@ -37,6 +38,22 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   useDismissOnOutsideOrEsc(exportMenuRef, () => setIsOpen(false), isOpen, true);
+
+  // Sizes derived from the numeral are 0 × 0 until it has been measured, just after it mounts:
+  // such a size is not known yet, rather than invalid, so it is neither flagged nor exported
+  const isKnownSize = (size: ExportSize) => {
+    const { width, height } = sizePresets[size].getDimensions();
+    return width > 0 && height > 0;
+  };
+  // Why the app's PNG size policy refuses a known size, or null; SVG export has no size limit
+  const pngRefusalFor = (size: ExportSize) => {
+    if (format !== 'png' || !isKnownSize(size)) return null;
+    const { width, height } = sizePresets[size].getDimensions();
+    const check = checkPngSize(width, height);
+    return check.supported ? null : check.reason;
+  };
+  const unsupportedReason = pngRefusalFor(sizeOption);
+  const unsupportedMessageId = useId();
 
   return (
     <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
@@ -89,14 +106,16 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                 id="size-preset-select"
                 value={sizeOption}
                 onChange={(e) => setSizeOption(e.target.value as ExportSize)}
+                aria-describedby={unsupportedReason ? unsupportedMessageId : undefined}
                 className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
               >
                 {Object.entries(sizePresets).map(
                   ([key, { label, getDimensions }]) => {
                     const { width, height } = getDimensions();
+                    const tooLargeForPng = pngRefusalFor(key as ExportSize) !== null;
                     return (
-                      <option key={key} value={key}>
-                        {label} ({width}×{height}px)
+                      <option key={key} value={key} disabled={tooLargeForPng}>
+                        {label} ({width}×{height}px){tooLargeForPng && ' – PNG too large'}
                       </option>
                     );
                   }
@@ -104,6 +123,12 @@ hover:shadow-ms-clay-500/50 transition duration-300"
               </select>
             </div>
           </div>
+
+          {unsupportedReason && (
+            <p id={unsupportedMessageId} role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+              PNG isn’t available at this size. {unsupportedReason} Choose a smaller size, or export as SVG.
+            </p>
+          )}
 
           {sizeOption === 'custom' && (
             <div className="space-y-2">
@@ -176,7 +201,9 @@ hover:shadow-ms-clay-500/50 transition duration-300"
 
           <button
             onClick={handleExport}
-            className="cursor-pointer w-full mt-2 px-4 py-2 bg-ms-clay-500 text-white rounded hover:bg-ms-amber-500 transition"
+            disabled={unsupportedReason !== null || !isKnownSize(sizeOption)}
+            aria-describedby={unsupportedReason ? unsupportedMessageId : undefined}
+            className="cursor-pointer w-full mt-2 px-4 py-2 bg-ms-clay-500 text-white rounded hover:bg-ms-amber-500 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-ms-clay-500"
             aria-label={`Export ${format.toUpperCase()} image with size ${sizePresets[sizeOption].label} (${sizePresets[sizeOption].getDimensions().width} by ${sizePresets[sizeOption].getDimensions().height} pixels)`}
 
           >

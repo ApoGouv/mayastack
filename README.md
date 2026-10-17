@@ -21,6 +21,7 @@ Explore and convert numbers or dates into Mayan numeral glyphs. MayaStack brings
 - Convert whole numbers of up to 500 digits exactly (leading zeros aside; the input itself can be at most 1,000 characters)
 - Interactive visual stacks using dots, bars, and shells
 - Export numeral stacks as SVG or PNG for sharing or printing
+- SVG export works at every size. PNG export is limited to 32,767 px in width and height and 8,192 × 8,192 pixels in total, because larger images fail or need too much memory in some browsers; sizes beyond that are marked unavailable. A PNG within these limits can still fail on some browsers or devices (notably mobile), in which case the app says so and suggests a smaller size or SVG
 - Supports custom export sizes and flexible display options
 - Dark mode support for comfortable viewing
 - Lightweight, modern React + Vite stack with TypeScript
