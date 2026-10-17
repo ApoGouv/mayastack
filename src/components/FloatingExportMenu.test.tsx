@@ -210,3 +210,39 @@ describe.each(['Width', 'Height'] as const)('FloatingExportMenu custom %s', (dim
     expect(setters[dimension]).toHaveBeenLastCalledWith(640);
   });
 });
+
+describe('FloatingExportMenu panel focus', () => {
+  const trigger = () => screen.getByRole('button', { name: '📦 Export' });
+  const panel = () => screen.queryByRole('dialog', { name: 'Export Options' });
+
+  it('is announced as a non-modal dialog', () => {
+    renderMenu('svg', 'original');
+
+    expect(panel()).not.toBeNull();
+    expect(panel()!.hasAttribute('aria-modal')).toBe(false);
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('returns focus to the Export button when Escape closes it from inside', () => {
+    renderMenu('svg', 'original');
+    const format = screen.getByLabelText('Export Format');
+    format.focus();
+    expect(document.activeElement).toBe(format);
+
+    fireEvent.keyDown(format, { key: 'Escape' });
+
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('does not move focus to the Export button when a click outside closes it', () => {
+    renderMenu('svg', 'original');
+    screen.getByLabelText('Export Format').focus();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(panel()).toBeNull();
+    expect(document.activeElement).not.toBe(trigger());
+  });
+});
