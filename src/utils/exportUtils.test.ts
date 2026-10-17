@@ -1,13 +1,23 @@
 // @vitest-environment happy-dom
 import { createElement } from 'react';
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DisplaySettingsProvider } from '@/context/DisplaySettingsContext';
 import MayanRenderer from '@components/MayanRenderer';
 import { toBase20 } from './base20';
-import { prepareSvgCloneForExport } from './exportUtils';
+import {
+  checkPngSize,
+  exportPng,
+  MAX_PNG_AREA,
+  MAX_PNG_SIDE,
+  PngSizeError,
+  prepareSvgCloneForExport,
+} from './exportUtils';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 /** Renders the glyphs of a number, as HomeView does, and returns the SVG element */
 const renderNumberSvg = (value: bigint) => {
@@ -49,5 +59,58 @@ describe('prepareSvgCloneForExport', () => {
         0n
       )
     ).toBe(value);
+  });
+});
+
+describe('checkPngSize', () => {
+  it('uses a 32,767 px side limit and an 8,192 × 8,192 px area limit', () => {
+    expect(MAX_PNG_SIDE).toBe(32_767);
+    expect(MAX_PNG_AREA).toBe(67_108_864);
+  });
+
+  it('allows the original size of the largest 500-digit number', () => {
+    // 385 base-20 digits × 80 units tall, 350 units wide
+    expect(checkPngSize(350, 30800)).toEqual({ supported: true });
+  });
+
+  it('allows sizes exactly at the limits', () => {
+    expect(checkPngSize(350, MAX_PNG_SIDE)).toEqual({ supported: true });
+    expect(checkPngSize(8192, 8192)).toEqual({ supported: true });
+  });
+
+  it('refuses a side longer than the limit, e.g. the Small preset for 500 digits', () => {
+    expect(checkPngSize(350, MAX_PNG_SIDE + 1)).toEqual({
+      supported: false,
+      reason:
+        'PNG export is limited to 32,767 px in width and height, the most some browsers can draw; this one would be 350 × 32,768 px.',
+    });
+    expect(checkPngSize(600, 52800).supported).toBe(false);
+  });
+
+  it('refuses more pixels than the area limit, even with both sides allowed', () => {
+    expect(checkPngSize(8192, 8193)).toEqual({
+      supported: false,
+      reason:
+        'PNG export is limited to 67,108,864 pixels (8,192 × 8,192) to keep memory use safe; this one would have 67,117,056.',
+    });
+  });
+
+  it('refuses empty or invalid sizes', () => {
+    expect(checkPngSize(0, 0).supported).toBe(false);
+    expect(checkPngSize(Number.NaN, 100).supported).toBe(false);
+  });
+});
+
+describe('exportPng', () => {
+  it.each([
+    ['too large', 600, 52800],
+    ['empty', 0, 0],
+  ])('refuses a %s size (%i × %i) before creating any canvas', async (_, width, height) => {
+    const svg = renderNumberSvg(10n ** 500n - 1n);
+    const clone = prepareSvgCloneForExport(svg, width, height, document.createElement('div')) as SVGSVGElement;
+    const createElement = vi.spyOn(document, 'createElement');
+
+    await expect(exportPng(clone, 'refused.png')).rejects.toBeInstanceOf(PngSizeError);
+    expect(createElement).not.toHaveBeenCalledWith('canvas');
   });
 });

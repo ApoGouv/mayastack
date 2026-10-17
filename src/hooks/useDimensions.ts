@@ -22,12 +22,10 @@ export const useDimensions = (ref: React.RefObject<SVGSVGElement | null>) => {
       const contentWidth = svg.viewBox?.baseVal?.width || svg.clientWidth;
       const contentHeight = svg.viewBox?.baseVal?.height || svg.clientHeight;
 
-      const paddingX =
-        parseFloat(computedStyle.paddingLeft) +
-        parseFloat(computedStyle.paddingRight);
-      const paddingY =
-        parseFloat(computedStyle.paddingTop) +
-        parseFloat(computedStyle.paddingBottom);
+      // An unset or unparseable padding counts as 0, so the size never becomes NaN
+      const padding = (value: string) => parseFloat(value) || 0;
+      const paddingX = padding(computedStyle.paddingLeft) + padding(computedStyle.paddingRight);
+      const paddingY = padding(computedStyle.paddingTop) + padding(computedStyle.paddingBottom);
 
       const newWidth = contentWidth - paddingX;
       const newHeight = contentHeight - paddingY;

@@ -1,18 +1,17 @@
 import React, { useRef, useState, useMemo } from "react";
 import toast from "react-hot-toast";
 import FloatingExportMenu from "@components/FloatingExportMenu";
-import { useDebounce } from "@hooks/useDebounce";
 import { useDimensions } from "@hooks/useDimensions";
 import { useShiftKey } from "@hooks/useShiftKey";
 import {
   prepareSvgCloneForExport,
   exportSvg,
   exportPng,
+  PngSizeError,
 } from "@utils/exportUtils";
 import { getSizePresets } from "@utils/exportPresets";
 import type {
   MayanExportPanelProps,
-  Dimensions,
   ExportSize,
   ExportFormat,
 } from "@/types/exportTypes";
@@ -29,8 +28,9 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   const [customWidth, setCustomWidth] = useState<number>(800);
   const [customHeight, setCustomHeight] = useState<number>(600);
 
-  const rawDimensions = useDimensions(exportRef);
-  const svgOriginalDimensions = useDebounce<Dimensions>(rawDimensions, 100);
+  // The SVG's logical size (its viewBox): 0 × 0 until it has been measured, just after it
+  // mounts. Not debounced, so the sizes offered and exported always match the current numeral.
+  const svgOriginalDimensions = useDimensions(exportRef);
   const shiftHeld = useShiftKey();
 
   const sizePresets = useMemo(
@@ -41,10 +41,12 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   const handleExport = async () => {
     if (!exportRef.current || !exportPlaceholderRef.current) return;
 
-    try {
-      // Calculate dimensions based on selection
-      const { width, height } = sizePresets[sizeOption].getDimensions();
+    // Calculate dimensions based on selection
+    const { width, height } = sizePresets[sizeOption].getDimensions();
+    // Not measured yet: there is no size to export at
+    if (!(width > 0 && height > 0)) return;
 
+    try {
       // Clone the original SVG to the export placeholder and prepare it for export
       const svgClone = prepareSvgCloneForExport(
         exportRef.current,
@@ -64,7 +66,15 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
       toast.success(`${format.toUpperCase()} exported! Check your downloads.`);
     } catch (err) {
       console.error("Export failed:", err);
-      toast.error("Export failed. Please try again.");
+      if (err instanceof PngSizeError) {
+        // Refused before conversion by the app's PNG size policy
+        toast.error(`PNG not exported. ${err.message} Choose a smaller size, or export as SVG.`);
+      } else if (format === "png") {
+        // The size passed the policy, but this browser or device still could not create the image
+        toast.error(`This browser could not create the ${width} × ${height} px PNG, although the size is within the app’s PNG limits. Try a smaller size, or export as SVG.`);
+      } else {
+        toast.error("Export failed. Please try again.");
+      }
     } finally {
       // Always clean up placeholder contents
       exportPlaceholderRef.current?.replaceChildren();
