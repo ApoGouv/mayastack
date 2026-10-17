@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { toBase20 } from '@utils/base20';
 import { validateNumberInput } from '@utils/numberInput';
+import { getNumberExportFilename } from '@utils/exportUtils';
 import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
@@ -15,6 +16,9 @@ import type { DateParts } from '@components/inputs/DateInput';
 type DigitGroup = { label: string; digits: number[] };
 
 type MayanRenderData = {
+  /** Identifies the numeral exactly: a new one starts at the top of the viewer */
+  key: string;
+  /** Export filename, without extension: abbreviated for long numbers, so not unique */
   filename: string;
   digitGroups: DigitGroup[];
   /** Accessible description of the rendered numeral */
@@ -52,7 +56,8 @@ export default function HomeView() {
       const decimal = parsedNumber.toString();
       const number = decimal.length <= MAX_DIGITS_IN_LABEL ? decimal : `a ${decimal.length}-digit number`;
       return {
-        filename: `mayan-numeral-number-${parsedNumber}`,
+        key: `number-${decimal}`,
+        filename: getNumberExportFilename(decimal),
         digitGroups: [
           { label: 'Number', digits }
         ],
@@ -62,6 +67,7 @@ export default function HomeView() {
 
     if (mode === 'date' && dateParts) {
       return {
+        key: `date-${dateParts.day}-${dateParts.month}-${dateParts.year}`,
         filename: `mayan-numeral-date-${dateParts.day}-${dateParts.month}-${dateParts.year}`,
         digitGroups: [
           { label: 'Day', digits: toBase20(dateParts.day) },
@@ -161,7 +167,7 @@ export default function HomeView() {
             {/* MayanRenderer and ExportPanel */}
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) => 
-                <NumeralViewport label={mayanData.label} resetKey={mayanData.filename}>
+                <NumeralViewport label={mayanData.label} resetKey={mayanData.key}>
                   <MayanRenderer
                     digitGroups={mayanData?.digitGroups.map(g => g.digits) ?? []}
                     heightPerGlyphStack={80}

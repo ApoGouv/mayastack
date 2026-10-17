@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DisplaySettingsProvider } from '@/context/DisplaySettingsContext';
 import { prepareSvgCloneForExport } from '@utils/exportUtils';
 import HomeView from './HomeView';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const renderHomeView = () => {
   const { container } = render(
@@ -181,5 +184,62 @@ describe('HomeView date mode', () => {
     const day = screen.getByText('Day').nextElementSibling as HTMLElement;
     expect(day.innerHTML).toBe('15 × 20<sup>0</sup>');
     expect(screen.queryByRole('region', { name: /in base 20, expanded form/ })).toBeNull();
+  });
+});
+
+describe('HomeView export filenames', () => {
+  /** Exports an SVG through the Export menu and returns the name of the file downloaded */
+  async function exportedSvgName() {
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '📦 Export' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Export SVG image/ }));
+    await waitFor(() => expect(names).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: '📦 Export' })); // close the menu
+    vi.mocked(HTMLAnchorElement.prototype.click).mockRestore();
+    return names[0];
+  }
+
+  it('names an export after the number, abbreviating only long numbers', async () => {
+    const { enter } = renderHomeView();
+
+    enter('123');
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-123.svg');
+    enter('007');
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-7.svg');
+    enter('9'.repeat(500));
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
+  });
+
+  it('exports the complete numeral of the largest number under its short filename', async () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('9'.repeat(500));
+
+    await exportedSvgName();
+    expect(numeralSvg().querySelectorAll('g[data-digit-index]')).toHaveLength(385);
+    expect(exportedMarkup(numeralSvg())).toContain('width="350" height="30800" viewBox="0 0 350 30800"');
+  });
+
+  it('keeps naming date exports after the day, month and year', async () => {
+    renderHomeView();
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+
+    const [, month, year] = (screen.getByLabelText('Date input') as HTMLInputElement).value.split('-').map(Number);
+    expect(await exportedSvgName()).toBe(`mayan-numeral-date-15-${month}-${year}.svg`);
+  });
+
+  it('still returns the viewer to the top for a long number with the same short filename', () => {
+    const { enter } = renderHomeView();
+    // Same length, first 10 and last 10 digits, so the same export filename
+    enter('1'.repeat(500));
+    const viewer = screen.getByRole('group', { name: 'Numeral viewer' });
+    viewer.scrollTop = 4000;
+
+    enter('1'.repeat(250) + '2' + '1'.repeat(249));
+    expect(viewer.scrollTop).toBe(0);
   });
 });

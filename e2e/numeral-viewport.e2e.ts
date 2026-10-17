@@ -188,7 +188,7 @@ test.describe('export with the viewport', () => {
     await viewer.evaluate((el) => el.scrollTo(100, 12000));
     const after = await exportFile(page, 'svg');
 
-    expect(after.name).toBe(`mayan-numeral-number-${MAX_DIGITS}.svg`);
+    expect(after.name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
     expect(after.data.equals(before.data)).toBe(true);
     const svg = after.data.toString('utf-8');
     expect(svg).toContain('width="350" height="30800" viewBox="0 0 350 30800"');
@@ -204,7 +204,7 @@ test.describe('export with the viewport', () => {
     await viewer.evaluate((el) => el.scrollTo(50, 800));
     const after = await exportFile(page, 'png');
 
-    expect(after.name).toBe(`mayan-numeral-number-${FIFTY_DIGITS}.png`);
+    expect(after.name).toBe('mayan-numeral-number-1234567890...1234567890-50-digits.png');
     // 38 base-20 digits × 80 units tall, 350 units wide: the whole numeral
     expect(pngSize(after.data)).toEqual({ width: 350, height: 3040 });
     expect(after.data.equals(before.data)).toBe(true);
@@ -270,7 +270,7 @@ test.describe('PNG export size limits', () => {
     await showNumber(page, MAX_DIGITS);
     const png = await exportFile(page, 'png');
 
-    expect(png.name).toBe(`mayan-numeral-number-${MAX_DIGITS}.png`);
+    expect(png.name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.png');
     expect(pngSize(png.data)).toEqual({ width: 350, height: 30800 });
   });
 });
@@ -479,5 +479,36 @@ test.describe('browser storage', () => {
     await expect(grid).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByRole('button', { name: '📦 Export' })).toBeVisible();
     expect(errors).toEqual([]);
+  });
+});
+
+test.describe('export filenames', () => {
+  test('names SVG and PNG exports after the number', async ({ page }) => {
+    await showNumber(page, '123');
+    expect((await exportFile(page, 'svg')).name).toBe('mayan-numeral-number-123.svg');
+    expect((await exportFile(page, 'png')).name).toBe('mayan-numeral-number-123.png');
+  });
+
+  test('writes out numbers of up to 30 digits and abbreviates longer ones', async ({ page }) => {
+    const thirtyDigits = '123456789012345678901234567890';
+    await showNumber(page, thirtyDigits);
+    expect((await exportFile(page, 'svg')).name).toBe(`mayan-numeral-number-${thirtyDigits}.svg`);
+
+    await showNumber(page, MAX_DIGITS);
+    const svg = await exportFile(page, 'svg');
+    expect(svg.name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
+    expect(svg.name.length).toBeLessThanOrEqual(59);
+    // Only the name is shortened: the file holds the complete numeral
+    expect(svg.data.toString('utf-8').match(/data-digit-index=/g)).toHaveLength(385);
+  });
+
+  test('names date exports after the day, month and year', async ({ page }) => {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    const [, month, year] = (await page.getByLabel('Date input').inputValue()).split('-').map(Number);
+
+    expect((await exportFile(page, 'svg')).name).toBe(`mayan-numeral-date-15-${month}-${year}.svg`);
+    expect((await exportFile(page, 'png')).name).toBe(`mayan-numeral-date-15-${month}-${year}.png`);
   });
 });

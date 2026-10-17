@@ -8,6 +8,8 @@ import { toBase20 } from './base20';
 import {
   checkPngSize,
   exportPng,
+  getNumberExportFilename,
+  MAX_DIGITS_IN_FILENAME,
   MAX_PNG_AREA,
   MAX_PNG_SIDE,
   PngSizeError,
@@ -112,5 +114,40 @@ describe('exportPng', () => {
 
     await expect(exportPng(clone, 'refused.png')).rejects.toBeInstanceOf(PngSizeError);
     expect(createElement).not.toHaveBeenCalledWith('canvas');
+  });
+});
+
+describe('getNumberExportFilename', () => {
+  it('writes out numbers of up to 30 digits in full, as before', () => {
+    expect(MAX_DIGITS_IN_FILENAME).toBe(30);
+    for (const decimal of ['0', '7', '123', '9007199254740993', '1'.repeat(30)]) {
+      expect(getNumberExportFilename(decimal)).toBe(`mayan-numeral-number-${decimal}`);
+    }
+  });
+
+  it('abbreviates longer numbers to their first and last 10 digits and their length', () => {
+    expect(getNumberExportFilename('1234567890' + '5' + '0987654321' + '0'.repeat(10))).toBe(
+      'mayan-numeral-number-1234567890...0000000000-31-digits'
+    );
+    expect(getNumberExportFilename('12345678901234567890123456789012345678901234567890')).toBe(
+      'mayan-numeral-number-1234567890...1234567890-50-digits'
+    );
+  });
+
+  it('keeps the filename of the largest 500-digit number short', () => {
+    const name = getNumberExportFilename('9'.repeat(500));
+
+    expect(name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits');
+    expect(name).toHaveLength(55);
+    // With either extension, well within the 255 characters most file systems allow
+    for (const extension of ['.svg', '.png']) expect(`${name}${extension}`.length).toBeLessThanOrEqual(59);
+  });
+
+  it('gives every supported number a filename of at most 55 safe characters', () => {
+    for (let digits = 1; digits <= 500; digits++) {
+      const name = getNumberExportFilename('8'.repeat(digits));
+      expect(name.length).toBeLessThanOrEqual(55);
+      expect(name).toMatch(/^[a-z0-9.-]+$/);
+    }
   });
 });

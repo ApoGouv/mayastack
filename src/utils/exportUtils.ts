@@ -48,6 +48,39 @@ export function prepareSvgCloneForExport(
 }
 
 // =============================================
+// Export Filenames
+// =============================================
+
+/** Numbers with more digits than this are abbreviated in export filenames */
+export const MAX_DIGITS_IN_FILENAME = 30;
+
+/** The digits kept from each end of an abbreviated number */
+const FILENAME_END_DIGITS = 10;
+
+/**
+ * The export filename, without its extension, for a number given by its decimal digits.
+ *
+ * A number of up to MAX_DIGITS_IN_FILENAME digits is written out in full. A longer one is
+ * abbreviated to its first and last 10 digits and its length, which keeps the filename within
+ * 55 characters (most file systems allow at most 255 per filename, and a 500-digit number would
+ * need 521). Only the filename is shortened, never the exported numeral.
+ *
+ * Example:
+ *   getNumberExportFilename('123')       => 'mayan-numeral-number-123'
+ *   getNumberExportFilename('9'.repeat(500))
+ *     => 'mayan-numeral-number-9999999999...9999999999-500-digits'
+ *
+ * @param decimal - The number's decimal digits, without leading zeros
+ */
+export function getNumberExportFilename(decimal: string): string {
+  if (decimal.length <= MAX_DIGITS_IN_FILENAME) return `mayan-numeral-number-${decimal}`;
+
+  const first = decimal.slice(0, FILENAME_END_DIGITS);
+  const last = decimal.slice(-FILENAME_END_DIGITS);
+  return `mayan-numeral-number-${first}...${last}-${decimal.length}-digits`;
+}
+
+// =============================================
 // Shared Utility Functions
 // =============================================
 
