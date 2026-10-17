@@ -46,6 +46,18 @@ Open [http://localhost:5173](http://localhost:5173) in your browser to see the a
 
 ---
 
+## 🧪 Testing
+
+```bash
+npm test                          # unit and component tests (Vitest)
+npx playwright install chromium   # once, to download the browser for the browser tests
+npm run test:e2e                  # browser tests (Playwright) against a production build
+```
+
+To use an already installed Chromium instead, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its path.
+
+---
+
 ## 📦 Build & Deploy
 
 ```bash

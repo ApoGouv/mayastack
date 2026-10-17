@@ -8,6 +8,7 @@ import RenderModeSelector from '@/components/inputs/RenderModeSelector';
 import type { RenderMode } from '@/components/inputs/RenderModeSelector';
 import DisplaySettings from '@components/DisplaySettings';
 import NumberInput from '@components/inputs/NumberInput';
+import NumeralViewport from '@components/NumeralViewport';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
 
@@ -16,7 +17,12 @@ type DigitGroup = { label: string; digits: number[] };
 type MayanRenderData = {
   filename: string;
   digitGroups: DigitGroup[];
+  /** Accessible description of the rendered numeral */
+  label: string;
 };
+
+/** Longer numbers are described by their length rather than read out in full */
+const MAX_DIGITS_IN_LABEL = 30;
 
 /**
  * HomeView is the main input view of the app.
@@ -42,11 +48,15 @@ export default function HomeView() {
 
   const mayanData: MayanRenderData | null = useMemo(() => {
     if (mode === 'number' && parsedNumber !== null) {
+      const digits = toBase20(parsedNumber);
+      const decimal = parsedNumber.toString();
+      const number = decimal.length <= MAX_DIGITS_IN_LABEL ? decimal : `a ${decimal.length}-digit number`;
       return {
         filename: `mayan-numeral-number-${parsedNumber}`,
         digitGroups: [
-          { label: 'Number', digits: toBase20(parsedNumber) }
-        ]
+          { label: 'Number', digits }
+        ],
+        label: `Mayan numeral for ${number}: ${digits.length} stacked base-20 ${digits.length === 1 ? 'digit' : 'digits'}, highest place value at the top`
       };
     }
 
@@ -57,7 +67,8 @@ export default function HomeView() {
           { label: 'Day', digits: toBase20(dateParts.day) },
           { label: 'Month', digits: toBase20(dateParts.month) },
           { label: 'Year', digits: toBase20(dateParts.year) }
-        ]
+        ],
+        label: `Mayan numerals for day ${dateParts.day}, month ${dateParts.month} and year ${dateParts.year}`
       };
     }
 
@@ -150,14 +161,16 @@ export default function HomeView() {
             {/* MayanRenderer and ExportPanel */}
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) => 
-                <MayanRenderer
-                  digitGroups={mayanData?.digitGroups.map(g => g.digits) ?? []}
-                  heightPerGlyphStack={80}
-                  widthPerGroup={mode === 'number' ? 350 : 100}
-                  spacing={25}
-                  scale={1}
-                  exportRef={ref}
-                />
+                <NumeralViewport label={mayanData.label} resetKey={mayanData.filename}>
+                  <MayanRenderer
+                    digitGroups={mayanData?.digitGroups.map(g => g.digits) ?? []}
+                    heightPerGlyphStack={80}
+                    widthPerGroup={mode === 'number' ? 350 : 100}
+                    spacing={25}
+                    scale={1}
+                    exportRef={ref}
+                  />
+                </NumeralViewport>
               }
             </MayanExportPanel>
           </div>

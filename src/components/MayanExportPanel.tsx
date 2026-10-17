@@ -4,7 +4,6 @@ import FloatingExportMenu from "@components/FloatingExportMenu";
 import { useDebounce } from "@hooks/useDebounce";
 import { useDimensions } from "@hooks/useDimensions";
 import { useShiftKey } from "@hooks/useShiftKey";
-import { useElementOnScreen } from "@hooks/useElementOnScreen";
 import {
   prepareSvgCloneForExport,
   exportSvg,
@@ -24,11 +23,6 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
 }) => {
   const exportPlaceholderRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<SVGSVGElement | null>(null);
-
-  const isExportVisible = useElementOnScreen<SVGSVGElement>(exportRef, {
-    rootMargin: '0px',
-    threshold: 0.25 // Trigger when 25% of element is visible
-  });
 
   const [format, setFormat] = useState<ExportFormat>("svg");
   const [sizeOption, setSizeOption] = useState<ExportSize>("original");
@@ -85,23 +79,23 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
         {children(exportRef)}
       </div>
 
+      {/* The panel only exists while there is a result to export, so Export is always offered,
+          wherever the page is scrolled */}
       <div className="my-4 space-y-4">
-        {isExportVisible && (
-          <FloatingExportMenu
-            format={format}
-            setFormat={setFormat}
-            sizeOption={sizeOption}
-            setSizeOption={setSizeOption}
-            sizePresets={sizePresets}
-            shiftHeld={shiftHeld}
-            svgOriginalDimensions={svgOriginalDimensions}
-            customWidth={customWidth}
-            setCustomWidth={setCustomWidth}
-            customHeight={customHeight}
-            setCustomHeight={setCustomHeight}
-            handleExport={handleExport}
-          />
-        )}
+        <FloatingExportMenu
+          format={format}
+          setFormat={setFormat}
+          sizeOption={sizeOption}
+          setSizeOption={setSizeOption}
+          sizePresets={sizePresets}
+          shiftHeld={shiftHeld}
+          svgOriginalDimensions={svgOriginalDimensions}
+          customWidth={customWidth}
+          setCustomWidth={setCustomWidth}
+          customHeight={customHeight}
+          setCustomHeight={setCustomHeight}
+          handleExport={handleExport}
+        />
       </div>
 
       {/* Cloned SVG placeholder for eporting */}
