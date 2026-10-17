@@ -19,6 +19,22 @@ interface FloatingExportMenuProps {
   handleExport: () => void;
 }
 
+/** The allowed range of a custom export width or height, in px */
+const MIN_CUSTOM_SIZE = 100;
+const MAX_CUSTOM_SIZE = 5000;
+
+const CUSTOM_SIZE_RANGE = `${MIN_CUSTOM_SIZE.toLocaleString('en-US')} to ${MAX_CUSTOM_SIZE.toLocaleString('en-US')} px`;
+
+/** Why the text of a custom width or height can't be exported, or null if it can */
+function customSizeError(text: string, dimension: 'Width' | 'Height'): string | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return `Enter a ${dimension.toLowerCase()} from ${CUSTOM_SIZE_RANGE}.`;
+  if (!/^\d+$/.test(trimmed)) return `${dimension} must be a whole number of pixels, from ${CUSTOM_SIZE_RANGE}.`;
+  const size = Number(trimmed);
+  if (size < MIN_CUSTOM_SIZE || size > MAX_CUSTOM_SIZE) return `${dimension} must be from ${CUSTOM_SIZE_RANGE}.`;
+  return null;
+}
+
 const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   format,
   sizeOption,
@@ -54,6 +70,53 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   };
   const unsupportedReason = pngRefusalFor(sizeOption);
   const unsupportedMessageId = useId();
+
+  // The custom size as typed. It is never rewritten while it is edited: only a valid value is
+  // passed on to be exported, and while either one is invalid the custom size can't be exported
+  const [widthText, setWidthText] = useState(String(customWidth));
+  const [heightText, setHeightText] = useState(String(customHeight));
+  const widthError = customSizeError(widthText, 'Width');
+  const heightError = customSizeError(heightText, 'Height');
+  const widthErrorId = useId();
+  const heightErrorId = useId();
+  const customSizeInvalid = widthError !== null || heightError !== null;
+
+  const changeCustomWidth = (text: string) => {
+    setWidthText(text);
+    if (customSizeError(text, 'Width') !== null) return;
+    const width = Number(text);
+    setCustomWidth(width);
+    if (shiftHeld && svgOriginalDimensions.width > 0) {
+      const height = Math.round((width * svgOriginalDimensions.height) / svgOriginalDimensions.width);
+      setHeightText(String(height));
+      if (customSizeError(String(height), 'Height') === null) setCustomHeight(height);
+    }
+  };
+
+  const changeCustomHeight = (text: string) => {
+    setHeightText(text);
+    if (customSizeError(text, 'Height') !== null) return;
+    const height = Number(text);
+    setCustomHeight(height);
+    if (shiftHeld && svgOriginalDimensions.height > 0) {
+      const width = Math.round((height * svgOriginalDimensions.width) / svgOriginalDimensions.height);
+      setWidthText(String(width));
+      if (customSizeError(String(width), 'Width') === null) setCustomWidth(width);
+    }
+  };
+
+  // The size to show for a preset: none for a custom size that can't be exported as typed
+  const shownSize = (size: ExportSize) =>
+    size === 'custom' && customSizeInvalid ? null : sizePresets[size].getDimensions();
+  const selectedLabel = sizePresets[sizeOption].label;
+  const selectedSize = shownSize(sizeOption);
+  const canExport =
+    unsupportedReason === null && isKnownSize(sizeOption) && !(sizeOption === 'custom' && customSizeInvalid);
+
+  const sizeInputClass = (error: string | null) =>
+    `w-full p-2 border rounded dark:bg-gray-800 ${
+      error ? 'border-red-500 dark:border-red-400' : 'dark:border-gray-700'
+    }`;
 
   return (
     <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
@@ -110,12 +173,12 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                 className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
               >
                 {Object.entries(sizePresets).map(
-                  ([key, { label, getDimensions }]) => {
-                    const { width, height } = getDimensions();
+                  ([key, { label }]) => {
+                    const size = shownSize(key as ExportSize);
                     const tooLargeForPng = pngRefusalFor(key as ExportSize) !== null;
                     return (
                       <option key={key} value={key} disabled={tooLargeForPng}>
-                        {label} ({width}×{height}px){tooLargeForPng && ' – PNG too large'}
+                        {label}{size && ` (${size.width}×${size.height}px)`}{tooLargeForPng && ' – PNG too large'}
                       </option>
                     );
                   }
@@ -150,24 +213,23 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                   <input
                     id="size-custom-width"
                     type="number"
-                    value={customWidth}
-                    onChange={(e) => {
-                      const val = Math.min(
-                        Math.max(100, Number(e.target.value)),
-                        5000
-                      );
-                      setCustomWidth(val);
-                      if (shiftHeld && svgOriginalDimensions.width > 0) {
-                        setCustomHeight(
-                          Math.round(
-                            (val * svgOriginalDimensions.height) /
-                              svgOriginalDimensions.width
-                          )
-                        );
-                      }
-                    }}
-                    className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
+                    min={MIN_CUSTOM_SIZE}
+                    max={MAX_CUSTOM_SIZE}
+                    step={1}
+                    value={widthText}
+                    onChange={(e) => changeCustomWidth(e.target.value)}
+                    aria-invalid={widthError !== null}
+                    aria-describedby={widthError ? widthErrorId : undefined}
+                    className={sizeInputClass(widthError)}
                   />
+                  {/* Always rendered so screen readers announce the message when it appears */}
+                  <p
+                    id={widthErrorId}
+                    aria-live="polite"
+                    className={`text-sm text-red-600 dark:text-red-400 ${widthError ? 'mt-1' : ''}`}
+                  >
+                    {widthError}
+                  </p>
                 </div>
                 <div className="flex-1 min-w-[250px]">
                   <label htmlFor="size-custom-height" className="block text-sm font-medium mb-1">
@@ -176,24 +238,22 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                   <input
                     id="size-custom-height"
                     type="number"
-                    value={customHeight}
-                    onChange={(e) => {
-                      const val = Math.min(
-                        Math.max(100, Number(e.target.value)),
-                        5000
-                      );
-                      setCustomHeight(val);
-                      if (shiftHeld && svgOriginalDimensions.height > 0) {
-                        setCustomWidth(
-                          Math.round(
-                            (val * svgOriginalDimensions.width) /
-                              svgOriginalDimensions.height
-                          )
-                        );
-                      }
-                    }}
-                    className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
+                    min={MIN_CUSTOM_SIZE}
+                    max={MAX_CUSTOM_SIZE}
+                    step={1}
+                    value={heightText}
+                    onChange={(e) => changeCustomHeight(e.target.value)}
+                    aria-invalid={heightError !== null}
+                    aria-describedby={heightError ? heightErrorId : undefined}
+                    className={sizeInputClass(heightError)}
                   />
+                  <p
+                    id={heightErrorId}
+                    aria-live="polite"
+                    className={`text-sm text-red-600 dark:text-red-400 ${heightError ? 'mt-1' : ''}`}
+                  >
+                    {heightError}
+                  </p>
                 </div>
               </div>
             </div>
@@ -201,15 +261,15 @@ hover:shadow-ms-clay-500/50 transition duration-300"
 
           <button
             onClick={handleExport}
-            disabled={unsupportedReason !== null || !isKnownSize(sizeOption)}
+            disabled={!canExport}
             aria-describedby={unsupportedReason ? unsupportedMessageId : undefined}
             className="cursor-pointer w-full mt-2 px-4 py-2 bg-ms-clay-500 text-white rounded hover:bg-ms-amber-500 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-ms-clay-500"
-            aria-label={`Export ${format.toUpperCase()} image with size ${sizePresets[sizeOption].label} (${sizePresets[sizeOption].getDimensions().width} by ${sizePresets[sizeOption].getDimensions().height} pixels)`}
-
+            aria-label={`Export ${format.toUpperCase()} image with size ${selectedLabel}${
+              selectedSize ? ` (${selectedSize.width} by ${selectedSize.height} pixels)` : ''
+            }`}
           >
-            Export {format.toUpperCase()} ({sizePresets[sizeOption].label}:{' '}
-            {sizePresets[sizeOption].getDimensions().width}×
-            {sizePresets[sizeOption].getDimensions().height}px)
+            Export {format.toUpperCase()} ({selectedLabel}
+            {selectedSize && `: ${selectedSize.width}×${selectedSize.height}px`})
           </button>
         </div>
       )}

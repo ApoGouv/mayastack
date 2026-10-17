@@ -99,3 +99,114 @@ describe('FloatingExportMenu PNG size limits', () => {
     expect(handleExport).toHaveBeenCalledOnce();
   });
 });
+
+/** Renders the open menu at the custom size (800 × 600 to start) for a small number */
+function renderCustomSizeMenu() {
+  const setCustomWidth = vi.fn();
+  const setCustomHeight = vi.fn();
+  const handleExport = vi.fn();
+  const original = { width: 350, height: 160, aspectRatio: 350 / 160 };
+  render(
+    <FloatingExportMenu
+      format="png"
+      setFormat={vi.fn()}
+      sizeOption="custom"
+      setSizeOption={vi.fn()}
+      sizePresets={getSizePresets(original, 800, 600)}
+      shiftHeld={false}
+      svgOriginalDimensions={original}
+      customWidth={800}
+      setCustomWidth={setCustomWidth}
+      customHeight={600}
+      setCustomHeight={setCustomHeight}
+      handleExport={handleExport}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: '📦 Export' }));
+  const exportButton = () => screen.getByRole('button', { name: /^Export PNG image/ }) as HTMLButtonElement;
+  return { setters: { Width: setCustomWidth, Height: setCustomHeight }, handleExport, exportButton };
+}
+
+const sizeField = (dimension: string) => screen.getByLabelText(`${dimension} (px)`) as HTMLInputElement;
+
+/** Edits a field one keystroke at a time, as typing does: each change starts from what the field shows */
+function typeInto(field: HTMLInputElement, text: string) {
+  for (const char of text) fireEvent.change(field, { target: { value: field.value + char } });
+}
+
+const clear = (field: HTMLInputElement) => fireEvent.change(field, { target: { value: '' } });
+
+/** The message a size field is described by, or null */
+const messageFor = (field: HTMLInputElement) => {
+  const id = field.getAttribute('aria-describedby');
+  return id ? document.getElementById(id)?.textContent ?? null : null;
+};
+
+describe.each(['Width', 'Height'] as const)('FloatingExportMenu custom %s', (dimension) => {
+  it('can be cleared and stays empty and editable, without becoming 100', () => {
+    const { setters, exportButton } = renderCustomSizeMenu();
+    clear(sizeField(dimension));
+
+    expect(sizeField(dimension).value).toBe('');
+    expect(messageFor(sizeField(dimension))).toBe(`Enter a ${dimension.toLowerCase()} from 100 to 5,000 px.`);
+    expect(exportButton().disabled).toBe(true);
+    expect(setters[dimension]).not.toHaveBeenCalled();
+  });
+
+  it('accepts 500 typed digit by digit', () => {
+    const { setters, exportButton } = renderCustomSizeMenu();
+    clear(sizeField(dimension));
+    typeInto(sizeField(dimension), '500');
+
+    expect(sizeField(dimension).value).toBe('500');
+    expect(sizeField(dimension).getAttribute('aria-invalid')).toBe('false');
+    expect(messageFor(sizeField(dimension))).toBeNull();
+    expect(setters[dimension]).toHaveBeenCalledOnce();
+    expect(setters[dimension]).toHaveBeenCalledWith(500);
+    expect(exportButton().disabled).toBe(false);
+  });
+
+  it.each(['50', '7000'])('rejects %s with a message instead of changing it', (text) => {
+    const { setters, exportButton, handleExport } = renderCustomSizeMenu();
+    clear(sizeField(dimension));
+    typeInto(sizeField(dimension), text);
+
+    expect(sizeField(dimension).value).toBe(text);
+    expect(sizeField(dimension).getAttribute('aria-invalid')).toBe('true');
+    expect(messageFor(sizeField(dimension))).toBe(`${dimension} must be from 100 to 5,000 px.`);
+    // Never passed on, neither as typed nor as a value within the limits; 700, typed on the
+    // way to 7000, is valid in itself
+    expect(setters[dimension]).not.toHaveBeenCalledWith(Number(text));
+    expect(setters[dimension].mock.calls.flat().every((size) => size !== 100 && size !== 5000)).toBe(true);
+    expect(exportButton().disabled).toBe(true);
+    fireEvent.click(exportButton());
+    expect(handleExport).not.toHaveBeenCalled();
+  });
+
+  it('cannot export an incomplete or fractional size, and shows no stale size for it', () => {
+    const { exportButton, handleExport } = renderCustomSizeMenu();
+    for (const text of ['', '12.5']) {
+      fireEvent.change(sizeField(dimension), { target: { value: text } });
+      expect(exportButton().disabled).toBe(true);
+      expect(exportButton().textContent).toBe('Export PNG (Custom Size)');
+      expect(screen.getByRole('option', { name: /^Custom Size/ }).textContent).toBe('Custom Size');
+    }
+    expect(messageFor(sizeField(dimension))).toBe(`${dimension} must be a whole number of pixels, from 100 to 5,000 px.`);
+    fireEvent.click(exportButton());
+    expect(handleExport).not.toHaveBeenCalled();
+  });
+
+  it('accepts the limits 100 and 5000 and is exportable again once corrected', () => {
+    const { setters, exportButton } = renderCustomSizeMenu();
+    for (const text of ['100', '5000']) {
+      fireEvent.change(sizeField(dimension), { target: { value: text } });
+      expect(messageFor(sizeField(dimension))).toBeNull();
+      expect(setters[dimension]).toHaveBeenLastCalledWith(Number(text));
+    }
+    fireEvent.change(sizeField(dimension), { target: { value: '99' } });
+    expect(exportButton().disabled).toBe(true);
+    fireEvent.change(sizeField(dimension), { target: { value: '640' } });
+    expect(exportButton().disabled).toBe(false);
+    expect(setters[dimension]).toHaveBeenLastCalledWith(640);
+  });
+});

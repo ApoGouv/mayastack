@@ -329,3 +329,119 @@ test.describe('base-20 representation', () => {
     await expect(page.getByRole('region', { name: /in base 20, expanded form/ })).toHaveCount(0);
   });
 });
+
+test.describe('date input', () => {
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  /** The expanded base-20 HTML of a number, e.g. "1 × 20<sup>1</sup> • 5 × 20<sup>0</sup>" for 25 */
+  const expanded = (n: number) => {
+    const digits: number[] = [];
+    for (let rest = n; rest > 0 || digits.length === 0; rest = Math.floor(rest / 20)) digits.unshift(rest % 20);
+    return digits.map((digit, i) => `${digit} × 20<sup>${digits.length - 1 - i}</sup>`).join(' • ');
+  };
+
+  /** The base-20 representation shown under a label (Day, Month or Year) */
+  const representation = (page: Page, label: string) =>
+    page.getByText(label, { exact: true }).locator('xpath=following-sibling::div[1]');
+
+  /** The day, month and year of the calendar day that has focus, from its name */
+  const focusedDay = async (page: Page) => {
+    const name = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '');
+    const [, month, day, year] = /^Choose \w+, (\w+) (\d+)\w\w, (\d{4})$/.exec(name)!;
+    return { day: Number(day), month: MONTHS.indexOf(month) + 1, year: Number(year) };
+  };
+
+  const expectRepresentations = async (page: Page, date: { day: number; month: number; year: number }) => {
+    await expect(representation(page, 'Day')).toHaveJSProperty('innerHTML', expanded(date.day));
+    await expect(representation(page, 'Month')).toHaveJSProperty('innerHTML', expanded(date.month));
+    await expect(representation(page, 'Year')).toHaveJSProperty('innerHTML', expanded(date.year));
+  };
+
+  test('can open the calendar and choose and change a date with the keyboard alone', async ({ page }) => {
+    const field = page.getByLabel('Date input');
+    const calendarDays = page.getByRole('gridcell', { name: /^Choose / });
+    await page.getByRole('radio', { name: 'Date' }).check();
+
+    // Tab from the mode selection opens the calendar on the field
+    await page.keyboard.press('Tab');
+    await expect(field).toBeFocused();
+    await expect(calendarDays.first()).toBeVisible();
+
+    // Escape closes it, and Enter reopens it
+    await page.keyboard.press('Escape');
+    await expect(calendarDays).toHaveCount(0);
+    await expect(field).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(calendarDays.first()).toBeVisible();
+
+    // The arrow keys move through the days and Enter chooses one, closing the calendar
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowRight');
+    const chosen = await focusedDay(page);
+    await page.keyboard.press('Enter');
+    await expect(calendarDays).toHaveCount(0);
+    await expect(field).toBeFocused();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    await expect(field).toHaveValue(`${pad(chosen.day)}-${pad(chosen.month)}-${chosen.year}`);
+    await expectRepresentations(page, chosen);
+
+    // Choosing another date updates the representations
+    await page.keyboard.press('ArrowDown');
+    await expect(calendarDays.first()).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    const changed = await focusedDay(page);
+    await page.keyboard.press('Enter');
+    await expect(field).toHaveValue(`${pad(changed.day)}-${pad(changed.month)}-${changed.year}`);
+    await expectRepresentations(page, changed);
+  });
+
+  test('still opens and chooses a date with the mouse', async ({ page }) => {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(representation(page, 'Day')).toHaveJSProperty('innerHTML', expanded(15));
+
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 16th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('gridcell', { name: /^Choose / })).toHaveCount(0);
+    await expect(representation(page, 'Day')).toHaveJSProperty('innerHTML', expanded(16));
+  });
+});
+
+test.describe('custom export size', () => {
+  test('exports a PNG at the width and height typed from the keyboard', async ({ page }) => {
+    await showNumber(page, '123');
+    await page.getByRole('button', { name: '📦 Export' }).click();
+    await page.getByLabel('Export Format').selectOption('png');
+    await page.getByLabel('Size Preset').selectOption('custom');
+
+    const width = page.getByLabel('Width (px)');
+    const height = page.getByLabel('Height (px)');
+    const exportButton = page.getByRole('button', { name: /^Export PNG image/ });
+
+    // Clearing a field leaves it empty, with a message, and nothing to export
+    await width.fill('');
+    await expect(width).toHaveValue('');
+    await expect(width).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText('Enter a width from 100 to 5,000 px.')).toBeVisible();
+    await expect(exportButton).toBeDisabled();
+
+    // Out-of-range values are reported, not changed
+    await width.pressSequentially('50');
+    await expect(width).toHaveValue('50');
+    await expect(page.getByText('Width must be from 100 to 5,000 px.')).toBeVisible();
+    await expect(exportButton).toBeDisabled();
+
+    await width.fill('');
+    await width.pressSequentially('500');
+    await height.fill('');
+    await height.pressSequentially('400');
+    await expect(width).toHaveValue('500');
+    await expect(height).toHaveValue('400');
+    await expect(exportButton).toBeEnabled();
+
+    const png = await exportFile(page, 'png');
+    expect(pngSize(png.data)).toEqual({ width: 500, height: 400 });
+  });
+});

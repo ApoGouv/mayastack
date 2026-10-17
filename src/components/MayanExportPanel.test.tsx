@@ -111,6 +111,22 @@ describe('MayanExportPanel', () => {
     expect(vi.mocked(exportPng).mock.calls[0][1]).toBe('mayan-numeral-number-123.png');
   });
 
+  it('exports a custom PNG at exactly the width and height entered', async () => {
+    vi.mocked(exportPng).mockResolvedValueOnce();
+    renderSmallResult();
+    fireEvent.change(screen.getByLabelText('Export Format'), { target: { value: 'png' } });
+    fireEvent.change(screen.getByLabelText('Size Preset'), { target: { value: 'custom' } });
+    fireEvent.change(screen.getByLabelText('Width (px)'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Width (px)'), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Height (px)'), { target: { value: '4321' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export PNG image with size Custom Size (500 by 4321 pixels)' }));
+
+    expect(await screen.findByText('PNG exported! Check your downloads.')).toBeTruthy();
+    const [svg, filename] = vi.mocked(exportPng).mock.calls[0];
+    expect([svg.getAttribute('width'), svg.getAttribute('height')]).toEqual(['500', '4321']);
+    expect(filename).toBe('mayan-numeral-number-123.png');
+  });
+
   it('reports a PNG refused by the size check', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(exportPng).mockRejectedValueOnce(new PngSizeError('A PNG can be at most 32,767 px wide or tall.'));
