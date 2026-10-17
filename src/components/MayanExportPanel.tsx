@@ -63,7 +63,8 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
 
       const exportFn = format === "svg" ? exportSvg : exportPng;
       await exportFn(svgClone, `${filename}.${format}`);
-      toast.success(`${format.toUpperCase()} exported! Check your downloads.`);
+      // The app can only ask the browser to download: whether the file is saved is not reported
+      toast.success(`${format.toUpperCase()} download started. Check your browser’s downloads.`);
     } catch (err) {
       console.error("Export failed:", err);
       if (err instanceof PngSizeError) {

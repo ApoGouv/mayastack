@@ -7,7 +7,9 @@ import MayanRenderer from '@components/MayanRenderer';
 import { toBase20 } from './base20';
 import {
   checkPngSize,
+  DOWNLOAD_URL_LIFETIME_MS,
   exportPng,
+  exportSvg,
   getNumberExportFilename,
   MAX_DIGITS_IN_FILENAME,
   MAX_PNG_AREA,
@@ -149,5 +151,68 @@ describe('getNumberExportFilename', () => {
       expect(name.length).toBeLessThanOrEqual(55);
       expect(name).toMatch(/^[a-z0-9.-]+$/);
     }
+  });
+});
+
+describe('exportSvg download', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('downloads the complete SVG and releases its URL only after a short delay', async () => {
+    vi.useFakeTimers();
+    const blobs: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      blobs.push(blob as Blob);
+      return 'blob:mayastack-test';
+    });
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clicks: { href: string; download: string }[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicks.push({ href: this.href, download: this.download });
+    });
+    const svg = renderNumberSvg(123n);
+
+    await exportSvg(svg, 'mayan-numeral-number-123.svg');
+
+    // The download is requested once, with the file's name and URL
+    expect(clicks).toEqual([{ href: 'blob:mayastack-test', download: 'mayan-numeral-number-123.svg' }]);
+    expect(blobs).toHaveLength(1);
+    expect(blobs[0].type).toBe('image/svg+xml');
+    expect(await blobs[0].text()).toBe(new XMLSerializer().serializeToString(svg));
+
+    // Not revoked during or straight after the click, so the browser can still read it
+    expect(revoke).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(DOWNLOAD_URL_LIFETIME_MS - 1);
+    expect(revoke).not.toHaveBeenCalled();
+
+    // Then released once, so no URL is left holding the file's memory
+    vi.advanceTimersByTime(1);
+    expect(revoke).toHaveBeenCalledOnce();
+    expect(revoke).toHaveBeenCalledWith('blob:mayastack-test');
+  });
+
+  it('still releases the URL, after the same delay, when starting the download throws', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mayastack-test');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const failure = new Error('Download blocked');
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      throw failure;
+    });
+
+    // The original error reaches the caller, which reports the failed export
+    await expect(exportSvg(renderNumberSvg(123n), 'mayan-numeral-number-123.svg')).rejects.toBe(failure);
+
+    expect(revoke).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(DOWNLOAD_URL_LIFETIME_MS - 1);
+    expect(revoke).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(revoke).toHaveBeenCalledOnce();
+    expect(revoke).toHaveBeenCalledWith('blob:mayastack-test');
+  });
+
+  it('keeps the release delay short: seconds, not minutes', () => {
+    expect(DOWNLOAD_URL_LIFETIME_MS).toBe(10_000);
   });
 });

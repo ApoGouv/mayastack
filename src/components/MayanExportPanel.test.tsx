@@ -121,7 +121,7 @@ describe('MayanExportPanel', () => {
     fireEvent.change(screen.getByLabelText('Height (px)'), { target: { value: '4321' } });
     fireEvent.click(screen.getByRole('button', { name: 'Export PNG image with size Custom Size (500 by 4321 pixels)' }));
 
-    expect(await screen.findByText('PNG exported! Check your downloads.')).toBeTruthy();
+    expect(await screen.findByText('PNG download started. Check your browser’s downloads.')).toBeTruthy();
     const [svg, filename] = vi.mocked(exportPng).mock.calls[0];
     expect([svg.getAttribute('width'), svg.getAttribute('height')]).toEqual(['500', '4321']);
     expect(filename).toBe('mayan-numeral-number-123.png');

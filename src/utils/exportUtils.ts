@@ -85,16 +85,33 @@ export function getNumberExportFilename(decimal: string): string {
 // =============================================
 
 /**
- * Triggers download of a data URL
+ * How long a download's object URL is kept before it is released, in ms.
  *
- * @param dataUrl - The data URL to download
+ * Clicking a download link only asks the browser to download: it reads the URL and saves
+ * the file asynchronously, and tells the page neither when it has read the URL nor whether
+ * the file was saved. Some browsers have failed downloads whose URL was revoked straight
+ * after the click, so the URL is kept briefly, then revoked so the file's memory is freed.
+ */
+export const DOWNLOAD_URL_LIFETIME_MS = 10_000;
+
+/**
+ * Asks the browser to download a blob under the given filename. This only starts the
+ * download: whether the file is then saved is up to the browser and the user.
+ *
+ * @param blob - The file's content
  * @param filename - Name for the downloaded file
  */
-function downloadDataUrl(dataUrl: string, filename: string): void {
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = filename;
-  link.click();
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+  } finally {
+    // Released even if starting the download throws, so the URL never outlives the delay
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
+  }
 }
 
 /**
@@ -293,11 +310,7 @@ export async function exportSvg(
 ): Promise<void> {
   const svgString = serializeSvg(svgEl);
   const blob = new Blob([svgString], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-
-  downloadDataUrl(url, filename);
-
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
 
 /**
@@ -321,7 +334,5 @@ export async function exportPng(
   const { canvas, ctx } = createCanvasForSvg(svgEl, scale);
   await renderSvgToCanvas(svgEl, canvas, ctx);
   const blob = await canvasToPngBlob(canvas);
-  const url = URL.createObjectURL(blob);
-  downloadDataUrl(url, filename);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
