@@ -14,11 +14,22 @@ interface DateInputProps {
   placeholder?: string;
 }
 
-interface CustomInputProps {
-  value?: string;
-  placeholder?: string;
-  onClick?: () => void;
-}
+// The props react-datepicker passes to its custom input that this read-only field uses:
+// the focus and key handlers open the calendar and move into it from the keyboard
+type CustomInputProps = Pick<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  | 'value'
+  | 'placeholder'
+  | 'onClick'
+  | 'onFocus'
+  | 'onBlur'
+  | 'onKeyDown'
+  | 'aria-label'
+  | 'aria-labelledby'
+  | 'aria-describedby'
+  | 'aria-invalid'
+  | 'aria-required'
+>;
 
 // Parse a Date object into { day, month, year }
 const parseDateParts = (date: Date): DateParts => ({
@@ -29,14 +40,40 @@ const parseDateParts = (date: Date): DateParts => ({
 
 // Custom input component with readonly behavior
   const CustomInput = forwardRef<HTMLInputElement, CustomInputProps>(
-    ({ value, placeholder, onClick }, ref) => (
+    (
+      {
+        value,
+        placeholder,
+        onClick,
+        onFocus,
+        onBlur,
+        onKeyDown,
+        'aria-label': ariaLabel,
+        'aria-labelledby': ariaLabelledBy,
+        'aria-describedby': ariaDescribedBy,
+        'aria-invalid': ariaInvalid,
+        'aria-required': ariaRequired,
+      },
+      ref
+    ) => (
       <div className="relative flex items-center max-w-sm w-full">
         <label htmlFor="date-input" className="sr-only">Date input</label>
+        {/* Read-only: dates are chosen in the calendar, so typing never changes the value.
+            The picker's onChange, id, name and class props are left out: they would replace
+            this field's own id and styling, and a read-only field has no typed changes */}
         <input
           id="date-input"
           type="text"
           readOnly
           onClick={onClick}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          aria-required={ariaRequired}
           ref={ref}
           value={value}
           placeholder={placeholder}
