@@ -169,4 +169,17 @@ describe('HomeView date mode', () => {
     const image = screen.getByRole('img', { name: /^Mayan numerals for day 15, month \d{1,2} and year \d{4}$/ });
     expect(screen.getByRole('group', { name: 'Numeral viewer' }).contains(image)).toBe(true);
   });
+
+  it('shows the base-20 representation of the day, month and year', () => {
+    renderHomeView();
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+
+    // Day 15 is the single base-20 digit 15; month and year follow in their own groups
+    for (const label of ['Day', 'Month', 'Year']) expect(screen.getByText(label)).toBeTruthy();
+    const day = screen.getByText('Day').nextElementSibling as HTMLElement;
+    expect(day.innerHTML).toBe('15 × 20<sup>0</sup>');
+    expect(screen.queryByRole('region', { name: /in base 20, expanded form/ })).toBeNull();
+  });
 });

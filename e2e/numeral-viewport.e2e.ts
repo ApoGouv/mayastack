@@ -158,7 +158,8 @@ test.describe('bounded numeral viewport', () => {
 
 test.describe('export with the viewport', () => {
   test('offers Export for the largest number wherever the page is scrolled', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 600 });
+    // Short enough for the result card to start below the fold at the top of the page
+    await page.setViewportSize({ width: 1280, height: 400 });
     await showNumber(page, MAX_DIGITS);
     const exportButton = page.getByRole('button', { name: '📦 Export' });
     const resultCard = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
@@ -271,5 +272,60 @@ test.describe('PNG export size limits', () => {
 
     expect(png.name).toBe(`mayan-numeral-number-${MAX_DIGITS}.png`);
     expect(pngSize(png.data)).toEqual({ width: 350, height: 30800 });
+  });
+});
+
+test.describe('base-20 representation', () => {
+  const representation = (page: Page) => page.getByRole('region', { name: 'Number in base 20, expanded form' });
+  const resultTop = async (page: Page) =>
+    (await page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').boundingBox())!.y;
+
+  test('stops growing with the number, so the page stays the same height', async ({ page }) => {
+    await showNumber(page, '9'.repeat(250));
+    const at250 = { box: (await representation(page).boundingBox())!.height, result: await resultTop(page) };
+    await showNumber(page, MAX_DIGITS);
+    const at500 = { box: (await representation(page).boundingBox())!.height, result: await resultTop(page) };
+
+    // Capped: twice the digits, same height (the uncapped text was about 2,450 px at 500 digits)
+    expect(at500.box).toBe(at250.box);
+    expect(at500.result).toBe(at250.result);
+    expect(at500.box).toBeLessThan(400);
+  });
+
+  test('keeps the complete, exact representation of the largest number', async ({ page }) => {
+    await showNumber(page, MAX_DIGITS);
+    const html = await representation(page).innerHTML();
+    const terms = [...html.matchAll(/(\d+) × 20<sup>(\d+)<\/sup>/g)];
+
+    expect(terms).toHaveLength(385);
+    expect(terms.reduce((sum, [, digit, exponent]) => sum + BigInt(digit) * 20n ** BigInt(exponent), 0n)).toBe(BigInt(MAX_DIGITS));
+  });
+
+  test('can be scrolled from beginning to end with the keyboard', async ({ page }) => {
+    await showNumber(page, MAX_DIGITS);
+    const region = representation(page);
+    const position = () => region.evaluate((el) => ({ top: el.scrollTop, atEnd: el.scrollTop + el.clientHeight >= el.scrollHeight - 1 }));
+
+    await region.focus();
+    await expect(region).toBeFocused();
+    // Keyboard scrolling is animated: each key is pressed once the previous scroll has finished
+    await page.keyboard.press('End');
+    await expect.poll(async () => (await position()).atEnd).toBe(true);
+    await page.keyboard.press('Home');
+    await expect.poll(async () => (await position()).top).toBe(0);
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(async () => (await position()).top).toBeGreaterThan(0);
+  });
+
+  test('stays plain text, at its natural height, for small numbers and dates', async ({ page }) => {
+    await showNumber(page, '123');
+    await expect(page.getByText('6 × 201 • 3 × 200')).toBeVisible();
+    await expect(page.getByRole('region', { name: /in base 20, expanded form/ })).toHaveCount(0);
+
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(page.getByText('15 × 200', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: /in base 20, expanded form/ })).toHaveCount(0);
   });
 });
