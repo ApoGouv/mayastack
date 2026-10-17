@@ -5,15 +5,38 @@ import type { RgbaColor, ColorTheme } from '@/types/colors';
 const THEMES: ColorTheme[] = ['light', 'dark', 'system'];
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
+// Browser storage may be unavailable: when a browser blocks site data, even reading
+// `localStorage` throws, and a write can also fail (e.g. when storage is full). Settings are
+// then not saved: they start from their defaults and still change for the current visit.
+
+// A saved setting, or null if there is none or storage can't be read
+const readStored = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+// Saves a setting, or removes it for null; if storage can't be written, it is simply not saved
+const writeStored = (key: string, value: string | null): void => {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Not saved: the setting still applies until the page is reloaded
+  }
+};
+
 // Read the saved theme once, on first render (ignore invalid values)
 const readSavedTheme = (): ColorTheme => {
-  const saved = localStorage.getItem('theme') as ColorTheme | null;
+  const saved = readStored('theme') as ColorTheme | null;
   return saved && THEMES.includes(saved) ? saved : 'system';
 };
 
 // Read the saved grid visibility once, on first render
 const readSavedShowGrid = (): boolean => {
-  const saved = localStorage.getItem('showGrid');
+  const saved = readStored('showGrid');
   return saved === null ? defaultShowGrid : saved === 'true';
 };
 
@@ -72,16 +95,13 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
     // Also add a class indicating if we're using system preference
     html.classList.toggle('using-system', theme === 'system');
 
-    if (theme !== 'system') {
-      localStorage.setItem('theme', theme);
-    } else {
-      localStorage.removeItem('theme');
-    }
+    // The system theme is the default, so it is saved by removing any saved theme
+    writeStored('theme', theme !== 'system' ? theme : null);
   }, [theme, resolvedTheme]);
 
   // Persist grid visibility setting
   useEffect(() => {
-    localStorage.setItem('showGrid', String(showGrid));
+    writeStored('showGrid', String(showGrid));
   }, [showGrid]);
 
   const toggleTheme = () => {
