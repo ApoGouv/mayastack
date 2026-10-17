@@ -52,8 +52,15 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   const [isOpen, setIsOpen] = useState(false);
 
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useDismissOnOutsideOrEsc(exportMenuRef, () => setIsOpen(false), isOpen, true);
+
+  // Escape closes the panel (above). Pressed inside the panel, it first returns focus to the
+  // Export button, which would otherwise be lost when the panel is removed
+  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') triggerRef.current?.focus();
+  };
 
   // Sizes derived from the numeral are 0 × 0 until it has been measured, just after it mounts:
   // such a size is not known yet, rather than invalid, so it is neither flagged nor exported
@@ -121,6 +128,7 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   return (
     <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
       <button
+        ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
@@ -136,8 +144,8 @@ hover:shadow-ms-clay-500/50 transition duration-300"
         <div
           id="floating-export-menu-panel"
           role="dialog"
-          aria-modal="true"
           aria-labelledby="export-menu-heading"
+          onKeyDown={handlePanelKeyDown}
           className="fixed bottom-18 sm:bottom-30 right-4 z-40 bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg max-w-[350px] max-h-[80vh] overflow-y-auto"
           style={{ width: 'calc(100% - 2*var(--spacing) * 4)' }}
         >
