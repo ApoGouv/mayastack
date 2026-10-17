@@ -445,3 +445,39 @@ test.describe('custom export size', () => {
     expect(pngSize(png.data)).toEqual({ width: 500, height: 400 });
   });
 });
+
+test.describe('browser storage', () => {
+  test('the app works with default settings when site storage is blocked', async ({ page }) => {
+    // As in a browser that blocks site data: reading localStorage itself throws
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'localStorage', {
+        get() {
+          throw new DOMException('The operation is insecure.', 'SecurityError');
+        },
+      });
+    });
+    await page.goto('./');
+
+    await expect(page.getByRole('heading', { name: /Convert to Mayan Numerals/ })).toBeVisible();
+    const themeButton = page.getByRole('button', { name: /^Theme selector/ });
+    await expect(themeButton).toHaveAttribute('aria-label', 'Theme selector (current: system)');
+
+    // Settings still change for the visit, without being saved
+    await themeButton.click();
+    await page.getByRole('menuitem', { name: 'Dark' }).click();
+    await expect(themeButton).toHaveAttribute('aria-label', 'Theme selector (current: dark)');
+    await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+    await themeButton.click();
+    await page.getByRole('menuitem', { name: 'Light' }).click();
+    await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
+
+    await showNumber(page, '123');
+    const grid = page.getByRole('switch', { name: 'Show Grid:' });
+    await grid.click();
+    await expect(grid).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('button', { name: '📦 Export' })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
