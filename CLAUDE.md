@@ -43,6 +43,7 @@ Preserve the existing behavior of each mode. Do not reinterpret date inputs as L
 - Inspect the existing implementation and project conventions before modifying code.
 - Prefer small, focused changes over broad refactoring.
 - Preserve existing functionality, visual design, responsiveness, and user preferences unless a change is explicitly requested.
+- When a visual redesign is explicitly approved, implement the approved design direction rather than treating the existing visual design as immutable. Preserve existing functionality, accessibility, responsive behavior, user preferences, and export semantics unless the task explicitly changes them.
 - Use TypeScript types and explicit validation to make invalid states difficult to represent.
 - Handle numeric precision correctly, especially for large integers. Avoid converting exact integer values through JavaScript `number` when precision could be lost. Consider `bigint` where appropriate.
 - Do not silently transform invalid input into a different valid value.
@@ -160,23 +161,22 @@ When modifying the interface:
 
 Do not treat a visually correct browser preview as sufficient proof that generated SVG output is correct in other rendering environments when cross-renderer compatibility is relevant.
 
-## 9. Development Priorities and Roadmap
+### Approved Redesign and Viewer Overlays
 
-The current priority is to strengthen the existing codebase before adding major new features.
+- Treat the approved MayaStack redesign plan as authorization to change the visual presentation and layout within the explicitly requested scope.
+- Keep screen-only annotations and tier guides outside the exported SVG whenever possible. They must not alter the underlying numeral renderer or leak into SVG/PNG output.
+- Preserve the existing exportable grid as an independent setting. Do not remove or replace it with screen-only tier guides unless explicitly authorized.
+- Preserve the existing numeral rendering, zoom range, keyboard controls, date-mode semantics, and SVG/PNG export behavior unless a task explicitly authorizes a change.
+- When adding display preferences, preserve existing customization options and handle persistence, validation, theme changes, and accessibility consistently.
+- Treat design mockups and generated HTML as visual references, not production-ready implementations. Reuse existing components, utilities, and tests where appropriate rather than copying mockup code or adding unnecessary dependencies.
 
-The intended order of work is:
+## 9. Project Specifications and Roadmaps
 
-1. Establish reliable automated testing and regression coverage.
-2. Fix existing bugs and improve numeric correctness.
-3. Improve input validation and error handling.
-4. Correct theme, rendering, and SVG/PNG export issues.
-5. Improve accessibility, reliability, and maintainability.
-6. Evaluate and implement glyph SVG improvements where appropriate.
-7. Consider additional features once the existing functionality is sufficiently reliable and well tested.
-
-A proper Mayan Long Count calendar implementation is planned for a later phase. It should be designed and implemented separately after the existing codebase is sufficiently stable and tested.
-
-This roadmap provides context and does not authorize Claude to implement every item automatically. Work only on the task explicitly requested.
+- Project-specific roadmaps, design decisions, and implementation plans belong in dedicated documentation under `docs/`, rather than being duplicated in this file.
+- Before implementing a task covered by a project specification, read the relevant document and follow its approved scope and acceptance criteria.
+- A roadmap describes intended future work; it does not authorize implementation of every listed stage. Implement only the stage explicitly requested by the user.
+- If a specification conflicts with these general instructions, existing application behavior, or a safety constraint, stop and explain the conflict rather than silently choosing an interpretation.
+- Keep specifications accurate as approved decisions change, and distinguish implemented behavior from planned or deferred work.
 
 ## 10. Git, Branches, and Safety
 
