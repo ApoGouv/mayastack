@@ -43,18 +43,23 @@
   }
 }
 
-/* Dark mode overrides */
-@theme .dark {
-  /* Slightly darker brand variant for dark mode */
-  --color-ms-brand-500: #c24d30;
+/* Dark mode overrides.
+   @theme takes no selector (it always defines global theme variables), so the dark values
+   override the variables under .dark instead. Utilities read colours through these
+   variables, so they follow the active theme. The base layer comes after the theme layer. */
+@layer base {
+  .dark {
+    /* Slightly darker brand variant for dark mode */
+    --color-ms-brand-500: #c24d30;
 
-  /* MayaStack Earthy Palette */
-  --color-ms-clay-500: #b3482e;
-  --color-ms-deep-teal-500: #045255;
-  --color-ms-moss-500: #4b7b60;
-  --color-ms-jade-500: #002f32;
-  --color-ms-sand-500: #d89d5f;
-  --color-ms-amber-500: #cc8e4d;
+    /* MayaStack Earthy Palette */
+    --color-ms-clay-500: #b3482e;
+    --color-ms-deep-teal-500: #045255;
+    --color-ms-moss-500: #4b7b60;
+    --color-ms-jade-500: #002f32;
+    --color-ms-sand-500: #d89d5f;
+    --color-ms-amber-500: #cc8e4d;
+  }
 }
 
 .mep-svg {
