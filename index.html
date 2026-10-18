@@ -1,13 +1,31 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Applies the theme before the first paint, as DisplaySettingsProvider does once React
+      // has mounted: a saved 'light' or 'dark', otherwise the system preference. If storage
+      // can't be read, the system theme is used, so startup never depends on storage.
+      (function () {
+        var saved = null;
+        try {
+          saved = localStorage.getItem('theme');
+        } catch (e) {
+          // Storage blocked: use the system theme
+        }
+        var system = saved !== 'light' && saved !== 'dark';
+        var dark = system ? window.matchMedia('(prefers-color-scheme: dark)').matches : saved === 'dark';
+        var root = document.documentElement;
+        root.classList.add(dark ? 'dark' : 'light');
+        root.classList.toggle('using-system', system);
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MayaStack – Dot. Bar. Shell. Stack your numbers the Mayan way.</title>
     <meta name="description" content="Explore and convert numbers or dates into Mayan numeral glyphs. MayaStack brings ancient math to life with visual dot, bar, and shell stacks." />
   </head>
-  <body class="bg-gray-950 text-gray-100">
+  <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

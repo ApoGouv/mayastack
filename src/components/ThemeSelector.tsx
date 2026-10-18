@@ -76,7 +76,9 @@ export const ThemeSelector: React.FC = () => {
               }}
               className={`flex items-center space-x-3 w-full px-4 py-2 text-sm text-left transition ${
                 theme === themeOption.id
-                  ? 'bg-ms-brand-100 dark:bg-ms-brand-900 text-ms-brand-700 dark:text-ms-brand-200'
+                  ? // Existing brand token only: the ring marks the selection (at least 3:1 against
+                    // the menu in both themes); the text keeps the menu's readable colours
+                    'bg-ms-brand-500/15 ring-2 ring-inset ring-ms-brand-500 font-semibold text-gray-900 dark:text-gray-100'
                   : 'cursor-pointer text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
               data-theme-option={themeOption.id}
