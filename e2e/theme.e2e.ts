@@ -26,7 +26,7 @@ async function open(page: Page, saved: string | null, system: Theme, { withApp =
   await page.goto('./');
 }
 
-/** The theme class, brand token and backgrounds of the document */
+/** The theme class, colour scheme, brand token and backgrounds of the document */
 function themeState(page: Page) {
   return page.evaluate(() => {
     const root = document.documentElement;
@@ -34,6 +34,8 @@ function themeState(page: Page) {
     return {
       theme: root.classList.contains('dark') ? 'dark' : root.classList.contains('light') ? 'light' : null,
       usingSystem: root.classList.contains('using-system'),
+      // The scheme native controls (scrollbars, selects) are drawn in
+      colorScheme: getComputedStyle(root).colorScheme,
       brand: getComputedStyle(root).getPropertyValue('--color-ms-brand-500').trim(),
       bodyBackground: getComputedStyle(document.body).backgroundColor,
       appBackground: app ? getComputedStyle(app).backgroundColor : null,
@@ -55,13 +57,13 @@ test.describe('initial theme', () => {
       await open(page, saved, system, { withApp: false });
       await expect(page.locator('#root')).toBeEmpty();
       const firstPaint = await themeState(page);
-      expect(firstPaint).toMatchObject({ theme: expected, usingSystem, brand: BRAND[expected] });
+      expect(firstPaint).toMatchObject({ theme: expected, usingSystem, brand: BRAND[expected], colorScheme: expected });
 
       await page.unrouteAll();
       await page.reload();
       await expect(page.getByRole('heading', { name: /Convert to Mayan Numerals/ })).toBeVisible();
       const started = await themeState(page);
-      expect(started).toMatchObject({ theme: expected, usingSystem, brand: BRAND[expected] });
+      expect(started).toMatchObject({ theme: expected, usingSystem, brand: BRAND[expected], colorScheme: expected });
       // The page behind the app has the app's own background, before and after it starts
       expect(started.bodyBackground).toBe(started.appBackground);
       expect(firstPaint.bodyBackground).toBe(started.bodyBackground);
@@ -74,12 +76,12 @@ test.describe('initial theme', () => {
       page.on('pageerror', (error) => errors.push(error.message));
       await page.addInitScript(blockStorage);
       await open(page, null, system, { withApp: false });
-      expect(await themeState(page)).toMatchObject({ theme: system, usingSystem: true, brand: BRAND[system] });
+      expect(await themeState(page)).toMatchObject({ theme: system, usingSystem: true, brand: BRAND[system], colorScheme: system });
 
       await page.unrouteAll();
       await page.reload();
       await expect(page.getByRole('heading', { name: /Convert to Mayan Numerals/ })).toBeVisible();
-      expect(await themeState(page)).toMatchObject({ theme: system, usingSystem: true, brand: BRAND[system] });
+      expect(await themeState(page)).toMatchObject({ theme: system, usingSystem: true, brand: BRAND[system], colorScheme: system });
       expect(errors).toEqual([]);
     });
   }
@@ -132,18 +134,18 @@ test.describe('theme switching', () => {
     };
 
     // System, resolved to the emulated light scheme
-    expect(await themeState(page)).toMatchObject({ theme: 'light', brand: BRAND.light });
+    expect(await themeState(page)).toMatchObject({ theme: 'light', brand: BRAND.light, colorScheme: 'light' });
     await expectSelectionVisible(2, 'light');
 
     await chooseTheme('Dark');
-    expect(await themeState(page)).toMatchObject({ theme: 'dark', usingSystem: false, brand: BRAND.dark });
+    expect(await themeState(page)).toMatchObject({ theme: 'dark', usingSystem: false, brand: BRAND.dark, colorScheme: 'dark' });
     await expectSelectionVisible(1, 'dark');
 
     await chooseTheme('Light');
-    expect(await themeState(page)).toMatchObject({ theme: 'light', usingSystem: false, brand: BRAND.light });
+    expect(await themeState(page)).toMatchObject({ theme: 'light', usingSystem: false, brand: BRAND.light, colorScheme: 'light' });
     await expectSelectionVisible(0, 'light');
 
     await chooseTheme('System');
-    expect(await themeState(page)).toMatchObject({ theme: 'light', usingSystem: true, brand: BRAND.light });
+    expect(await themeState(page)).toMatchObject({ theme: 'light', usingSystem: true, brand: BRAND.light, colorScheme: 'light' });
   });
 });

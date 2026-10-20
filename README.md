@@ -92,3 +92,7 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 ## 📄 License
 
 MIT © 2025 MayaStack by Apostolos Gouvalas
+
+### Third-party font
+
+Headings use [Playfair Display](https://github.com/clauseggers/Playfair) by Claus Eggers Sørensen, Copyright 2017 The Playfair Display Project Authors, licensed under the [SIL Open Font License 1.1](public/fonts/playfair-display/OFL.txt). The unmodified font file is self-hosted with its licence and FONTLOG in [`public/fonts/playfair-display/`](public/fonts/playfair-display/); see [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) for its provenance.
