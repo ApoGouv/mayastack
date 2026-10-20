@@ -389,7 +389,7 @@ Acceptance criteria:
 - Text and interactive controls meet applicable contrast requirements.
 - Existing theme and display settings continue to work.
 - No unnecessary dependencies are introduced.
-- The design system is documented where appropriate.
+- The design system is documented where appropriate (`docs/DESIGN_SYSTEM.md`).
 
 ### Stage 2: Implement the Workspace Layout
 
@@ -642,8 +642,8 @@ Update this section as work progresses.
 
 | Stage | Status | Notes |
 |---|---|---|
-| Stage 0: Theme defects | Planned | |
-| Stage 1: Design system | Planned | |
+| Stage 0: Theme defects | Implemented | Merged in PR #12. |
+| Stage 1: Design system | In progress | PR 1 (foundation) implemented; PR 2 applies it to existing components. See `docs/DESIGN_SYSTEM.md`. |
 | Stage 2: Workspace layout | Planned | |
 | Stage 3: Input controls | Planned | |
 | Stage 4: Mathematical breakdown | Planned | |

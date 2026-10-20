@@ -3,7 +3,60 @@
 /** @see https://tailwindcss.com/docs/dark-mode#toggling-dark-mode-manually */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/** */
+/* Design system: see docs/DESIGN_SYSTEM.md for the token roles, contrast checks and rules. */
+
+/* Heading font: the unmodified official Playfair Display variable font, self-hosted with its
+   licence (public/fonts/playfair-display/OFL.txt). It is used only through font-heading. */
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('/fonts/playfair-display/PlayfairDisplay%5Bwght%5D.ttf') format('truetype');
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Semantic tokens, light theme (dark values below, under .dark). "static" keeps every
+   variable in the CSS even before a utility uses it, so plain CSS (e.g. third-party widget
+   overrides) can rely on var(--color-…). */
+@theme static {
+  --font-heading: 'Playfair Display', Georgia, 'Times New Roman', serif;
+
+  /* Surfaces */
+  --color-canvas: #f6f1e7;         /* Page background (warm parchment) */
+  --color-surface: #fffcf5;        /* Cards and panels */
+  --color-surface-raised: #ffffff; /* Menus, popovers, toasts */
+  --color-surface-hover: #f2ebdd;  /* Hovered secondary controls and menu rows */
+  --color-surface-active: #e8decb; /* Pressed secondary controls */
+  --color-well: #ffffff;           /* Input fields */
+
+  /* Lines */
+  --color-line: #e2d8c6;           /* Decorative separators only, never a control's boundary */
+  --color-line-strong: #857a66;    /* Control boundaries (at least 3:1) */
+
+  /* Text */
+  --color-fg: #1e1a14;
+  --color-fg-muted: #4f4738;
+  --color-fg-subtle: #6b6250;      /* Hints and placeholders (at least 4.5:1) */
+  --color-fg-disabled: #a1978a;    /* Inactive controls only (exempt from text contrast) */
+
+  /* Ceremonial gold: primary actions, selection, focus */
+  --color-accent: #d4af37;         /* Gold fill: always with an accent-fg border */
+  --color-accent-hover: #c9a42e;
+  --color-accent-active: #b8952a;
+  --color-on-accent: #1e1a14;      /* Text and marks on gold */
+  --color-accent-fg: #735c00;      /* Gold text, borders and indicators */
+  --color-accent-subtle: #f6eccb;  /* Selected tint */
+
+  /* Status */
+  --color-jade: #1f7a4d;           /* Success, active/on states */
+  --color-danger: #b3261e;         /* Errors */
+
+  /* Focus, tooltips, toggles */
+  --color-focus: #735c00;
+  --color-inverse: #2a251d;
+  --color-on-inverse: #f6f1e7;
+  --color-toggle-thumb: #ffffff;
+}
 
 @theme {
   /* Brand Color */
@@ -59,6 +112,64 @@
     --color-ms-jade-500: #002f32;
     --color-ms-sand-500: #d89d5f;
     --color-ms-amber-500: #cc8e4d;
+
+    /* Semantic tokens, dark theme */
+    --color-canvas: #101319;         /* Obsidian */
+    --color-surface: #191c22;
+    --color-surface-raised: #232730;
+    --color-surface-hover: #2a2f38;
+    --color-surface-active: #343a45;
+    --color-well: #0b0e14;
+    --color-line: #2d3542;
+    --color-line-strong: #908979;
+    --color-fg: #e8dfd1;
+    --color-fg-muted: #c2b69d;
+    --color-fg-subtle: #a59a84;
+    --color-fg-disabled: #6e6758;
+    --color-accent: #d4af37;
+    --color-accent-hover: #e5c158;
+    --color-accent-active: #bf9c2e;
+    --color-on-accent: #101319;
+    --color-accent-fg: #e5c158;
+    --color-accent-subtle: #3a3320;
+    --color-jade: #3eb489;
+    --color-danger: #ff8a80;
+    --color-focus: #e5c158;
+    --color-inverse: #e8dfd1;
+    --color-on-inverse: #101319;
+    --color-toggle-thumb: #101319;
+  }
+
+  /* Native controls (scrollbars, selects, spinners) follow the active theme. The theme class
+     is set before the first paint (index.html), so this applies from the first paint too. */
+  :root {
+    color-scheme: light;
+  }
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  /* Reduced motion: animations and transitions end almost at once instead of being removed,
+     so they still reach their end state and fire their end events. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* The shared keyboard focus indicator: a 2px outline in the focus colour, 2px away from the
+   control, so it always sits on the surrounding surface (even around a gold button). Outlines,
+   unlike box-shadow rings, stay visible in forced-colours (high contrast) mode. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
   }
 }
 
