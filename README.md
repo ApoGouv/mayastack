@@ -87,6 +87,10 @@ This will build the app and deploy it to GitHub Pages using the `gh-pages` packa
 
 Contributions are welcome! Feel free to open issues or submit pull requests.
 
+### Development tooling
+
+Routine Git and GitHub workflow helpers are available under `scripts/git/`. See the [Git workflow guide](scripts/git/README.md) for usage and safety details.
+
 ---
 
 ## 📄 License

@@ -218,6 +218,14 @@ Do not treat a visually correct browser preview as sufficient proof that generat
 
 When the repository state is unexpected, the working tree is dirty, or an operation could affect existing work, stop and explain the situation before proceeding.
 
+### Git Workflow Scripts
+
+Predictable Git and GitHub operations run through tested Node.js scripts in `scripts/git/`. Claude does the reasoning and drafting.
+
+- **Opening a pull request:** the `/finish-pr` skill drafts the title and description and validates them with `npm run git:create-pr -- --check` (read-only apart from a fetch). After the user approves the draft, the user runs `npm run git:create-pr` in their own terminal, where it asks for a typed confirmation before pushing and creating the pull request. Claude must not push or create pull requests itself, must not run `git:create-pr` without `--check`, and must not feed or otherwise bypass its confirmation.
+- **After a merge:** `npm run git:sync-main` checks that the current branch's pull request was merged at its exact head commit, then switches to `main` and fast-forwards it. Run it only when the user asks.
+- If a script stops, report its message. Do not retry, force, or work around the failed step.
+
 ### Commit Messages and Pull Request Descriptions
 
 - Do not include Claude Code session URLs, `Claude-Session` trailers, or other AI-session links in commit messages, commit trailers, pull request titles, or pull request descriptions unless explicitly requested by the user.
