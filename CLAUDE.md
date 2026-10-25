@@ -223,7 +223,7 @@ When the repository state is unexpected, the working tree is dirty, or an operat
 
 Predictable Git and GitHub operations run through tested Node.js scripts in `scripts/git/`. Claude does the reasoning and drafting.
 
-- **Opening a pull request:** the `/finish-pr` skill drafts the title and description and validates them with `npm run git:create-pr -- --check` (read-only apart from a fetch). After the user approves the draft, the user runs `npm run git:create-pr` in their own terminal, where it asks for a typed confirmation before pushing and creating the pull request. Claude must not push or create pull requests itself, must not run `git:create-pr` without `--check`, and must not feed or otherwise bypass its confirmation.
+- **Opening a pull request:** the `/finish-pr` skill drafts the title and description and validates them with `node scripts/git/create-pr.mjs --check` (read-only apart from a fetch). After the user approves the draft, the user runs `node scripts/git/create-pr.mjs` in their own terminal, where it asks for a typed confirmation before pushing and creating the pull request. Use the `node` form, not `npm run git:create-pr -- …`, whose options Windows PowerShell does not pass through. Claude must not push or create pull requests itself, must not run the script (by either command) without `--check`, and must not feed or otherwise bypass its confirmation.
 - **After a merge:** `npm run git:sync-main` checks that the current branch's pull request was merged at its exact head commit, then switches to `main` and fast-forwards it. Run it only when the user asks.
 - If a script stops, report its message. Do not retry, force, or work around the failed step.
 

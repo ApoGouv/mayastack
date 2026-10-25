@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // @ts-check
 /**
- * npm run git:create-pr -- --title-file <file> --body-file <file> [--check]
+ * node scripts/git/create-pr.mjs --title-file <file> --body-file <file> [--check]
+ *
+ * Run it with node, not `npm run git:create-pr -- …`: npm reads options as its own unless the
+ * shell passes the `--` on to it, and Windows PowerShell's npm.ps1 does not.
  *
  * Pushes the current feature branch to `origin` and opens its pull request into `main`, with
  * the exact title and Markdown body supplied, after checking that it is safe and after the user
@@ -317,13 +320,39 @@ export async function createPr({
   return { status: 'created', number: pr.number, url: pr.url, title: pr.title, state: pr.state };
 }
 
-const USAGE = `Usage: npm run git:create-pr -- --title-file <file> --body-file <file> [--check]
+/** The documented way to run this script, which works in every shell */
+export const COMMAND = 'node scripts/git/create-pr.mjs';
+
+const USAGE = `Usage: ${COMMAND} --title-file <file> --body-file <file> [--check]
        (or --title "<title>" instead of --title-file)
 
   --title-file <file>  The pull request title (one line), from a file outside the repository
-  --title <title>      The title as an argument (prefer --title-file: npm passes arguments through a shell)
+  --title <title>      The title as an argument (prefer --title-file: shells can change special characters in arguments)
   --body-file <file>   The Markdown description, from a file outside the repository
-  --check              Validate and show the proposal only; nothing is pushed or created`;
+  --check              Validate and show the proposal only; nothing is pushed or created
+
+Run it from the repository root. Prefer it to \`npm run git:create-pr -- …\`, which works only
+where the shell passes the \`--\` on to npm (Windows PowerShell's npm.ps1 does not).`;
+
+/** This script's options, which npm takes as its own when they reach it before a `--` */
+const NPM_TAKEN_OPTIONS = ['title', 'title-file', 'body-file', 'check'];
+
+/**
+ * Stops when npm, not this script, received some of its options. npm reads options as its own
+ * unless they follow a `--`, and records each one it took as an `npm_config_<name>` variable.
+ * That happens when the shell drops the `--` (Windows PowerShell's npm.ps1 does), or when an
+ * option is placed before it; a lost `--check` would otherwise turn a dry run into a real one.
+ */
+export function requireOptionsNotTakenByNpm(/** @type {NodeJS.ProcessEnv} */ env = process.env) {
+  if (env.npm_lifecycle_event !== 'git:create-pr') return;
+  const taken = NPM_TAKEN_OPTIONS.filter((name) => env[`npm_config_${name.replace(/-/g, '_')}`] !== undefined);
+  if (taken.length === 0) return;
+  throw new WorkflowError(
+    `npm took ${taken.map((name) => `--${name}`).join(', ')} as its own option${taken.length > 1 ? 's' : ''}, so this script did not receive ${taken.length > 1 ? 'them' : 'it'}. ` +
+      'This happens when the `--` after `npm run git:create-pr` does not reach npm (Windows PowerShell drops it) or when an option comes before it.',
+    `Run the script with node instead, from the repository root: ${COMMAND} --check --title-file <file> --body-file <file>. Nothing was changed.`
+  );
+}
 
 /** Parses the command line */
 export function parseCliArgs(/** @type {string[]} */ args) {
@@ -347,8 +376,9 @@ export function parseCliArgs(/** @type {string[]} */ args) {
 }
 
 /** Runs the command from the command line and returns its exit code */
-export async function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2), env = process.env) {
   try {
+    requireOptionsNotTakenByNpm(env);
     const options = parseCliArgs(args);
     if (options.help) {
       console.log(USAGE);

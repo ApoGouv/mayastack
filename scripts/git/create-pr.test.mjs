@@ -5,8 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WorkflowError, runCommand } from './common.mjs';
-import { NotConfirmedError, confirmInTerminal, createPr, parseCliArgs, parseGitHubRepo } from './create-pr.mjs';
+import { REPO_ROOT, WorkflowError, runCommand } from './common.mjs';
+import {
+  COMMAND, NotConfirmedError, confirmInTerminal, createPr, parseCliArgs, parseGitHubRepo, requireOptionsNotTakenByNpm,
+} from './create-pr.mjs';
 
 // Every test runs against throwaway repositories in the system temp directory, in folders whose
 // names contain spaces. The working clone's origin is configured as a GitHub URL, and a
@@ -408,11 +410,59 @@ describe('command line and URLs', () => {
     expect(() => parseCliArgs(['positional'])).toThrow(WorkflowError);
   });
 
+  it('stops when npm took options meant for the script', () => {
+    // What npm passes on after Windows PowerShell's npm.ps1 drops the `--`
+    const env = { npm_lifecycle_event: 'git:create-pr', npm_config_check: 'true', npm_config_title_file: 'true', npm_config_body_file: 'true' };
+    expect(() => requireOptionsNotTakenByNpm(env)).toThrow(/npm took --title-file, --body-file, --check as its own options/);
+    // A lost --check alone must not let a run go ahead as a real one
+    expect(() => requireOptionsNotTakenByNpm({ npm_lifecycle_event: 'git:create-pr', npm_config_check: 'true' })).toThrow(WorkflowError);
+    // Options that reached the script, through npm with `--` or through node directly
+    expect(() => requireOptionsNotTakenByNpm({ npm_lifecycle_event: 'git:create-pr' })).not.toThrow();
+    expect(() => requireOptionsNotTakenByNpm({ npm_config_check: 'true' })).not.toThrow();
+  });
+
   it('recognises GitHub remote URLs only', () => {
     expect(parseGitHubRepo('https://github.com/ApoGouv/mayastack.git')).toBe('ApoGouv/mayastack');
     expect(parseGitHubRepo('git@github.com:ApoGouv/mayastack.git\n')).toBe('ApoGouv/mayastack');
     expect(parseGitHubRepo('ssh://git@github.com/ApoGouv/mayastack')).toBe('ApoGouv/mayastack');
     expect(parseGitHubRepo('https://gitlab.com/ApoGouv/mayastack.git')).toBeNull();
     expect(parseGitHubRepo('C:/repos/origin.git')).toBeNull();
+  });
+});
+
+describe('documented command', () => {
+  /** Runs the script as documented, from the repository root, without a shell or npm */
+  function runDocumented(/** @type {string[]} */ args, /** @type {Record<string, string>} */ extraEnv = {}) {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^npm_/i.test(name)));
+    return spawnSync(process.execPath, ['scripts/git/create-pr.mjs', ...args], {
+      cwd: REPO_ROOT, encoding: 'utf8', shell: false, env: { ...env, ...extraEnv },
+    });
+  }
+
+  it('shows the documented command in its usage', () => {
+    const result = runDocumented(['--help']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`Usage: ${COMMAND} --title-file <file> --body-file <file> [--check]`);
+  });
+
+  it('receives option values containing spaces intact', () => {
+    // Read-only: the script stops at the missing title file, before fetching or reading branches
+    const titleFile = join(repo.root, 'missing drafts', 'pr title.txt');
+    const bodyFile = join(repo.root, 'missing drafts', 'pr body.md');
+    const result = runDocumented(['--check', '--title-file', titleFile, '--body-file', bodyFile]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`The title file does not exist: ${titleFile}`);
+  });
+
+  it('explains, rather than misreads, arguments that npm stripped of their options', () => {
+    const titleFile = join(repo.root, 'pr title.txt');
+    const bodyFile = join(repo.root, 'pr body.md');
+    const result = runDocumented([titleFile, bodyFile], {
+      npm_lifecycle_event: 'git:create-pr', npm_config_check: 'true', npm_config_title_file: 'true', npm_config_body_file: 'true',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('npm took --title-file, --body-file, --check as its own options');
+    expect(result.stderr).toContain(`Run the script with node instead, from the repository root: ${COMMAND}`);
+    expect(result.stderr).not.toContain('Unexpected argument');
   });
 });

@@ -56,7 +56,7 @@ After approval, do not run the command yourself. Give the user the exact command
 node scripts/git/create-pr.mjs --title-file "<title file>" --body-file "<body file>"
 ```
 
-Give this direct `node` form rather than `npm run git:create-pr -- …`: in Windows PowerShell 5.1, `npm` runs `npm.ps1`, which drops some of the arguments after `--`.
+Give this direct `node` form rather than `npm run git:create-pr -- …`: in Windows PowerShell, `npm` runs `npm.ps1`, PowerShell removes the bare `--`, and npm then takes the options for itself, so the script receives only the file paths and stops.
 
 Explain that it checks everything again, shows the same proposal, and pushes and creates the pull request only after they type `create`. The confirmation needs a real interactive terminal: if the standalone Git Bash window cannot provide one, the script stops with exit code 2 and nothing is pushed, so recommend PowerShell, Windows Terminal or the VS Code integrated terminal. It exits with code 0 when the pull request was created and verified, 1 when a check or step failed (its message says what did and did not happen), and 2 when nothing was confirmed. When it creates a pull request, it prints its URL (`✔ Pull request #<number> was created and verified: <URL>`, or the URL inside its message if a later step failed): ask the user to share that output. Then **end the turn**.
 

@@ -4,7 +4,7 @@ Two Node.js scripts handle the routine Git and GitHub steps of MayaStack's workf
 
 | Command | Use it to |
 |---|---|
-| `npm run git:create-pr` | Push the committed feature branch you are on and open its pull request into `main`, with a title and description you supply |
+| `node scripts/git/create-pr.mjs` | Push the committed feature branch you are on and open its pull request into `main`, with a title and description you supply |
 | `npm run git:sync-main` | After that pull request is merged, switch to `main` and fast-forward it to `origin/main` |
 
 Both scripts only run predictable Git and GitHub CLI commands. They never commit, stage, stash, rebase, reset, force-push, merge pull requests, delete branches or change Git configuration. They stop at the first failed check, before any further change, and say what was and was not done. Every command runs with an argument array and no shell, so branch names, titles and paths are never interpreted by a shell. Neither script retries a failed step.
@@ -34,15 +34,17 @@ Keep both files **outside the repository** (for example in your temp directory),
 ### 2. Check the proposal (optional, changes nothing on GitHub)
 
 ```bash
-npm run git:create-pr -- --check --title-file "/tmp/pr-title.txt" --body-file "/tmp/pr-body.md"
+node scripts/git/create-pr.mjs --check --title-file "/tmp/pr-title.txt" --body-file "/tmp/pr-body.md"
 ```
+
+Run it from the repository root, with `node` as shown, in any shell (see [Why `node` rather than `npm run`](#why-node-rather-than-npm-run)).
 
 `--check` runs every check below and shows the proposal, then stops: it does not ask for confirmation, push or create anything. Its only change is a `git fetch origin`, which updates your remote-tracking branches (such as `origin/main`) so the checks use GitHub's current state.
 
 ### 3. Create the pull request
 
 ```bash
-npm run git:create-pr -- --title-file "/tmp/pr-title.txt" --body-file "/tmp/pr-body.md"
+node scripts/git/create-pr.mjs --title-file "/tmp/pr-title.txt" --body-file "/tmp/pr-body.md"
 ```
 
 The script first checks, in order:
@@ -89,9 +91,13 @@ If the push succeeded but creating or verifying the pull request failed, the mes
 | `--check` | Check and show the proposal only (see above) |
 | `--help` | Show the usage |
 
-### Windows PowerShell
+### Why `node` rather than `npm run`
 
-In Windows PowerShell 5.1, `npm` runs `npm.ps1`, which drops some of the arguments after `--`: the script then stops with a usage message and changes nothing. Run the script with `node` instead (or use `npm.cmd run git:create-pr -- …`):
+`npm run git:create-pr` also starts the script, but npm reads every option as its own unless it follows a `--` that reaches npm. In Windows PowerShell, `npm` runs `npm.ps1`, and PowerShell removes a bare `--` before passing arguments to a `.ps1` script. npm then takes `--check`, `--title-file` and `--body-file` for itself (with "Unknown cli config" warnings) and passes only the file paths on. The same happens in any shell to an option placed before the `--`.
+
+When the script is started by `npm run git:create-pr` and npm reports that it took any of these options, the script stops with an explanation and changes nothing, so a lost `--check` can never turn a dry run into a real one. Running the script with `node` avoids npm's option parsing altogether. `npm run git:create-pr -- …` has been tested to work in Git Bash, and as `npm.cmd run git:create-pr -- …` from Windows PowerShell; in both, the `--` reaches npm.
+
+### Windows PowerShell
 
 ```powershell
 $title = Join-Path $env:TEMP 'pr-title.txt'
@@ -102,6 +108,8 @@ $body  = Join-Path $env:TEMP 'pr-body.md'
 node scripts/git/create-pr.mjs --check --title-file $title --body-file $body
 node scripts/git/create-pr.mjs --title-file $title --body-file $body
 ```
+
+Quote paths that contain spaces (`--title-file "C:\My drafts\pr-title.txt"`); variables such as `$title` need no quotes.
 
 `npm run git:sync-main` takes no arguments, so it works as shown in every shell.
 
