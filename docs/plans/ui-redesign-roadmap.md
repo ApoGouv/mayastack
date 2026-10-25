@@ -42,6 +42,27 @@ This roadmap does not authorize implementation of every listed task. Each task r
 
 **Scope of maintenance:** update this roadmap for work that is part of the UI redesign, or for changes that materially affect its decisions, dependencies or progress. Unrelated bug fixes and infrastructure work do not belong here.
 
+### Branches and pull requests
+
+By default, each task has its own branch and pull request. Closely related tasks may share one branch and one pull request as an exception, only with the user's approval, and each such grouping is recorded in the plan-change log (section E). The approved exceptions so far:
+
+| Group | Tasks | Reason |
+|---|---|---|
+| Input controls | UI-05, UI-06 | Same phase; UI-06 depends on UI-05 and changes the same number input |
+| Preferences and tier guides | UI-08, UI-09 | Same phase; UI-09 is the first feature to use the UI-08 persistence mechanism (G §4.7) |
+
+When tasks share a branch:
+
+- Each task keeps its own entry, status, acceptance criteria and evidence in section C. Grouping does not merge or change them.
+- Tasks are implemented in dependency order. Each commit belongs to one task and names its ID.
+- **Review checkpoint:** when a task's commits are complete and validated, stop for review (G §11, step 8), and start the next task only after approval.
+- The pull request's description reports the scope and validation of each task separately.
+- If a later task turns out larger or riskier than expected, open the pull request for the completed tasks and continue the rest on a new branch, recording the change in the plan-change log.
+
+For every branch: record roadmap progress in the same branch, not in a separate pull request; add fixes from review as new commits; and after the merge, start further work on a new branch from the updated `main`.
+
+**Incidental fixes:** a fix that the current task needs may be proposed for inclusion when it is small and directly related, even if it touches a neighbouring file. It stays separately identifiable, in its own commit with appropriate regression coverage, and is not included without approval when it expands the approved scope. Unrelated fixes are proposed separately (`CLAUDE.md` §4).
+
 Task statuses are `not started`, `in progress`, `blocked`, `completed` and `deferred`. Task IDs are stable: they are never renumbered or reused, even when the order of work changes.
 
 ## B. Confirmed design decisions
@@ -77,6 +98,8 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-12 | Educational explanations | 7 Education | not started | UI-04 | 7 |
 | UI-13 | Viewer interaction polish | 8 Viewer polish | not started | UI-04, UI-09 | 8 |
 | UI-14 | Final responsive, accessibility, regression and visual validation | 9 Final validation | not started | UI-01–UI-13 | 9 |
+
+By default, each task has its own branch and pull request. The approved exceptions, currently UI-05 with UI-06 and UI-08 with UI-09, are listed in section A, "Branches and pull requests".
 
 References to "Stage N" in section G correspond to the tasks in the "Old stage" column. Unless a task says otherwise, its validation is: `npm test`, `npm run lint`, `npm run build`, `npm run test:e2e`, `git diff --check`, and a visual review at 375, 768 and 1280 px in the light and dark themes. Export-related tasks also follow G §6 and §9.
 
@@ -223,6 +246,7 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-23 | Split Stage 3 into UI-05 (initial value, Clear, significant-digit count) and UI-06 (Random, stepper presets, custom increment). | Two smaller, independently reviewable pieces of work |
 | 2026-10-23 | Scheduled UI-08 (persistence, from Stage 6) before UI-09 (tier guides, from Stage 5). | Stage 5 must use the persistence mechanism that Stage 6 owns (G §4.7), so persistence has to come first |
 | 2026-10-23 | Recorded the verified statuses: UI-01 and UI-02 completed (PRs #12 and #14), UI-03 not started. | Checked against the code, tests and Git history |
+| 2026-10-25 | Adopted a branching policy (section A, "Branches and pull requests"): by default one branch and pull request per task. Approved exceptions: UI-05 with UI-06, and UI-08 with UI-09, each sharing one branch and pull request, with a review checkpoint after each task. Further groupings need the user's approval and an entry in this log. Task boundaries and acceptance criteria are unchanged. | Less overhead for closely related tasks, while keeping review per task, rollback per commit, and early merges for tasks that others depend on, such as UI-04 |
 
 ## F. Completion record
 

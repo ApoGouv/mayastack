@@ -193,7 +193,7 @@ Do not treat a visually correct browser preview as sufficient proof that generat
 
 ### Branch Workflow
 
-- Use a dedicated Git branch for each new implementation task, keeping changes isolated from `main`.
+- Use a dedicated Git branch for each new implementation task, keeping changes isolated from `main`. A branch may cover a group of closely related tasks only when that grouping has been approved and recorded in the relevant plan under `docs/` (for the UI redesign, section A of `docs/plans/ui-redesign-roadmap.md`).
 - Create task branches from the latest `main` only after verifying that the branch and working tree are in a safe state.
 - Use short, descriptive branch names with the appropriate prefix:
   - `fix/...` for bug fixes.
@@ -201,7 +201,8 @@ Do not treat a visually correct browser preview as sufficient proof that generat
   - `feat/...` for new features.
   - `chore/...` for maintenance and tooling.
   - `docs/...` for documentation-only changes.
-- Keep each branch focused on the current task. A single task may contain multiple related changes or commits when appropriate.
+- Keep each branch focused on the current task. A single task may contain multiple related changes or commits when appropriate. In a branch that covers several tasks, keep each commit within one task, and stop for review when each task is complete, before starting the next.
+- A branch ends with its pull request: once that is merged, start any further work on a new branch from the updated `main`.
 - Do not switch branches with uncommitted changes unless their safety has been assessed and no existing work will be lost or mixed.
 - Do not create a new branch if doing so would abandon, overwrite, or interfere with existing work.
 - If the current task is already in progress on another branch, do not switch branches or move changes without first assessing the current state.
