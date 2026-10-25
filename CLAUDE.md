@@ -177,6 +177,7 @@ Do not treat a visually correct browser preview as sufficient proof that generat
 - A roadmap describes intended future work; it does not authorize implementation of every listed stage. Implement only the stage explicitly requested by the user.
 - If a specification conflicts with these general instructions, existing application behavior, or a safety constraint, stop and explain the conflict rather than silently choosing an interpretation.
 - Keep specifications accurate as approved decisions change, and distinguish implemented behavior from planned or deferred work.
+- The UI redesign is tracked in `docs/plans/ui-redesign-roadmap.md`. For redesign tasks, read it first, verify the task's status against the repository, and update it after verified progress, following the maintenance rules in that document.
 
 ## 10. Git, Branches, and Safety
 

@@ -1,14 +1,236 @@
-# MayaStack Redesign Roadmap
+# MayaStack UI Redesign Roadmap
 
-## 1. Purpose
+This document is the single source of truth for the agreed MayaStack UI redesign: its decisions, tasks, progress and next step. Sections A–F track the plan; section G keeps the approved requirements, unchanged, as the detailed reference for every task.
 
-This document defines the approved direction, product decisions, implementation stages, and acceptance criteria for the MayaStack interface redesign.
+## A. Purpose and working rules
 
-The goal is to evolve MayaStack into a modern, approachable, accessible, and visually distinctive Mayan numeral converter while preserving the correctness and reliability of its existing functionality.
+The goal is to evolve MayaStack into a modern, approachable, accessible and visually distinctive Mayan numeral converter, while preserving the correctness and reliability of its existing functionality.
 
-This roadmap is the source of truth for the redesign. Update it when decisions change or stages are completed. Distinguish clearly between planned, in-progress, implemented, and verified work.
+This roadmap does not authorize implementation of every listed task. Each task requires a separate, explicitly requested piece of work, following `CLAUDE.md` and the workflow in section G §11.
 
-This document does not authorize implementation of every listed stage. Each stage requires a separate, explicitly scoped task with defined acceptance criteria.
+### Working rules
+
+- Verify this roadmap against the current repository state at the beginning of every redesign task.
+- Preserve agreed decisions unless they are explicitly revised.
+- Do not infer approval from a suggestion or an old conversation summary.
+- Do not silently expand the scope.
+- Do not mark work complete until its acceptance criteria and required validation have been verified.
+- Record deviations, blockers and changes to the plan in the plan-change log (section E).
+- Keep completed tasks in this document as a concise historical record.
+- When this roadmap and the repository disagree, investigate and correct the status rather than trusting either source blindly.
+
+### Maintenance protocol
+
+**At the beginning of a redesign task:**
+
+1. Read this roadmap.
+2. Check the current branch, working tree and recent Git history, without disturbing existing work.
+3. Verify the selected task's status against the actual code and tests.
+4. Identify its scope, acceptance criteria and dependencies.
+5. Summarize the task and the intended changes, and get approval before implementing when approval is needed.
+
+**Before implementation:** confirm the task to be worked on and follow the existing review and approval workflow. Do not implement deferred or proposed ideas, or broaden the scope, without permission. Ask when the task or its acceptance criteria are ambiguous.
+
+**After implementation and validation:**
+
+- Update the task's status and record the actual validation results.
+- Mark a task `completed` only when its acceptance criteria are met and the required checks have passed.
+- If the work is partial, leave it `in progress` and list what remains. If it cannot proceed, mark it `blocked` with the reason. If it is deferred or the plan changes, record the decision and its rationale.
+- Add commit and PR references only when they exist and have been verified. Never record tests, merges or completed work that did not happen.
+
+**At the end of a phase:** review its acceptance criteria, verify the relevant tests and implementation, update the statuses, identify the next recommended task, and summarize what changed and what remains.
+
+**Scope of maintenance:** update this roadmap for work that is part of the UI redesign, or for changes that materially affect its decisions, dependencies or progress. Unrelated bug fixes and infrastructure work do not belong here.
+
+Task statuses are `not started`, `in progress`, `blocked`, `completed` and `deferred`. Task IDs are stable: they are never renumbered or reused, even when the order of work changes.
+
+## B. Confirmed design decisions
+
+Detailed requirements are in section G; the design system itself is documented in [`docs/DESIGN_SYSTEM.md`](../DESIGN_SYSTEM.md).
+
+- **Visual identity:** obsidian and warm parchment surfaces, ceremonial gold and selective jade accents, with light and dark themes designed intentionally rather than inverted (G §3.3).
+- **Colour roles:** gold for primary actions, selection and focus; jade for success and active or on states; red for errors. Status is never communicated by colour alone. Gold fills always have a 1 px `accent-fg` border, in both themes, with dark text on gold.
+- **Foundation:** semantic colour tokens in `src/index.css` (light values in `@theme static`, dark values under `.dark`), WCAG 2.2 AA contrast, a shared `focus-ring` utility (2 px outline, 2 px offset), a reduced-motion rule and `color-scheme` per theme. Details and contrast tables are in `docs/DESIGN_SYSTEM.md`.
+- **Typography:** one display font, Playfair Display, for the main heading and section headings only: the unmodified official file, self-hosted with its OFL licence, never subset, converted or loaded from a CDN. Interface text and numbers use system fonts, with `tabular-nums` where digits must align.
+- **Brand mark:** the logo and favicon keep their geometry and identity, recoloured to a gold disc with dark marks and a contrasting `accent-fg` ring. The main heading uses `fg`; "Stack" in the wordmark uses `accent-fg`.
+- **Shape:** no zero-radius rule; controls `rounded-md`, cards and popovers `rounded-lg`, pills `rounded-full` (G §3.4, `docs/DESIGN_SYSTEM.md` §7).
+- **Workspace:** a two-column workspace based on the first design-reference concept, without a permanent third panel (G §3.1–§3.2).
+- **Product decisions:** Number mode starts at `0`; Clear resets it to `0`; Random generates 1–500 significant digits; stepper presets 1, 5, 20, 400 and 8,000 plus a custom increment; a significant-digit count; a compact breakdown with on-demand exact contributions and Copy Formula; the existing shell zero glyph is kept; display preferences, including colours, are remembered (G §4).
+- **Viewer and export:** the exportable grid stays an independent setting; tier guides and annotations are screen-only and never exported; export output does not depend on zoom, scroll or theme; Export stays reachable when the result is off-screen (G §5–§6).
+- **Domain:** the date mode is a component-wise numerical representation of a Gregorian date, not a Mayan calendar conversion. A Long Count mode is deferred (G §2, §10.1).
+
+## C. Phases and tasks
+
+| ID | Task | Phase | Status | Depends on | Old stage |
+|---|---|---|---|---|---|
+| UI-01 | Fix theme defects | 0 Theme defects | completed | none | 0 |
+| UI-02 | Design-system foundation | 1 Design system | completed | UI-01 | 1 (PR 1) |
+| UI-03 | Apply the foundation to existing components | 1 Design system | not started | UI-02 | 1 (PR 2) |
+| UI-04 | Two-column workspace layout | 2 Workspace | not started | UI-03 | 2 |
+| UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | not started | UI-04 | 3 |
+| UI-06 | Random, stepper presets and custom increment | 3 Input controls | not started | UI-05 | 3 |
+| UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | not started | UI-04 | 4 |
+| UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | not started | UI-03 | 6 (persistence) |
+| UI-09 | Screen-only tier guides | 5 Preferences and viewer aids | not started | UI-04, UI-08 | 5 |
+| UI-10 | Screen-only annotations (evaluate, then implement if suitable) | 5 Preferences and viewer aids | not started | UI-09 | 5 |
+| UI-11 | Export controls in the redesigned workspace | 6 Export | not started | UI-04 | 6 (export) |
+| UI-12 | Educational explanations | 7 Education | not started | UI-04 | 7 |
+| UI-13 | Viewer interaction polish | 8 Viewer polish | not started | UI-04, UI-09 | 8 |
+| UI-14 | Final responsive, accessibility, regression and visual validation | 9 Final validation | not started | UI-01–UI-13 | 9 |
+
+References to "Stage N" in section G correspond to the tasks in the "Old stage" column. Unless a task says otherwise, its validation is: `npm test`, `npm run lint`, `npm run build`, `npm run test:e2e`, `git diff --check`, and a visual review at 375, 768 and 1280 px in the light and dark themes. Export-related tasks also follow G §6 and §9.
+
+### UI-01: Fix theme defects
+
+- **Status:** completed.
+- **Goal:** light and dark tokens were not scoped correctly, the theme selector's selected state used undefined classes, and the first paint could show the wrong theme.
+- **Acceptance:** G §8, Stage 0.
+- **Evidence:** PR #12 (commit `0c5a806`, merge `0c8517c`). Tests: `e2e/theme.e2e.ts`, `src/components/ThemeSelector.test.tsx`.
+
+### UI-02: Design-system foundation
+
+- **Status:** completed.
+- **Goal:** a reusable foundation for the redesign, with no component changes.
+- **Scope:** semantic colour tokens for both themes, `color-scheme`, the `focus-ring` utility, the reduced-motion rule, the self-hosted Playfair Display font with its licence and provenance, and `docs/DESIGN_SYSTEM.md`.
+- **Acceptance:** G §8, Stage 1; the token, contrast, font and export-independence checks in `e2e/design-foundation.e2e.ts`.
+- **Evidence:** PR #14 (commit `189033e`, merge `8162e67`).
+
+### UI-03: Apply the foundation to existing components
+
+- **Status:** not started. Verified on 2026-10-23: components use no semantic tokens, `focus-ring` or `font-heading`; the logo and favicon still use the old colours; the date picker and toasts are not themed.
+- **Goal:** the existing interface adopts the design system, without changing layout, behaviour, labels or exported artwork.
+- **Scope:**
+  - Semantic tokens instead of raw colour classes in components, `index.html` body classes and `App.tsx`.
+  - Gold primary controls with the `accent-fg` border; `focus-ring` on interactive controls.
+  - Theme the date picker (`DateInput.css`, using the tokens), the toasts (`<Toaster>` options) and the colour-picker popover, without new dependencies.
+  - Recolour the logo and favicon (see section B), and apply the heading font and colours to the main heading and section headings.
+  - Remove the `ms-*` tokens once nothing uses them.
+  - Out of scope: layout, labels, export artwork and its default colours, the first-paint script, and the proposals in section D.
+- **Acceptance:**
+  - UI colours use semantic tokens; only the exceptions documented in `docs/DESIGN_SYSTEM.md` §11 remain, as shown by its check commands.
+  - Element-level contrast in both themes, measured in the browser: at least 4.5:1 for the number input's text and placeholder, the Export button label (default and hover), error text and muted labels; at least 3:1 for input boundaries against their card and for the toggle tracks and thumb.
+  - Gold-filled controls have the `accent-fg` border, checked in their default, hover, pressed and focused states in both themes.
+  - Keyboard focus shows the `focus-ring` outline on the number input, a radio button, a zoom button, the Export trigger and dialog controls, a theme option, the colour swatch and a date-picker day.
+  - The date picker, toasts and colour-picker popover follow the active theme.
+  - The heading font is used only by the main heading and section headings (`HEADING_FONT_ELEMENTS` in `e2e/design-foundation.e2e.ts` lists them).
+  - The first-paint and storage-failure theme behaviour from UI-01 is unchanged.
+  - SVG and PNG exports are unchanged: the export and artwork files are untouched, the existing export tests pass, and a one-off comparison against `main` (determinism shown first) finds identical SVG text and PNG pixels.
+  - No layout, behaviour or label changes; no horizontal overflow at 375 px.
+- **Relevant files:** `index.html`, `src/App.tsx`, `src/views/HomeView.tsx`, `src/components/` (theme selector, inputs, display settings, base-20 display, viewer, export panel and menu, logo), `src/components/inputs/DateInput.css`, `favicon.svg`, `src/index.css`.
+- **Validation:** the standard checks; the colour-rule check commands; the export comparison; screenshots. `e2e/theme.e2e.ts` brand-colour assertions are updated deliberately to the accent tokens.
+- **Next action:** Once UI-03 is approved to start: create a task branch from the latest `main` and capture the export baseline before editing.
+
+### UI-04: Two-column workspace layout
+
+- **Status:** not started.
+- **Goal:** the approved responsive two-column workspace, with a prominent numeral viewer.
+- **Scope and acceptance:** G §3.2 and §8, Stage 2. Export must stay reachable when the result is off-screen (G §6). The Export trigger's placement and the proposals in section D are decided when this task is defined.
+- **Next action:** propose a layout for review, including the Export trigger's placement.
+
+### UI-05: Initial value, Clear and significant-digit count
+
+- **Status:** not started.
+- **Scope and acceptance:** G §4.1 and §4.4, and the matching parts of §8, Stage 3. Tests that assume an initially empty input are updated deliberately (G §4.1).
+- **Next action:** define the detailed scope when the task is selected.
+
+### UI-06: Random, stepper presets and custom increment
+
+- **Status:** not started.
+- **Scope and acceptance:** G §4.2 and §4.3, and the matching parts of §8, Stage 3.
+- **Next action:** define the detailed scope when the task is selected.
+
+### UI-07: Base-20 breakdown and Copy Formula
+
+- **Status:** not started.
+- **Scope and acceptance:** G §4.5 and §8, Stage 4. `getPlaceValues` (`src/utils/base20.ts`) exists and is tested, but no component uses it yet.
+- **Next action:** define the detailed scope when the task is selected.
+
+### UI-08: Shared persistence for display preferences
+
+- **Status:** not started.
+- **Goal:** one persistence mechanism for display preferences, including background and glyph colours, before other tasks add preferences. Today only the theme and grid visibility are saved (`src/context/DisplaySettingsContext.tsx`).
+- **Scope and acceptance:** G §4.7, and the persistence parts of §8, Stage 6.
+- **Next action:** define the detailed scope when the task is selected.
+
+### UI-09: Screen-only tier guides
+
+- **Status:** not started.
+- **Scope and acceptance:** G §5.2 and the tier-guide parts of §8, Stage 5, using the UI-08 persistence mechanism.
+- **Next action:** define the detailed scope when the task is selected.
+
+### UI-10: Screen-only annotations
+
+- **Status:** not started.
+- **Scope and acceptance:** G §5.3 and the annotation parts of §8, Stage 5. Approved for evaluation; implemented only if the evaluation supports it.
+- **Next action:** evaluate a restrained annotation design against the renderer when the task is selected.
+
+### UI-11: Export controls in the redesigned workspace
+
+- **Status:** not started.
+- **Scope and acceptance:** G §6 and the export parts of §8, Stage 6.
+- **Next action:** define the detailed scope after UI-04.
+
+### UI-12: Educational explanations
+
+- **Status:** not started.
+- **Scope and acceptance:** G §4.9 and §8, Stage 7, including whether the date mode needs a short explanatory note.
+- **Next action:** define the topics and sources when the task is selected.
+
+### UI-13: Viewer interaction polish
+
+- **Status:** not started.
+- **Scope and acceptance:** G §8, Stage 8. Ctrl + scroll zooming is an option to evaluate, not a requirement.
+- **Next action:** define the detailed scope after UI-04 and UI-09.
+
+### UI-14: Final responsive, accessibility, regression and visual validation
+
+- **Status:** not started.
+- **Scope and acceptance:** G §8, Stage 9, and G §9.
+- **Next action:** run when all other tasks are completed or explicitly deferred.
+
+## D. Optional and deferred ideas
+
+None of these are committed scope. Each needs a separate decision before implementation.
+
+| Idea | Status | Notes |
+|---|---|---|
+| Alternative zero glyph | deferred | Needs artwork, attribution, licensing and rendering review (G §4.6, §10) |
+| Long Count date mode | deferred | Needs its own research and specification (G §10.1) |
+| Material colour presets | proposed | Listed as not approved (G §10) |
+| Copy SVG code | proposed | Listed as not approved (G §10) |
+| Separate Date tab | proposed | Listed as not approved (G §10) |
+| Tier-count chip | proposed | Listed as not approved (G §10) |
+| Glyph legend (dot = 1, bar = 5, shell = 0) | proposed | Seen in design references; to be reviewed separately |
+| Educational information cards | proposed | A possible format for UI-12; the explanations themselves are approved |
+| Heading order (`h1` followed by `h3`) | proposed | For review when UI-04 is defined |
+| Emoji in visible labels and accessible names (such as `📦 Export`) | proposed | For review when UI-04 is defined |
+| Theme menu Escape and arrow-key support | proposed | For review when UI-04 is defined |
+| Harden the toast reduced-motion test | proposed | Follow-up noted in PR #14 |
+
+## E. Current progress and next task
+
+- **Completed:** UI-01 (phase 0) and UI-02.
+- **In progress:** no task; phase 1 is partially complete (UI-02 completed, UI-03 not started).
+- **Blockers:** none.
+- **Unresolved decision:** where the Export trigger goes (floating or in the viewer header), to be decided with the UI-04 layout proposal.
+- **Next task: UI-03.** Every later visual task builds on the design system being applied to the existing components, its scope and acceptance criteria are already approved, and the repository confirms that it has not started. See its entry in section C.
+
+### Plan-change log
+
+| Date | Change | Rationale |
+|---|---|---|
+| 2026-10-23 | Moved the roadmap from `docs/REDESIGN_ROADMAP.md` to `docs/plans/ui-redesign-roadmap.md`, added this tracker (sections A–F) with stable task IDs, and kept the approved requirements unchanged in section G. The old stage status table was replaced by section C, and its status values (Planned, In progress, Implemented, Verified, Deferred) by those in section A, where `completed` requires verified acceptance criteria. | One concise source of truth that a new session can resume from |
+| 2026-10-23 | Split Stage 3 into UI-05 (initial value, Clear, significant-digit count) and UI-06 (Random, stepper presets, custom increment). | Two smaller, independently reviewable pieces of work |
+| 2026-10-23 | Scheduled UI-08 (persistence, from Stage 6) before UI-09 (tier guides, from Stage 5). | Stage 5 must use the persistence mechanism that Stage 6 owns (G §4.7), so persistence has to come first |
+| 2026-10-23 | Recorded the verified statuses: UI-01 and UI-02 completed (PRs #12 and #14), UI-03 not started. | Checked against the code, tests and Git history |
+
+## F. Completion record
+
+Not completed. When the whole redesign is finished, record here: the completion date, the final validation performed, the final commit or PR, and any explicitly deferred items that remain outside the completed scope. Keep this document afterwards as project history.
+
+## G. Reference: approved requirements
+
+The sections below are the approved requirements, retained unchanged from the original roadmap. Section C maps their "Stage N" references to task IDs; where section C or the plan-change log records a later approved decision, that decision applies.
 
 ## 2. Project Context
 
@@ -635,26 +857,3 @@ This roadmap is an evolving plan, not a rigid implementation contract.
 - After an approved change, update this roadmap and the status table so they reflect the actual plan.
 
 These rules operate within the task-scope and safety rules in `CLAUDE.md`, which continue to apply.
-
-## 12. Status Tracking
-
-Update this section as work progresses.
-
-| Stage | Status | Notes |
-|---|---|---|
-| Stage 0: Theme defects | Implemented | Merged in PR #12. |
-| Stage 1: Design system | In progress | PR 1 (foundation) implemented; PR 2 applies it to existing components. See `docs/DESIGN_SYSTEM.md`. |
-| Stage 2: Workspace layout | Planned | |
-| Stage 3: Input controls | Planned | |
-| Stage 4: Mathematical breakdown | Planned | |
-| Stage 5: Viewer guides and annotations | Planned | |
-| Stage 6: Export and display preferences | Planned | |
-| Stage 7: Educational explanations | Planned | |
-| Stage 8: Viewer interaction polish | Planned | |
-| Stage 9: Regression and polish | Planned | |
-
-Use the following status values consistently: **Planned**, **In progress**, **Implemented**, **Verified**, and **Deferred**.
-
-Mark a stage as Implemented when its code changes are complete. Mark it as Verified only after the relevant acceptance criteria and validation have been checked.
-
-Keep this roadmap aligned with the actual repository state and approved decisions.
