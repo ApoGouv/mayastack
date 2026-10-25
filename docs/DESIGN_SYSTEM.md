@@ -1,6 +1,6 @@
 # MayaStack Design System
 
-This document describes MayaStack's visual foundation: semantic colour tokens, contrast rules, focus and motion conventions, typography, and the heading font's licence and provenance. It belongs to Stage 1 of [the redesign roadmap](REDESIGN_ROADMAP.md).
+This document describes MayaStack's visual foundation: semantic colour tokens, contrast rules, focus and motion conventions, typography, and the heading font's licence and provenance. It belongs to Stage 1 of [the redesign roadmap](plans/ui-redesign-roadmap.md).
 
 ## 1. Status
 
