@@ -13,8 +13,8 @@ export default function DisplaySettings() {
   } = useDisplaySettings();
 
   return (
-    <fieldset className="border border-gray-200 dark:border-gray-700 rounded-md py-5 px-3 space-y-4">
-      <legend className="px-3 font-medium text-gray-700 dark:text-gray-300">
+    <fieldset className="border border-line rounded-md py-5 px-3 space-y-4">
+      <legend className="px-3 font-medium text-fg-muted">
         SVG Display Settings
       </legend>
       <div className="flex flex-wrap items-center gap-4">

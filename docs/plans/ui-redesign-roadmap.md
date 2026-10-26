@@ -86,7 +86,7 @@ Detailed requirements are in section G; the design system itself is documented i
 |---|---|---|---|---|---|
 | UI-01 | Fix theme defects | 0 Theme defects | completed | none | 0 |
 | UI-02 | Design-system foundation | 1 Design system | completed | UI-01 | 1 (PR 1) |
-| UI-03 | Apply the foundation to existing components | 1 Design system | not started | UI-02 | 1 (PR 2) |
+| UI-03 | Apply the foundation to existing components | 1 Design system | completed | UI-02 | 1 (PR 2) |
 | UI-04 | Two-column workspace layout | 2 Workspace | not started | UI-03 | 2 |
 | UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | not started | UI-04 | 3 |
 | UI-06 | Random, stepper presets and custom increment | 3 Input controls | not started | UI-05 | 3 |
@@ -120,7 +120,7 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-03: Apply the foundation to existing components
 
-- **Status:** not started. Verified on 2026-10-23: components use no semantic tokens, `focus-ring` or `font-heading`; the logo and favicon still use the old colours; the date picker and toasts are not themed.
+- **Status:** completed. Its acceptance criteria were verified on 2026-10-26 on the branch `feat/ui-03-apply-design-system`, before it was committed. Commit and PR references are added once they exist.
 - **Goal:** the existing interface adopts the design system, without changing layout, behaviour, labels or exported artwork.
 - **Scope:**
   - Semantic tokens instead of raw colour classes in components, `index.html` body classes and `App.tsx`.
@@ -141,7 +141,22 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - No layout, behaviour or label changes; no horizontal overflow at 375 px.
 - **Relevant files:** `index.html`, `src/App.tsx`, `src/views/HomeView.tsx`, `src/components/` (theme selector, inputs, display settings, base-20 display, viewer, export panel and menu, logo), `src/components/inputs/DateInput.css`, `favicon.svg`, `src/index.css`.
 - **Validation:** the standard checks; the colour-rule check commands; the export comparison; screenshots. `e2e/theme.e2e.ts` brand-colour assertions are updated deliberately to the accent tokens.
-- **Next action:** Once UI-03 is approved to start: create a task branch from the latest `main` and capture the export baseline before editing.
+- **Validation results (2026-10-26):**
+  - Colour rules (`docs/DESIGN_SYSTEM.md` §11): the class rule finds nothing; the hex rule finds only exceptions 1–3 (`SvgBackground`, `SvgGrid`, `colors.ts` and `favicon.svg`). No `ms-*` token remains.
+  - Criteria 2–5 are covered by eight new tests in `e2e/design-foundation.e2e.ts` ("design system on the components", in both themes): element contrast, the gold controls' borders in default, hover, pressed and focused states, focus rings on the listed controls, and the themed date picker, toast and colour-picker popover. All eight fail against the `main` build, so they test the change.
+  - The heading font: `HEADING_FONT_ELEMENTS` lists the main heading and the two section headings, and the test enters a number so the section headings exist.
+  - First paint and blocked storage: the `e2e/theme.e2e.ts` tests pass. They now check the `--color-canvas` value each theme declares in the stylesheet, instead of the removed `--color-ms-brand-500`, and the selected theme option's `accent-fg` ring.
+  - Exports: 19 SVG and PNG cases (numbers from 0 to 500 digits, a date, grid on and off, both themes, a custom size) were captured from `main` at `1481e77` twice to show they are repeatable, then compared with the branch. Every SVG is byte-identical and every PNG has the same size and decoded pixels. The export and artwork files are unchanged, and the existing export tests pass.
+  - Layout: screenshots at 375, 768 and 1280 px in both themes, in five states (a result, the export dialog, the theme menu, the colour picker, the calendar): no horizontal overflow, and the page sizes match `main` in every state.
+  - Standard checks: `npm test` 215 passed; `npm run test:e2e` 53 passed; `npm run lint` 0 errors (4 earlier warnings in `src/hooks/useElementOnScreen.ts`); `npm run build` passed; `git diff --check` clean.
+  - Some full `npm test` runs during the work timed out in existing tests under load (the `scripts/git/sync-main.test.mjs` setup and the 500-digit view tests). The same tests also timed out on unchanged `main`, and reruns passed. This is not caused by UI-03 and is outside the redesign.
+- **Implementation notes:** the gold buttons' padding is 1 px smaller, so with their new border they keep their original size. The toasts' edge is an inset outline, so they keep the library's size. `ColorPicker.css` gives the colour picker's areas and pointers a `line-strong` edge, because react-colorful draws them white. The date picker's days and clear button get the `focus-ring` outline from `DateInput.css`.
+- **Known follow-ups, not part of UI-03:**
+  - The date picker's clear button is not reachable with the keyboard: react-datepicker renders it with `tabIndex={-1}` (on `main` too). See section D.
+  - At 375 px the fixed Export trigger covers the colour-picker popover's corner, and a toast can briefly cover the Export trigger and the dialog's Export button (on `main` too). This belongs to the Export trigger placement decided with UI-04 and UI-11.
+  - The colour picker's sliders keep react-colorful's own focus cue (an enlarged pointer). See section D.
+  - Playfair Display's old-style figures make the "20" in "Base-20 Representation" sit lower than the capitals. See section D.
+- **Next action:** open the pull request, then add the commit and PR references here.
 
 ### UI-04: Two-column workspace layout
 
@@ -229,14 +244,17 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Emoji in visible labels and accessible names (such as `📦 Export`) | proposed | For review when UI-04 is defined |
 | Theme menu Escape and arrow-key support | proposed | For review when UI-04 is defined |
 | Harden the toast reduced-motion test | proposed | Follow-up noted in PR #14 |
+| Date picker's clear button reachable with the keyboard | proposed | react-datepicker renders it with `tabIndex={-1}`; needs a replacement button in `DateInput.tsx`. Found during UI-03 |
+| Lining figures in the headings | proposed | Playfair Display's default old-style figures lower the "20" in "Base-20 Representation". Found during UI-03 |
+| A visible focus ring on the colour picker's sliders | proposed | react-colorful shows focus only by enlarging the pointer. Found during UI-03 |
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0) and UI-02.
-- **In progress:** no task; phase 1 is partially complete (UI-02 completed, UI-03 not started).
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03, which completes phase 1. UI-03 is verified and committed on its branch, but not yet merged.
+- **In progress:** no task.
 - **Blockers:** none.
-- **Unresolved decision:** where the Export trigger goes (floating or in the viewer header), to be decided with the UI-04 layout proposal.
-- **Next task: UI-03.** Every later visual task builds on the design system being applied to the existing components, its scope and acceptance criteria are already approved, and the repository confirms that it has not started. See its entry in section C.
+- **Unresolved decision:** where the Export trigger goes (floating or in the viewer header), to be decided with the UI-04 layout proposal. The fixed trigger currently overlaps other elements at 375 px (see UI-03's follow-ups).
+- **Next task: UI-04,** once UI-03 is merged. UI-04 depends only on UI-03, and six later tasks depend on UI-04 (UI-05, UI-07, UI-09, UI-11, UI-12 and UI-13). Its next action is a layout proposal for review, including the Export trigger's placement. See its entry in section C.
 
 ### Plan-change log
 
@@ -247,6 +265,7 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-23 | Scheduled UI-08 (persistence, from Stage 6) before UI-09 (tier guides, from Stage 5). | Stage 5 must use the persistence mechanism that Stage 6 owns (G §4.7), so persistence has to come first |
 | 2026-10-23 | Recorded the verified statuses: UI-01 and UI-02 completed (PRs #12 and #14), UI-03 not started. | Checked against the code, tests and Git history |
 | 2026-10-25 | Adopted a branching policy (section A, "Branches and pull requests"): by default one branch and pull request per task. Approved exceptions: UI-05 with UI-06, and UI-08 with UI-09, each sharing one branch and pull request, with a review checkpoint after each task. Further groupings need the user's approval and an entry in this log. Task boundaries and acceptance criteria are unchanged. | Less overhead for closely related tasks, while keeping review per task, rollback per commit, and early merges for tasks that others depend on, such as UI-04 |
+| 2026-10-26 | Recorded UI-03 as completed (verified on its branch, before the commit and PR), and added three proposals found during it to section D: a keyboard-reachable clear button for the date picker, lining figures in the headings, and a focus ring on the colour picker's sliders. | Checked against the acceptance criteria, the tests, the export comparison and screenshots; the proposals need separate decisions |
 
 ## F. Completion record
 

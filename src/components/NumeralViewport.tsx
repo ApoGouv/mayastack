@@ -95,7 +95,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   };
 
   const buttonClass =
-    'cursor-pointer px-2 py-1 text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ms-moss-500 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
+    'cursor-pointer px-2 py-1 text-sm rounded border border-line-strong bg-surface text-fg hover:bg-surface-hover active:bg-surface-active focus-ring aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
 
   return (
     <div className="space-y-2">
@@ -123,7 +123,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
         <button type="button" className={buttonClass} onClick={reset}>
           Reset
         </button>
-        <span aria-live="polite" className="text-sm tabular-nums text-gray-600 dark:text-gray-400">
+        <span aria-live="polite" className="text-sm tabular-nums text-fg-muted">
           {Math.round(zoom * 100)}%
           {atMin && <span className="sr-only"> (minimum zoom)</span>}
           {atMax && <span className="sr-only"> (maximum zoom)</span>}
@@ -140,7 +140,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
         aria-label="Numeral viewer"
         aria-describedby={hintId}
         onKeyDown={handleKeyDown}
-        className="overflow-auto rounded-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ms-moss-500"
+        className="overflow-auto rounded-xs focus-ring"
         style={{ maxHeight }}
       >
         {/* One image for assistive technology instead of thousands of glyph shapes */}

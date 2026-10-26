@@ -37,6 +37,15 @@ function contrast(a: string, b: string) {
   return (light + 0.05) / (dark + 0.05);
 }
 
+/** A computed, opaque rgb() colour as #rrggbb, for contrast() */
+function hex(rgb: string) {
+  const [r, g, b] = (rgb.match(/[\d.]+/g) ?? []).map(Number);
+  return `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Waits until every running CSS transition and animation has finished */
+const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
+
 /** Exports the current numeral through the Export menu and returns the file */
 async function exportFile(page: Page, format: 'svg' | 'png') {
   const menuButton = page.getByRole('button', { name: '📦 Export' });
@@ -176,10 +185,14 @@ test.describe('heading font', () => {
   const FONT = { bytes: 300_724, sha256: 'c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6' };
 
   /**
-   * The elements that use the heading font. Stage 1 PR 1 adds the font without applying it;
-   * PR 2 applies it to the main heading and section headings, and lists them here.
+   * The elements that use the heading font: the main heading and the section headings
+   * (docs/DESIGN_SYSTEM.md, "Typography"), once a number is shown
    */
-  const HEADING_FONT_ELEMENTS: string[] = [];
+  const HEADING_FONT_ELEMENTS: string[] = [
+    'h1: 🌄 Convert to Mayan Numerals',
+    'h3: Base-20 Representation',
+    'h3: Mayan Numeral',
+  ];
 
   /** The URL the stylesheet loads the heading font from */
   const fontUrl = (page: Page) =>
@@ -234,6 +247,9 @@ test.describe('heading font', () => {
     expect(loaded.faces).toBeGreaterThan(0);
     expect(loaded.ready).toBe(true);
 
+    // The section headings appear with a result
+    await page.getByLabel('Number input').fill('20');
+    await expect(page.getByRole('group', { name: 'Numeral viewer' })).toBeVisible();
     const users = await page.evaluate(() =>
       [...document.querySelectorAll('body *')]
         .filter((el) => getComputedStyle(el).fontFamily.includes('Playfair Display'))
@@ -291,4 +307,196 @@ test.describe('export and the interface theme', () => {
     const { light, dark } = await exportInBothThemes(page, 'png');
     expect(await pngPixels(page, dark)).toEqual(await pngPixels(page, light));
   });
+});
+
+/**
+ * The design system applied to the existing components (UI-03 acceptance criteria): measured on
+ * the rendered elements, in both themes, after their transitions have finished.
+ */
+test.describe('design system on the components', () => {
+  /** A token's colour as the browser computes it, e.g. "rgb(115, 92, 0)" */
+  const token = (page: Page, name: string) =>
+    page.evaluate((t) => {
+      const probe = document.createElement('div');
+      probe.style.color = `var(--color-${t})`;
+      document.body.append(probe);
+      const colour = getComputedStyle(probe).color;
+      probe.remove();
+      return colour;
+    }, name);
+
+  /** Gives keyboard focus (so :focus-visible applies) and returns the outline drawn */
+  const keyboardFocus = async (page: Page, target: ReturnType<Page['locator']>) => {
+    await page.keyboard.press('Shift');
+    await target.focus();
+    await settle(page);
+    return target.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { focusVisible: el.matches(':focus-visible'), outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}` };
+    });
+  };
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`meets the contrast minimums on the controls in the ${theme} theme`, async ({ page }) => {
+      await openWithTheme(page, theme);
+      const input = page.getByLabel('Number input');
+      const results: { what: string; ratio: number; min: number }[] = [];
+      const check = (what: string, fg: string, bg: string, min: number) => results.push({ what, ratio: contrast(hex(fg), hex(bg)), min });
+
+      // The number input: placeholder (while empty), text, and boundary against its card
+      await input.fill('');
+      const field = await input.evaluate((el) => ({
+        placeholder: getComputedStyle(el, '::placeholder').color, background: getComputedStyle(el).backgroundColor,
+        border: getComputedStyle(el).borderTopColor, card: getComputedStyle(el.closest('section')!).backgroundColor,
+      }));
+      check('number input placeholder', field.placeholder, field.background, 4.5);
+      check('number input boundary', field.border, field.card, 3);
+      await input.fill('8000400019');
+      await settle(page);
+      check('number input text', await input.evaluate((el) => getComputedStyle(el).color), field.background, 4.5);
+
+      // Muted labels on their cards
+      for (const text of ['Choose Input Mode', 'SVG Display Settings', 'Background color:', 'Show Grid:']) {
+        const label = await page.getByText(text, { exact: true }).first().evaluate((el) => {
+          let bg = 'rgba(0, 0, 0, 0)';
+          for (let e: Element | null = el; e && bg.startsWith('rgba'); e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
+          return { color: getComputedStyle(el).color, bg };
+        });
+        check(`label "${text}"`, label.color, label.bg, 4.5);
+      }
+
+      // The Export button's label, default and hovered
+      const exportButton = page.getByRole('button', { name: '📦 Export' });
+      for (const state of ['default', 'hover'] as const) {
+        if (state === 'hover') await exportButton.hover();
+        await settle(page);
+        const b = await exportButton.evaluate((el) => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
+        check(`Export label (${state})`, b.color, b.bg, 4.5);
+      }
+      await page.mouse.move(0, 0);
+
+      // The toggle's tracks against the card, and its thumb against each track
+      const toggle = page.getByRole('switch', { name: 'Show Grid:' });
+      for (let i = 0; i < 2; i++) {
+        await settle(page);
+        const t = await toggle.evaluate((el) => {
+          let card = 'rgba(0, 0, 0, 0)';
+          for (let e: Element | null = el.parentElement; e && card.startsWith('rgba'); e = e.parentElement) card = getComputedStyle(e).backgroundColor;
+          return { state: el.getAttribute('aria-checked'), track: getComputedStyle(el).backgroundColor, thumb: getComputedStyle(el.firstElementChild!).backgroundColor, card };
+        });
+        check(`toggle track (${t.state === 'true' ? 'on' : 'off'})`, t.track, t.card, 3);
+        check(`toggle thumb (${t.state === 'true' ? 'on' : 'off'})`, t.thumb, t.track, 3);
+        await toggle.click();
+      }
+
+      // Error text on its card
+      await input.fill('12a');
+      await settle(page);
+      const error = await page.locator(`#${await input.getAttribute('aria-describedby')}`).evaluate((el) => ({
+        color: getComputedStyle(el).color, card: getComputedStyle(el.closest('section')!).backgroundColor,
+      }));
+      check('error text', error.color, error.card, 4.5);
+
+      expect(results.filter(({ ratio, min }) => ratio < min)).toEqual([]);
+    });
+
+    test(`draws gold controls with the accent-fg border in every state in the ${theme} theme`, async ({ page }) => {
+      await openWithTheme(page, theme);
+      await page.getByLabel('Number input').fill('20');
+      const accentFg = await token(page, 'accent-fg');
+      const border = async (target: ReturnType<Page['locator']>) => {
+        await settle(page);
+        return target.evaluate((el) => `${getComputedStyle(el).borderTopWidth} ${getComputedStyle(el).borderTopColor}`);
+      };
+      const states = async (target: ReturnType<Page['locator']>) => {
+        const seen: Record<string, string> = { default: await border(target) };
+        await target.hover();
+        seen.hover = await border(target);
+        // Pressed: the button down, then released elsewhere, so it is not clicked
+        await page.mouse.down();
+        seen.pressed = await border(target);
+        await page.mouse.move(0, 0);
+        await page.mouse.up();
+        await keyboardFocus(page, target);
+        seen.focused = await border(target);
+        return seen;
+      };
+      const expected = { default: `1px ${accentFg}`, hover: `1px ${accentFg}`, pressed: `1px ${accentFg}`, focused: `1px ${accentFg}` };
+
+      const trigger = page.getByRole('button', { name: '📦 Export' });
+      expect(await states(trigger)).toEqual(expected);
+      await trigger.click();
+      expect(await states(page.getByRole('button', { name: /^Export SVG image/ }))).toEqual(expected);
+    });
+
+    test(`shows the focus ring on keyboard focus in the ${theme} theme`, async ({ page }) => {
+      await openWithTheme(page, theme);
+      await page.getByLabel('Number input').fill('20');
+      const ring = `solid 2px ${await token(page, 'focus')} 2px`;
+      const seen: Record<string, { focusVisible: boolean; outline: string }> = {};
+      const expected: typeof seen = {};
+      const focusOn = async (name: string, target: ReturnType<Page['locator']>) => {
+        seen[name] = await keyboardFocus(page, target);
+        expected[name] = { focusVisible: true, outline: ring };
+      };
+
+      await focusOn('number input', page.getByLabel('Number input'));
+      await focusOn('radio button', page.getByRole('radio', { name: 'Number' }));
+      await focusOn('zoom button', page.getByRole('button', { name: 'Zoom in' }));
+      await focusOn('colour swatch', page.getByRole('button', { name: 'Background color:' }));
+      const trigger = page.getByRole('button', { name: '📦 Export' });
+      await focusOn('Export trigger', trigger);
+
+      // The Export dialog's controls
+      await trigger.click();
+      await focusOn('Export Format select', page.getByLabel('Export Format'));
+      await focusOn('dialog Export button', page.getByRole('button', { name: /^Export SVG image/ }));
+      await trigger.click();
+
+      // A theme option, in the open theme menu
+      const themeButton = page.getByRole('button', { name: /^Theme selector/ });
+      await themeButton.click();
+      await focusOn('theme option', page.getByRole('menuitem').first());
+      await themeButton.click();
+      await expect(page.getByRole('menuitem')).toHaveCount(0);
+
+      // A date-picker day, reached with the keyboard: Tab opens the calendar, ArrowDown enters it
+      await page.getByRole('radio', { name: 'Date' }).check();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('gridcell', { name: /^Choose / }).first()).toBeVisible();
+      await page.keyboard.press('ArrowDown');
+      await settle(page);
+      seen['date-picker day'] = await page.evaluate(() => {
+        const el = document.activeElement!; const s = getComputedStyle(el);
+        return { focusVisible: el.matches('.react-datepicker__day:focus-visible'), outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}` };
+      });
+      expected['date-picker day'] = { focusVisible: true, outline: ring };
+
+      expect(seen).toEqual(expected);
+    });
+
+    test(`themes the date picker, toasts and colour-picker popover in the ${theme} theme`, async ({ page }) => {
+      await openWithTheme(page, theme);
+      const raised = await token(page, 'surface-raised');
+      const fg = await token(page, 'fg');
+      await page.getByLabel('Number input').fill('20');
+      const surfaces: Record<string, string> = {};
+
+      // The colour-picker popover
+      await page.getByRole('button', { name: 'Background color:' }).click();
+      surfaces['colour-picker popover'] = await page.locator('.react-colorful').locator('xpath=..').evaluate((el) => getComputedStyle(el).backgroundColor);
+      await page.keyboard.press('Escape');
+
+      // A toast, after an export
+      await exportFile(page, 'svg');
+      surfaces.toast = await page.getByRole('status').locator('xpath=..').evaluate((el) => `${getComputedStyle(el).backgroundColor} / ${getComputedStyle(el).color}`);
+
+      // The date picker
+      await page.getByRole('radio', { name: 'Date' }).check();
+      await page.getByLabel('Date input').click();
+      surfaces['date picker'] = await page.locator('.react-datepicker').evaluate((el) => `${getComputedStyle(el).backgroundColor} / ${getComputedStyle(el).color}`);
+
+      expect(surfaces).toEqual({ 'colour-picker popover': raised, toast: `${raised} / ${fg}`, 'date picker': `${raised} / ${fg}` });
+    });
+  }
 });

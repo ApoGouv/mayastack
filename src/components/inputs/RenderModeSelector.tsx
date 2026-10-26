@@ -25,7 +25,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
 
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      <legend className="text-sm font-medium text-fg-muted">
         {label}
       </legend>
       <div
@@ -44,7 +44,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
             value="number"
             checked={mode === "number"}
             onChange={() => onChange("number")}
-            className="w-5 h-5 accent-ms-moss-500"
+            className="w-5 h-5 accent-accent-fg focus-ring"
           />
           Number
         </label>
@@ -60,7 +60,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
             value="date"
             checked={mode === "date"}
             onChange={() => onChange("date")}
-            className="w-5 h-5 accent-ms-moss-500"
+            className="w-5 h-5 accent-accent-fg focus-ring"
           />
           Date
         </label>

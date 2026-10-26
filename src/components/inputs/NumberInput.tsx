@@ -46,19 +46,17 @@ const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder 
           inputMode="numeric"
           autoComplete="off"
           spellCheck={false}
-          className={`w-full pl-10 pr-4 py-2 rounded-md px-4 border bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 transition ${
-            error
-              ? 'border-red-500 dark:border-red-400 focus:ring-red-500'
-              : 'border-gray-300 dark:border-gray-700 focus:ring-ms-moss-500'
+          className={`w-full pl-10 pr-4 py-2 rounded-md px-4 border bg-well text-fg placeholder-fg-subtle focus-ring transition ${
+            error ? 'border-danger' : 'border-line-strong'
           }`}
         />
-        <Numbers className="absolute left-3 w-5 h-5 text-ms-moss-500 pointer-events-none" />
+        <Numbers className="absolute left-3 w-5 h-5 text-fg-subtle pointer-events-none" />
       </div>
       {/* Always rendered so screen readers announce the message when it appears */}
       <p
         id={ERROR_ID}
         aria-live="polite"
-        className={`text-sm text-red-600 dark:text-red-400 ${error ? 'mt-1' : ''}`}
+        className={`text-sm text-danger ${error ? 'mt-1' : ''}`}
       >
         {error}
       </p>

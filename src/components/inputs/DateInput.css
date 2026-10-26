@@ -28,5 +28,98 @@ h2.react-datepicker__current-month {
 
 .react-datepicker__close-icon::after {
     padding: 1px;
-    background-color: #EF5350;
+    background-color: var(--color-danger);
+    color: var(--color-well);
+}
+
+/* Keyboard focus on the clear button: the shared focus-ring outline (src/index.css). The library
+   sets outline: 0 on the button; :focus-visible adds the specificity to override it. */
+.react-datepicker__close-icon:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+/* Theme: react-datepicker's colours, replaced with the design-system tokens (docs/DESIGN_SYSTEM.md).
+   This file is imported after the library's stylesheet, with the same selectors, so it wins without
+   !important. Only colours, edges and focus change: sizes, positions and behaviour are the library's. */
+.react-datepicker {
+    background-color: var(--color-surface-raised);
+    color: var(--color-fg);
+    border-color: var(--color-line);
+}
+
+.react-datepicker__header {
+    background-color: var(--color-surface-raised);
+    border-bottom-color: var(--color-line);
+}
+
+/* The pointer triangle matches the calendar's edge and surface */
+.react-datepicker-popper .react-datepicker__triangle {
+    stroke: var(--color-line);
+}
+
+.react-datepicker-popper[data-placement^=bottom] .react-datepicker__triangle,
+.react-datepicker-popper[data-placement^=top] .react-datepicker__triangle {
+    fill: var(--color-surface-raised);
+    color: var(--color-surface-raised);
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day {
+    color: var(--color-fg);
+}
+
+.react-datepicker__day-name {
+    color: var(--color-fg-muted);
+}
+
+.react-datepicker__day-name--disabled,
+.react-datepicker__day--disabled {
+    color: var(--color-fg-disabled);
+}
+
+.react-datepicker__navigation-icon::before {
+    border-color: var(--color-fg-muted);
+}
+
+.react-datepicker__navigation:hover *::before {
+    border-color: var(--color-fg);
+}
+
+.react-datepicker__month-select,
+.react-datepicker__year-select {
+    border-color: var(--color-line-strong);
+}
+
+.react-datepicker__day:not([aria-disabled=true]):hover {
+    background-color: var(--color-surface-hover);
+}
+
+/* The chosen date: a gold fill, with the 1px accent-fg edge every gold fill has (drawn inset, so
+   the day keeps its size) */
+.react-datepicker__day--selected {
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent-fg);
+}
+
+.react-datepicker__day--selected:not([aria-disabled=true]):hover {
+    background-color: var(--color-accent-hover);
+}
+
+/* The day the arrow keys are on: the selected tint (after --selected, as in the library) */
+.react-datepicker__day--keyboard-selected {
+    background-color: var(--color-accent-subtle);
+    color: var(--color-fg);
+}
+
+.react-datepicker__day--keyboard-selected:not([aria-disabled=true]):hover {
+    background-color: var(--color-accent-hover);
+    color: var(--color-on-accent);
+}
+
+/* Keyboard focus on a day: the shared focus-ring outline (src/index.css) */
+.react-datepicker__day:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
 }

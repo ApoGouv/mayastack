@@ -45,7 +45,7 @@ export const ThemeSelector: React.FC = () => {
           cursor-pointer
           relative flex items-center space-x-2 p-2 rounded-full 
           ring-2 ring-inset ring-current
-          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ms-brand-500 dark:focus:ring-offset-gray-800
+          focus-ring
           transition-all
         `}
         aria-haspopup="menu"
@@ -61,7 +61,7 @@ export const ThemeSelector: React.FC = () => {
       {shouldRender && (
         <div
           role="menu"
-          className={`absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 
+          className={`absolute right-0 mt-2 w-48 bg-surface-raised text-fg rounded-md shadow-lg py-1 z-50
           ${isOpen ? 'animate-fade-in' : 'animate-fade-out'}
         `}
         >
@@ -74,12 +74,12 @@ export const ThemeSelector: React.FC = () => {
                 setTheme(themeOption.id as 'light' | 'dark' | 'system');
                 setIsOpen(false);
               }}
-              className={`flex items-center space-x-3 w-full px-4 py-2 text-sm text-left transition ${
+              className={`flex items-center space-x-3 w-full px-4 py-2 text-sm text-left transition focus-ring ${
                 theme === themeOption.id
-                  ? // Existing brand token only: the ring marks the selection (at least 3:1 against
-                    // the menu in both themes); the text keeps the menu's readable colours
-                    'bg-ms-brand-500/15 ring-2 ring-inset ring-ms-brand-500 font-semibold text-gray-900 dark:text-gray-100'
-                  : 'cursor-pointer text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  ? // The accent-fg ring marks the selection (at least 3:1 against the menu and the
+                    // selected tint in both themes), with aria-current, not colour alone
+                    'bg-accent-subtle ring-2 ring-inset ring-accent-fg font-semibold text-fg'
+                  : 'cursor-pointer text-fg hover:bg-surface-hover'
               }`}
               data-theme-option={themeOption.id}
             >

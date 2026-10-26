@@ -121,9 +121,7 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
     unsupportedReason === null && isKnownSize(sizeOption) && !(sizeOption === 'custom' && customSizeInvalid);
 
   const sizeInputClass = (error: string | null) =>
-    `w-full p-2 border rounded dark:bg-gray-800 ${
-      error ? 'border-red-500 dark:border-red-400' : 'dark:border-gray-700'
-    }`;
+    `w-full p-2 border rounded bg-well text-fg focus-ring ${error ? 'border-danger' : 'border-line-strong'}`;
 
   return (
     <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
@@ -133,8 +131,7 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls="floating-export-menu-panel"
-        className="cursor-pointer bg-ms-clay-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-ms-amber-500 hover:shadow-lg 
-hover:shadow-ms-clay-500/50 transition duration-300"
+        className="cursor-pointer bg-accent text-on-accent border border-accent-fg px-3.75 py-1.75 rounded-full shadow-lg hover:bg-accent-hover active:bg-accent-active focus-ring transition duration-300"
       >
         📦 Export
       </button>
@@ -146,7 +143,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
           role="dialog"
           aria-labelledby="export-menu-heading"
           onKeyDown={handlePanelKeyDown}
-          className="fixed bottom-18 sm:bottom-30 right-4 z-40 bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg max-w-[350px] max-h-[80vh] overflow-y-auto"
+          className="fixed bottom-18 sm:bottom-30 right-4 z-40 bg-surface-raised text-fg p-4 rounded-lg shadow-lg max-w-[350px] max-h-[80vh] overflow-y-auto"
           style={{ width: 'calc(100% - 2*var(--spacing) * 4)' }}
         >
           <div className="flex flex-wrap gap-4">
@@ -161,7 +158,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                 id="export-format-select"
                 value={format}
                 onChange={(e) => setFormat(e.target.value as ExportFormat)}
-                className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
+                className="w-full p-2 border border-line-strong rounded bg-well text-fg focus-ring"
               >
                 <option value="svg">SVG (Vector)</option>
                 <option value="png">PNG (Raster)</option>
@@ -178,7 +175,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                 value={sizeOption}
                 onChange={(e) => setSizeOption(e.target.value as ExportSize)}
                 aria-describedby={unsupportedReason ? unsupportedMessageId : undefined}
-                className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-700"
+                className="w-full p-2 border border-line-strong rounded bg-well text-fg focus-ring"
               >
                 {Object.entries(sizePresets).map(
                   ([key, { label }]) => {
@@ -196,16 +193,16 @@ hover:shadow-ms-clay-500/50 transition duration-300"
           </div>
 
           {unsupportedReason && (
-            <p id={unsupportedMessageId} role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            <p id={unsupportedMessageId} role="alert" className="mt-2 text-sm text-danger">
               PNG isn’t available at this size. {unsupportedReason} Choose a smaller size, or export as SVG.
             </p>
           )}
 
           {sizeOption === 'custom' && (
             <div className="space-y-2">
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="text-sm text-fg-muted">
                 {shiftHeld ? (
-                  <span className="text-ms-brand-500">
+                  <span className="text-accent-fg">
                     ⇧ Shift held: Aspect ratio locked
                   </span>
                 ) : (
@@ -234,7 +231,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                   <p
                     id={widthErrorId}
                     aria-live="polite"
-                    className={`text-sm text-red-600 dark:text-red-400 ${widthError ? 'mt-1' : ''}`}
+                    className={`text-sm text-danger ${widthError ? 'mt-1' : ''}`}
                   >
                     {widthError}
                   </p>
@@ -258,7 +255,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
                   <p
                     id={heightErrorId}
                     aria-live="polite"
-                    className={`text-sm text-red-600 dark:text-red-400 ${heightError ? 'mt-1' : ''}`}
+                    className={`text-sm text-danger ${heightError ? 'mt-1' : ''}`}
                   >
                     {heightError}
                   </p>
@@ -271,7 +268,7 @@ hover:shadow-ms-clay-500/50 transition duration-300"
             onClick={handleExport}
             disabled={!canExport}
             aria-describedby={unsupportedReason ? unsupportedMessageId : undefined}
-            className="cursor-pointer w-full mt-2 px-4 py-2 bg-ms-clay-500 text-white rounded hover:bg-ms-amber-500 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-ms-clay-500"
+            className="cursor-pointer w-full mt-2 px-3.75 py-1.75 bg-accent text-on-accent border border-accent-fg rounded hover:bg-accent-hover active:bg-accent-active focus-ring transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-accent disabled:active:bg-accent"
             aria-label={`Export ${format.toUpperCase()} image with size ${selectedLabel}${
               selectedSize ? ` (${selectedSize.width} by ${selectedSize.height} pixels)` : ''
             }`}
