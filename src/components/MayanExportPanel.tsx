@@ -85,7 +85,7 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   return (
     <div className="mt-6 flex justify-center">
       <div
-        className={`mep-svg-wrapper bg-gray-200 dark:bg-gray-900 p-4 rounded-xs w-full max-w-sm mx-auto`}
+        className={`mep-svg-wrapper bg-canvas p-4 rounded-xs w-full max-w-sm mx-auto`}
       >
         {children(exportRef)}
       </div>

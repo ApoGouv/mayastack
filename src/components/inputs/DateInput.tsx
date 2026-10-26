@@ -78,9 +78,9 @@ const parseDateParts = (date: Date): DateParts => ({
           value={value}
           placeholder={placeholder}
           aria-haspopup="dialog"
-          className="w-full pl-10 pr-4 py-2 rounded-md px-4 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-ms-moss-500 transition cursor-pointer"
+          className="w-full pl-10 pr-4 py-2 rounded-md px-4 border border-line-strong bg-well text-fg placeholder-fg-subtle focus-ring transition cursor-pointer"
         />
-        <CalendarMonth className="absolute left-3 w-5 h-5 text-ms-moss-500 pointer-events-none" />
+        <CalendarMonth className="absolute left-3 w-5 h-5 text-fg-subtle pointer-events-none" />
       </div>
     )
   );
@@ -123,6 +123,7 @@ const DateInput: React.FC<DateInputProps> = ({
       dropdownMode="select"
       dateFormat="dd-MM-yyyy"
       customInput={<CustomInput placeholder={placeholder}/>}
+      calendarClassName="shadow-lg"
       aria-label="Date input"
       autoComplete="off"
       isClearable

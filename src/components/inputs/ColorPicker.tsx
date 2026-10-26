@@ -45,7 +45,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     >
       <div className="flex items-center justify-between gap-4 w-full">
         {label && (
-          <label htmlFor={buttonId} className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+          <label htmlFor={buttonId} className="text-sm text-fg-muted cursor-pointer select-none">
             {label}
           </label>
         )}
@@ -58,7 +58,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
               showValue
                 ? "min-w-[215px] h-[34px] px-[0.6rem] py-[0.4rem] font-mono text-[0.85rem] leading-[1.2rem] text-center"
                 : "w-[24px] h-[24px] p-0 inline-block"
-            } flex items-center justify-between border border-gray-300 bg-white rounded cursor-pointer select-none transition-all duration-200 ease-in-out color-preview`}        
+            } flex items-center justify-between border border-line-strong bg-well rounded cursor-pointer select-none transition-all duration-200 ease-in-out focus-ring color-preview`}
           style={{
             backgroundColor: rgbaString,
             color: textColor
@@ -72,7 +72,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </div>
 
       {isOpen && (
-        <div className="absolute top-full mt-[6px] z-10 bg-neutral-800 border border-gray-300 p-2 rounded-lg shadow-md">
+        <div className="absolute top-full mt-[6px] z-10 bg-surface-raised border border-line p-2 rounded-lg shadow-lg">
           <RgbaColorPicker color={value} onChange={onChange} />
         </div>
       )}

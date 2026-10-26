@@ -95,13 +95,13 @@ export default function HomeView() {
     <div className="grid grid-cols-1 gap-8 max-w-4xl mx-auto">
       {/* Header Section */}
       <header className="space-y-4">
-        <h1 className="text-3xl sm:text-4xl font-bold text-ms-brand-500">
+        <h1 className="font-heading text-3xl sm:text-4xl font-semibold text-fg">
           🌄 Convert to Mayan Numerals
         </h1>
       </header>
 
       {/* Input & Base-20 Section */}
-      <section className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm space-y-4">
+      <section className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none space-y-4">
         <div className="grid md:grid-cols-2 gap-6 items-start">
           {/* Left: Render Mode + Input */}
           <div className="space-y-4">
@@ -123,7 +123,7 @@ export default function HomeView() {
           {/* Right: Base-20 Display */}
           {hasValidinput && (
             <div>
-              <h3 className="text-lg font-semibold mb-2">
+              <h3 className="font-heading text-lg font-semibold mb-2">
                 Base-20 Representation
               </h3>
 
@@ -156,14 +156,14 @@ export default function HomeView() {
       {hasValidinput && mayanData && (
         <div className="grid gap-6 md:grid-cols-[30%_1fr]">
           {/* Left: Display Settings */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+          <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none">
             {/* Color pickers and grid toggle */}
             <DisplaySettings />
           </div>
 
           {/* Right: Results Section */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold mb-4">Mayan Numeral</h3>
+          <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none">
+            <h3 className="font-heading text-lg font-semibold mb-4">Mayan Numeral</h3>
             {/* MayanRenderer and ExportPanel */}
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) => 

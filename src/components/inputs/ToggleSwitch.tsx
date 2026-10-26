@@ -27,7 +27,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
         {label && (
           <label 
             htmlFor={switchId} 
-            className={`text-sm text-gray-700 dark:text-gray-300 select-none ${
+            className={`text-sm text-fg-muted select-none ${
               disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
             }`}
           >
@@ -42,12 +42,12 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
           aria-checked={value}
           onClick={() => !disabled && onChange(!value)}
           disabled={disabled}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-ms-moss-500 ${
-            value ? 'bg-ms-moss-500' : 'bg-gray-300 dark:bg-gray-700'
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-ring ${
+            value ? 'bg-jade' : 'bg-line-strong'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            className={`inline-block h-4 w-4 transform rounded-full bg-toggle-thumb transition-transform ${
               value ? "translate-x-6" : "translate-x-1"
             }`}
           />

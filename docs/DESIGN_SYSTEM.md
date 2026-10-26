@@ -6,10 +6,10 @@ This document describes MayaStack's visual foundation: semantic colour tokens, c
 
 | Part | Status |
 |---|---|
-| Tokens, `color-scheme`, focus utility, reduced motion, heading font | Implemented (Stage 1, PR 1) |
-| Existing components use the tokens | Planned (Stage 1, PR 2) |
+| Tokens, `color-scheme`, focus utility, reduced motion, heading font | Implemented (Stage 1: UI-02, PR #14) |
+| Existing components use the tokens | Implemented (Stage 1: UI-03) |
 
-Until PR 2, existing components still use their earlier Tailwind colours and the `ms-*` brand tokens. Section 9 lists the approved decisions that PR 2 applies.
+The existing components, the third-party widgets (date picker, toasts, colour picker) and the brand mark use the tokens and the shared focus ring. The earlier Tailwind colours and the `ms-*` brand tokens have been removed. Section 9 records the decisions that were applied.
 
 ## 2. Source of truth
 
@@ -80,13 +80,15 @@ Ratios for the main pairs, calculated from the values in `src/index.css` (light 
 | `focus` against `canvas`, `surface`, `surface-raised`, `well` | Non-text | 5.72–6.44 | 8.62–11.13 |
 | `accent` fill against `surface` | Non-text | **2.05** (hence the border rule) | 8.12 |
 
-`e2e/design-foundation.e2e.ts` re-checks a deliberate set of contrast-critical pairs from the browser's computed values in both themes. When a token changes, update the values in `src/index.css`, run that test, and update this table.
+`e2e/design-foundation.e2e.ts` re-checks a deliberate set of contrast-critical pairs from the browser's computed values in both themes. It also measures the colours as applied to the components ("design system on the components"): element contrast, the gold controls' borders, focus rings and the themed widgets. When a token changes, update the values in `src/index.css`, run that test, and update this table.
 
 ## 6. Focus
 
-All interactive controls must use the shared `focus-ring` utility instead of their own focus styles. This is a required convention: it is defined in PR 1, and PR 2 applies it to the existing components, which until then keep their earlier focus styles. On `:focus-visible` it draws a 2 px outline in `focus`, 2 px away from the control. Because of the offset, the outline sits on the surrounding surface, so it stays visible even around a gold button, where gold on gold would not. Outlines, unlike `box-shadow` rings, remain visible in forced-colours (high contrast) mode.
+All interactive controls must use the shared `focus-ring` utility instead of their own focus styles. This is a required convention, and the application's own controls follow it. Of the third-party elements that cannot take the class, only the date picker's days and its clear button get the same outline, from `src/components/inputs/DateInput.css`. On `:focus-visible` it draws a 2 px outline in `focus`, 2 px away from the control. Because of the offset, the outline sits on the surrounding surface, so it stays visible even around a gold button, where gold on gold would not. Outlines, unlike `box-shadow` rings, remain visible in forced-colours (high contrast) mode.
 
 Do not remove the outline (`outline-none`) without replacing it with `focus-ring`.
+
+Two library limitations remain. The colour picker's sliders keep react-colorful's own focus cue (an enlarged pointer). react-datepicker renders its clear button with `tabIndex={-1}`, so it is not in the Tab order and shows the ring only when focused another way. The date picker's month and year selects and its previous and next month buttons keep their existing library or browser focus styles; their focus appearance has not been verified separately.
 
 ## 7. Shape, elevation and spacing
 
@@ -104,17 +106,17 @@ Toast notifications are covered by the same rule: their entrance animation is se
 
 `color-scheme` is `light` on `:root` and `dark` on `:root.dark`. The theme class is set before the first paint (`index.html`), so native scrollbars, selects and spinners follow the active theme from the first paint.
 
-Approved for PR 2, which applies the tokens to existing components:
+Applied to the existing components (UI-03):
 
-- The date picker, toast notifications and colour-picker popover are themed through the tokens, without new dependencies.
-- The logo and favicon keep their geometry and identity, recoloured to a gold disc with dark marks and a contrasting `accent-fg` ring.
+- The date picker (`DateInput.css`), toast notifications (the `<Toaster>` options in `App.tsx`) and colour-picker popover are themed through the tokens, without new dependencies. react-colorful draws its picker areas and pointers white, so `ColorPicker.css` gives them a `line-strong` edge to keep them visible on the popover's surface.
+- The logo and favicon keep their geometry and identity, recoloured to a gold disc with dark marks and a contrasting `accent-fg` ring, drawn inside the original radius. The favicon uses the light theme's values, because a static file cannot read the tokens (section 11, exception 3).
 - The main heading uses `fg` and the heading font. The "Stack" part of the wordmark uses `accent-fg`.
-- The `ms-*` brand tokens are removed once no component uses them.
+- The `ms-*` brand tokens have been removed.
 
 ## 10. Typography
 
 - **Interface text and numbers:** system fonts (Tailwind's `font-sans`), with `tabular-nums` where digits must line up.
-- **Headings:** `font-heading` (Playfair Display, falling back to Georgia and other serifs), applied only to the main heading and section headings, at weight 600. In PR 1 no element uses it yet; PR 2 applies it.
+- **Headings:** `font-heading` (Playfair Display, falling back to Georgia and other serifs), applied only to the main heading and section headings, at weight 600: the main heading and the "Base-20 Representation" and "Mayan Numeral" headings (`HEADING_FONT_ELEMENTS` in `e2e/design-foundation.e2e.ts` lists them). Form legends and the wordmark use the system font. Playfair Display's default figures are old-style, so digits in headings, such as the "20" in "Base-20", do not align with the capitals.
 
 ### Heading font licence and provenance
 
@@ -134,7 +136,7 @@ Do not subset, convert (including to WOFF2), rename or otherwise modify the font
 
 ## 11. Colour rule and exceptions
 
-UI colours (backgrounds, text, borders, outlines and rings, `accent-color`, placeholders) use the semantic tokens. Raw Tailwind palette colours, the `ms-*` brand tokens and hex values are allowed only for these documented exceptions:
+UI colours (backgrounds, text, borders, outlines and rings, `accent-color`, placeholders) use the semantic tokens. Raw Tailwind palette colours and hex values are allowed only for these documented exceptions:
 
 1. **Exported artwork and its defaults:** the numeral renderer, glyph and SVG components, the `.mep-svg` rule, and the default background and glyph colours in `DisplaySettingsContext`. These belong to the exported SVG and PNG, not to the interface theme.
 2. **Colours the user chooses:** the colour-picker swatch's inline colour, and the black or white text that `utils/colors.ts` picks for it.
@@ -142,7 +144,7 @@ UI colours (backgrounds, text, borders, outlines and rings, `accent-color`, plac
 4. **CSS keywords:** `transparent`, `currentColor` and `inherit`.
 5. **Test files.**
 
-After PR 2, these commands must list only the exceptions above:
+These commands must list only the exceptions above. The first lists nothing. It also matches `ms-*` classes, so the retired brand tokens cannot return unnoticed:
 
 ```sh
 git grep -nE '\b(bg|text|border|ring|ring-offset|outline|fill|stroke|accent|placeholder|divide|shadow|decoration|caret)-(white|black|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-[0-9]{2,3}|ms-[a-z-]+)' -- 'src/*.tsx' 'src/*.ts' ':!*.test.*'

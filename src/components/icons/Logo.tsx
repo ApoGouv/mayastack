@@ -37,8 +37,9 @@ const Logo: React.FC<LogoProps> = ({
         data-tooltip-id={tooltip ? logoTooltipId : undefined}
         data-tooltip-content={tooltip ? logoTooltipContent : undefined}
       >
+        {/* A gold disc with an accent-fg ring, drawn inside the disc's original radius (28) */}
         {showBackground && (
-          <circle cx="30" cy="30" r="28" fill="#b3482e" />
+          <circle cx="30" cy="30" r="27" strokeWidth="2" className="fill-accent stroke-accent-fg" />
         )}
 
         <path d="M15 15 H45" stroke={color} strokeWidth="5" strokeLinecap="round" />
@@ -48,7 +49,7 @@ const Logo: React.FC<LogoProps> = ({
       {tooltip && (
         <Tooltip
           id={logoTooltipId}
-          className="z-50 max-w-sm! bg-gray-800! text-white! text-sm! rounded! p-2!"
+          className="z-50 max-w-sm! bg-inverse! text-on-inverse! text-sm! rounded! p-2!"
           place="bottom"
           offset={10}
         />

@@ -59,17 +59,6 @@
 }
 
 @theme {
-  /* Brand Color */
-  --color-ms-brand-500: #d95d39; /* Vibrant MayaStack orange-red */
-
-  /* MayaStack Earthy Palette */
-  --color-ms-clay-500: #c75638;      /* Rich earthy clay */
-  --color-ms-deep-teal-500: #096264; /* Deep teal ocean */
-  --color-ms-moss-500: #5b9171;      /* Soft moss green */
-  --color-ms-jade-500: #003d40;      /* Dark jade */
-  --color-ms-sand-500: #eab678;      /* Sandy tan */
-  --color-ms-amber-500: #e3a866;     /* Warm amber */
-
   --animate-fade-in: fade-in 0.3s ease-out forwards;
   --animate-fade-out: fade-out 0.3s ease-in forwards;
 
@@ -102,17 +91,6 @@
    variables, so they follow the active theme. The base layer comes after the theme layer. */
 @layer base {
   .dark {
-    /* Slightly darker brand variant for dark mode */
-    --color-ms-brand-500: #c24d30;
-
-    /* MayaStack Earthy Palette */
-    --color-ms-clay-500: #b3482e;
-    --color-ms-deep-teal-500: #045255;
-    --color-ms-moss-500: #4b7b60;
-    --color-ms-jade-500: #002f32;
-    --color-ms-sand-500: #d89d5f;
-    --color-ms-amber-500: #cc8e4d;
-
     /* Semantic tokens, dark theme */
     --color-canvas: #101319;         /* Obsidian */
     --color-surface: #191c22;

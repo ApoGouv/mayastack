@@ -7,15 +7,17 @@
   aria-label="Mayan numeral logo favicon"
   fill="none"
 >
-  <!-- Circular background -->
-  <circle cx="32" cy="32" r="30" fill="#b3482e" />
+  <!-- Circular background: a gold disc with a ring, drawn inside the original radius (30).
+       Fixed light-theme token values (accent, accent-fg, on-accent): a static file cannot read the
+       app's CSS variables (docs/DESIGN_SYSTEM.md §11, exception 3) -->
+  <circle cx="32" cy="32" r="29" fill="#d4af37" stroke="#735c00" stroke-width="2" />
 
   <!-- Top bar -->
-  <path d="M15 15 H49" stroke="#eab678" stroke-width="5" stroke-linecap="round" />
+  <path d="M15 15 H49" stroke="#1e1a14" stroke-width="5" stroke-linecap="round" />
 
   <!-- Dot -->
-  <circle cx="32" cy="30" r="6" fill="#eab678" /> 
+  <circle cx="32" cy="30" r="6" fill="#1e1a14" />
 
   <!-- Bottom bar -->
-  <path d="M15 45 H49" stroke="#eab678" stroke-width="5" stroke-linecap="round" />
+  <path d="M15 45 H49" stroke="#1e1a14" stroke-width="5" stroke-linecap="round" />
 </svg>
