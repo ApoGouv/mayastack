@@ -39,9 +39,12 @@ export default function App() {
 
       {/* Toasts use the design-system tokens, so they follow the active theme: the raised surface
           with a decorative edge, jade for success and danger for errors (docs/DESIGN_SYSTEM.md).
-          The edge is an inset outline rather than a border, so toasts keep the library's size */}
+          The edge is an inset outline rather than a border, so toasts keep the library's size.
+          They appear at the top, below the navbar (64px), so they never cover the floating Export
+          trigger or its dialog in the bottom-right corner */}
       <Toaster
-        position="bottom-right"
+        position="top-center"
+        containerStyle={{ top: 80 }}
         reverseOrder={false}
         toastOptions={{
           style: {

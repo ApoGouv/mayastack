@@ -87,7 +87,7 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-01 | Fix theme defects | 0 Theme defects | completed | none | 0 |
 | UI-02 | Design-system foundation | 1 Design system | completed | UI-01 | 1 (PR 1) |
 | UI-03 | Apply the foundation to existing components | 1 Design system | completed | UI-02 | 1 (PR 2) |
-| UI-04 | Two-column workspace layout | 2 Workspace | not started | UI-03 | 2 |
+| UI-04 | Two-column workspace layout | 2 Workspace | in progress | UI-03 | 2 |
 | UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | not started | UI-04 | 3 |
 | UI-06 | Random, stepper presets and custom increment | 3 Input controls | not started | UI-05 | 3 |
 | UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | not started | UI-04 | 4 |
@@ -120,7 +120,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-03: Apply the foundation to existing components
 
-- **Status:** completed. Its acceptance criteria were verified on 2026-10-26 on the branch `feat/ui-03-apply-design-system`, before it was committed. Commit and PR references are added once they exist.
+- **Status:** completed. Its acceptance criteria were verified on 2026-10-26 on the branch `feat/ui-03-apply-design-system`, before it was committed.
+- **Evidence:** PR #19 (commit `d295e5d`, merge `80971cd`).
 - **Goal:** the existing interface adopts the design system, without changing layout, behaviour, labels or exported artwork.
 - **Scope:**
   - Semantic tokens instead of raw colour classes in components, `index.html` body classes and `App.tsx`.
@@ -156,14 +157,20 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - At 375 px the fixed Export trigger covers the colour-picker popover's corner, and a toast can briefly cover the Export trigger and the dialog's Export button (on `main` too). This belongs to the Export trigger placement decided with UI-04 and UI-11.
   - The colour picker's sliders keep react-colorful's own focus cue (an enlarged pointer). See section D.
   - Playfair Display's old-style figures make the "20" in "Base-20 Representation" sit lower than the capitals. See section D.
-- **Next action:** open the pull request, then add the commit and PR references here.
 
 ### UI-04: Two-column workspace layout
 
-- **Status:** not started.
+- **Status:** in progress, on the branch `feat/ui-04-workspace-layout`.
 - **Goal:** the approved responsive two-column workspace, with a prominent numeral viewer.
-- **Scope and acceptance:** G §3.2 and §8, Stage 2. Export must stay reachable when the result is off-screen (G §6). The Export trigger's placement and the proposals in section D are decided when this task is defined.
-- **Next action:** propose a layout for review, including the Export trigger's placement.
+- **Scope and acceptance:** G §3.2 and §8, Stage 2. Export must stay reachable when the result is off-screen (G §6).
+- **Approved layout (2026-10-27),** following the first design-reference concept:
+  - From 1024 px: the input, base-20 representation and display settings cards on the left, in that order, in 5 of 12 columns; the viewer card on the right, in 7 of 12.
+  - Below 1024 px: one column in the order input, viewer, base-20, settings, so the numeral follows the input directly.
+  - The viewer keeps its 480 px maximum height and the meaning of 100% zoom; the numeral is not enlarged.
+  - The floating Export trigger stays, with only the adjustments needed to avoid collisions. Moving Export into the viewer header is not part of UI-04 (see UI-11).
+  - All four cards stay in place for empty, invalid and valid input. Without a valid result, the viewer and the base-20 card each show a short instruction instead of a result, and there are no viewer controls or Export (an initial value is UI-05).
+  - The section headings become `h2`. The emoji in labels and the theme menu's Escape and arrow keys are deferred (section D).
+- **Next action:** review the implementation on its branch.
 
 ### UI-05: Initial value, Clear and significant-digit count
 
@@ -240,9 +247,9 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Tier-count chip | proposed | Listed as not approved (G §10) |
 | Glyph legend (dot = 1, bar = 5, shell = 0) | proposed | Seen in design references; to be reviewed separately |
 | Educational information cards | proposed | A possible format for UI-12; the explanations themselves are approved |
-| Heading order (`h1` followed by `h3`) | proposed | For review when UI-04 is defined |
-| Emoji in visible labels and accessible names (such as `📦 Export`) | proposed | For review when UI-04 is defined |
-| Theme menu Escape and arrow-key support | proposed | For review when UI-04 is defined |
+| Heading order (`h1` followed by `h3`) | approved | Part of UI-04: the section headings become `h2` |
+| Emoji in visible labels and accessible names (such as `📦 Export`) | deferred | Reviewed with UI-04 and deferred |
+| Theme menu Escape and arrow-key support | deferred | Reviewed with UI-04 and deferred |
 | Harden the toast reduced-motion test | proposed | Follow-up noted in PR #14 |
 | Date picker's clear button reachable with the keyboard | proposed | react-datepicker renders it with `tabIndex={-1}`; needs a replacement button in `DateInput.tsx`. Found during UI-03 |
 | Lining figures in the headings | proposed | Playfair Display's default old-style figures lower the "20" in "Base-20 Representation". Found during UI-03 |
@@ -250,11 +257,11 @@ None of these are committed scope. Each needs a separate decision before impleme
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0), UI-02 and UI-03, which completes phase 1. UI-03 is verified and committed on its branch, but not yet merged.
-- **In progress:** no task.
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1.
+- **In progress:** UI-04, on the branch `feat/ui-04-workspace-layout`.
 - **Blockers:** none.
-- **Unresolved decision:** where the Export trigger goes (floating or in the viewer header), to be decided with the UI-04 layout proposal. The fixed trigger currently overlaps other elements at 375 px (see UI-03's follow-ups).
-- **Next task: UI-04,** once UI-03 is merged. UI-04 depends only on UI-03, and six later tasks depend on UI-04 (UI-05, UI-07, UI-09, UI-11, UI-12 and UI-13). Its next action is a layout proposal for review, including the Export trigger's placement. See its entry in section C.
+- **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11.
+- **Next task: UI-04,** in progress. Six later tasks depend on it (UI-05, UI-07, UI-09, UI-11, UI-12 and UI-13). See its entry in section C.
 
 ### Plan-change log
 
@@ -266,6 +273,8 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-23 | Recorded the verified statuses: UI-01 and UI-02 completed (PRs #12 and #14), UI-03 not started. | Checked against the code, tests and Git history |
 | 2026-10-25 | Adopted a branching policy (section A, "Branches and pull requests"): by default one branch and pull request per task. Approved exceptions: UI-05 with UI-06, and UI-08 with UI-09, each sharing one branch and pull request, with a review checkpoint after each task. Further groupings need the user's approval and an entry in this log. Task boundaries and acceptance criteria are unchanged. | Less overhead for closely related tasks, while keeping review per task, rollback per commit, and early merges for tasks that others depend on, such as UI-04 |
 | 2026-10-26 | Recorded UI-03 as completed (verified on its branch, before the commit and PR), and added three proposals found during it to section D: a keyboard-reachable clear button for the date picker, lining figures in the headings, and a focus ring on the colour picker's sliders. | Checked against the acceptance criteria, the tests, the export comparison and screenshots; the proposals need separate decisions |
+| 2026-10-27 | Recorded UI-03's merge (PR #19) and started UI-04 with the approved layout (UI-04 in section C): two columns from 1024 px, the floating Export trigger kept, the section headings as `h2`, and the emoji and theme-menu proposals deferred. | Approved after the UI-04 preflight, which compared the first design-reference concept with the existing layout |
+| 2026-10-27 | Changed UI-04 to keep every card in place without a valid result, with an instruction in the viewer and the base-20 card and still no Export. The base-20 representation becomes its own card, between the input and the settings, as in the design reference. | Requested in the UI-04 review: a persistent workspace, which UI-05 can then fill with its initial value without panels appearing or disappearing |
 
 ## F. Completion record
 

@@ -157,26 +157,47 @@ test.describe('bounded numeral viewport', () => {
 });
 
 test.describe('export with the viewport', () => {
-  test('offers Export for the largest number wherever the page is scrolled', async ({ page }) => {
-    // Short enough for the result card to start below the fold at the top of the page
-    await page.setViewportSize({ width: 1280, height: 400 });
-    await showNumber(page, MAX_DIGITS);
-    const exportButton = page.getByRole('button', { name: '📦 Export' });
-    const resultCard = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
+  // The trigger's placement below sm (375px) and from sm (768px)
+  for (const width of [375, 768]) {
+    test(`offers Export for the largest number wherever the page is scrolled at ${width}px`, async ({ page }) => {
+      // In the one-column layout (below 1024px), the base-20 and settings cards follow the result
+      // card: at the end of the page it is scrolled out of view, above the viewport
+      await page.setViewportSize({ width, height: 400 });
+      await showNumber(page, MAX_DIGITS);
+      const exportButton = page.getByRole('button', { name: '📦 Export' });
+      const resultCard = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
 
-    // Top of the page: the result card is below the fold
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(resultCard).not.toBeInViewport();
-    await expect(exportButton).toBeInViewport();
+      // Top of the page
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(exportButton).toBeInViewport();
 
-    // Bottom of the page
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    await expect(exportButton).toBeInViewport();
+      // End of the page: the result card is out of view
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const pageEnd = await page.evaluate(() => window.scrollY);
+      expect(pageEnd).toBeGreaterThan(0);
+      await expect(resultCard).not.toBeInViewport();
+      await expect(exportButton).toBeInViewport();
 
-    // No result, no Export
-    await page.getByLabel('Number input').fill('12.5');
-    await expect(exportButton).toHaveCount(0);
-  });
+      // Export works from there, with its whole dialog in view, without scrolling the page
+      await exportButton.click();
+      await expect(exportButton).toHaveAttribute('aria-expanded', 'true');
+      const dialog = page.getByRole('dialog', { name: 'Export Options' });
+      const dialogExport = page.getByRole('button', { name: /^Export SVG image/ });
+      for (const control of [dialog, page.getByLabel('Export Format'), page.getByLabel('Size Preset'), dialogExport]) {
+        await expect(control).toBeInViewport({ ratio: 1 });
+      }
+      const [download] = await Promise.all([page.waitForEvent('download'), dialogExport.click()]);
+      expect(download.suggestedFilename()).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
+      expect(await page.evaluate(() => window.scrollY)).toBe(pageEnd);
+      await expect(resultCard).not.toBeInViewport();
+      await exportButton.click(); // close the menu
+      await expect(exportButton).toBeInViewport();
+
+      // No result, no Export
+      await page.getByLabel('Number input').fill('12.5');
+      await expect(exportButton).toHaveCount(0);
+    });
+  }
 
   test('exports the same complete SVG before and after zooming and scrolling', async ({ page }) => {
     const viewer = await showNumber(page, MAX_DIGITS);

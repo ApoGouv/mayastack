@@ -186,12 +186,12 @@ test.describe('heading font', () => {
 
   /**
    * The elements that use the heading font: the main heading and the section headings
-   * (docs/DESIGN_SYSTEM.md, "Typography"), once a number is shown
+   * (docs/DESIGN_SYSTEM.md, "Typography"), with a number shown
    */
   const HEADING_FONT_ELEMENTS: string[] = [
     'h1: 🌄 Convert to Mayan Numerals',
-    'h3: Base-20 Representation',
-    'h3: Mayan Numeral',
+    'h2: Mayan Numeral',
+    'h2: Base-20 Representation',
   ];
 
   /** The URL the stylesheet loads the heading font from */
@@ -247,7 +247,7 @@ test.describe('heading font', () => {
     expect(loaded.faces).toBeGreaterThan(0);
     expect(loaded.ready).toBe(true);
 
-    // The section headings appear with a result
+    // With a result, so that the result content is checked too
     await page.getByLabel('Number input').fill('20');
     await expect(page.getByRole('group', { name: 'Numeral viewer' })).toBeVisible();
     const users = await page.evaluate(() =>
