@@ -81,6 +81,14 @@ export default function HomeView() {
     return null;
   }, [mode, parsedNumber, dateParts]);
 
+  // What the viewer and the base-20 card say while there is no result to show
+  const emptyMessages: { viewer: string; base20: string } =
+    mode === 'date'
+      ? { viewer: 'Choose a date to see its Mayan numerals.', base20: 'Choose a date to see it in base 20.' }
+      : numberValidation.status === 'invalid'
+        ? { viewer: 'Correct the number to see its Mayan numeral.', base20: 'Correct the number to see it in base 20.' }
+        : { viewer: 'Enter a whole number to see its Mayan numeral.', base20: 'Enter a whole number to see it in base 20.' };
+
   // Event handlers
   const handleNumberInputChange = (value: string): void => {
     setNumberInput(value);
@@ -92,7 +100,7 @@ export default function HomeView() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-8 max-w-4xl mx-auto">
+    <div className="grid grid-cols-1 gap-8 max-w-7xl mx-auto">
       {/* Header Section */}
       <header className="space-y-4">
         <h1 className="font-heading text-3xl sm:text-4xl font-semibold text-fg">
@@ -100,73 +108,36 @@ export default function HomeView() {
         </h1>
       </header>
 
-      {/* Input & Base-20 Section */}
-      <section className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none space-y-4">
-        <div className="grid md:grid-cols-2 gap-6 items-start">
-          {/* Left: Render Mode + Input */}
-          <div className="space-y-4">
-            <RenderModeSelector mode={mode} onChange={setMode} />
+      {/* Workspace: from lg, the input, the base-20 representation and the display settings on the
+          left (5 of 12 columns) and the numeral viewer on the right (7 of 12), spanning all three
+          rows. Below lg, one column in source order: input, viewer, base-20, settings. The last row
+          takes the viewer's extra height (1fr), so the left cards stay directly under each other.
+          Every card stays in place without a valid input; only their results need one. */}
+      <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12 lg:grid-rows-[auto_auto_1fr]">
+        {/* Input Section: Render Mode + Input */}
+        <section className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none space-y-4 lg:col-span-5">
+          <RenderModeSelector mode={mode} onChange={setMode} />
 
-            {mode === 'number' ? (
-              <NumberInput
-                value={numberInput}
-                onChange={handleNumberInputChange}
-              />
-            ) : (
-              <DateInput
-                value={dateInputRaw}
-                onChange={handleDateInputChange}
-              />
-            )}
-          </div>
-
-          {/* Right: Base-20 Display */}
-          {hasValidinput && (
-            <div>
-              <h3 className="font-heading text-lg font-semibold mb-2">
-                Base-20 Representation
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
-                {mayanData?.digitGroups.map((group) => {
-                  let extraClass = '';
-
-                  if (mode === 'date') {
-                    if (group.label === 'Year') extraClass = 'sm:col-span-2';
-                    else extraClass = 'sm:col-span-1';
-                  } else if (mode === 'number') {
-                    extraClass = 'sm:col-span-2';
-                  }
-
-                  return (
-                    <Base20Display
-                      key={group.label}
-                      label={group.label}
-                      digits={group.digits}
-                      className={extraClass}
-                    />
-                  );
-                })}
-              </div>
-            </div>
+          {mode === 'number' ? (
+            <NumberInput
+              value={numberInput}
+              onChange={handleNumberInputChange}
+            />
+          ) : (
+            <DateInput
+              value={dateInputRaw}
+              onChange={handleDateInputChange}
+            />
           )}
-        </div>
-      </section>
+        </section>
 
-      {hasValidinput && mayanData && (
-        <div className="grid gap-6 md:grid-cols-[30%_1fr]">
-          {/* Left: Display Settings */}
-          <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none">
-            {/* Color pickers and grid toggle */}
-            <DisplaySettings />
-          </div>
-
-          {/* Right: Results Section */}
-          <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none">
-            <h3 className="font-heading text-lg font-semibold mb-4">Mayan Numeral</h3>
-            {/* MayanRenderer and ExportPanel */}
+        {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result */}
+        <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
+          <h2 className="font-heading text-lg font-semibold mb-4">Mayan Numeral</h2>
+          {hasValidinput && mayanData ? (
+            /* MayanRenderer and ExportPanel */
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
-              {(ref) => 
+              {(ref) =>
                 <NumeralViewport label={mayanData.label} resetKey={mayanData.key}>
                   <MayanRenderer
                     digitGroups={mayanData?.digitGroups.map(g => g.digits) ?? []}
@@ -179,10 +150,56 @@ export default function HomeView() {
                 </NumeralViewport>
               }
             </MayanExportPanel>
-          </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-line p-8 text-center text-fg-muted">
+              {emptyMessages.viewer}
+            </p>
+          )}
         </div>
-      )}
-      
+
+        {/* Left, under the input (below lg, under the viewer): Base-20 Display */}
+        <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none lg:col-span-5 lg:col-start-1 lg:row-start-2">
+          <h2 className="font-heading text-lg font-semibold mb-2">
+            Base-20 Representation
+          </h2>
+
+          {hasValidinput && mayanData ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
+              {mayanData.digitGroups.map((group) => {
+                let extraClass = '';
+
+                if (mode === 'date') {
+                  if (group.label === 'Year') extraClass = 'sm:col-span-2';
+                  else extraClass = 'sm:col-span-1';
+                } else if (mode === 'number') {
+                  extraClass = 'sm:col-span-2';
+                }
+
+                return (
+                  <Base20Display
+                    key={group.label}
+                    label={group.label}
+                    digits={group.digits}
+                    className={extraClass}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-line p-4 text-center text-fg-muted">
+              {emptyMessages.base20}
+            </p>
+          )}
+        </div>
+
+        {/* Left, under the base-20 card: Display Settings. Below sm it is the last card, with the floating
+            Export trigger in the corner of the screen (bottom-4, 40px tall): the margin lets it and
+            its colour popovers, which reach below it, scroll clear of the trigger */}
+        <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none mb-20 sm:mb-0 lg:col-span-5 lg:col-start-1 lg:row-start-3">
+          {/* Color pickers and grid toggle */}
+          <DisplaySettings />
+        </div>
+      </div>
     </div>
   );
 }

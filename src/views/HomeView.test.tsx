@@ -145,6 +145,32 @@ describe('HomeView numeral viewport', () => {
     expect(exportButton()).toBeNull();
   });
 
+  it('keeps every workspace card in place for empty, invalid and valid input, without stale results', () => {
+    const { enter, renderedPlaceValues } = renderHomeView();
+    // The whole text of a card, from its heading
+    const card = (heading: string) => screen.getByRole('heading', { level: 2, name: heading }).parentElement!.textContent;
+    const expectNoResult = (viewer: string, base20: string) => {
+      expect(card('Mayan Numeral')).toBe(`Mayan Numeral${viewer}`);
+      expect(card('Base-20 Representation')).toBe(`Base-20 Representation${base20}`);
+      expect(screen.getByRole('group', { name: 'SVG Display Settings' })).not.toBeNull();
+      expect(renderedPlaceValues()).toEqual([]);
+    };
+
+    expect(screen.getByLabelText('Number input')).toHaveProperty('value', '');
+    expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
+    enter('123');
+    expect(card('Base-20 Representation')).toContain('6 × 201 • 3 × 200');
+    expect(renderedPlaceValues()).toEqual(['120', '3']);
+    // Invalid after a valid number: nothing of 123 is left
+    enter('12.5');
+    expectNoResult('Correct the number to see its Mayan numeral.', 'Correct the number to see it in base 20.');
+    enter('123');
+    enter('');
+    expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    expectNoResult('Choose a date to see its Mayan numerals.', 'Choose a date to see it in base 20.');
+  });
+
   it('exports the same complete SVG before and after zooming and scrolling', () => {
     const { enter, numeralSvg } = renderHomeView();
     enter('9'.repeat(500));
