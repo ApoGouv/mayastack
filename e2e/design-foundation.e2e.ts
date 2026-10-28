@@ -152,7 +152,7 @@ test.describe('reduced motion', () => {
    */
   async function toastAnimation(page: Page) {
     await page.goto('./');
-    await page.getByLabel('Number input').fill('123');
+    await page.getByLabel('Decimal integer').fill('123');
     await exportFile(page, 'svg');
     const bar = page.getByRole('status').filter({ hasText: 'SVG download started' }).locator('xpath=..');
     // Read in one step, as soon as the animation is applied: the toast closes after a few seconds
@@ -248,7 +248,7 @@ test.describe('heading font', () => {
     expect(loaded.ready).toBe(true);
 
     // With a result, so that the result content is checked too
-    await page.getByLabel('Number input').fill('20');
+    await page.getByLabel('Decimal integer').fill('20');
     await expect(page.getByRole('group', { name: 'Numeral viewer' })).toBeVisible();
     const users = await page.evaluate(() =>
       [...document.querySelectorAll('body *')]
@@ -280,7 +280,7 @@ test.describe('export and the interface theme', () => {
    */
   async function exportInBothThemes(page: Page, format: 'svg' | 'png') {
     await openWithTheme(page, 'light', { showGrid: 'true' });
-    await page.getByLabel('Number input').fill('8000400019');
+    await page.getByLabel('Decimal integer').fill('8000400019');
     await expect(page.getByRole('group', { name: 'Numeral viewer' })).toBeVisible();
     const light = await exportFile(page, format);
 
@@ -339,7 +339,7 @@ test.describe('design system on the components', () => {
   for (const theme of ['light', 'dark'] as const) {
     test(`meets the contrast minimums on the controls in the ${theme} theme`, async ({ page }) => {
       await openWithTheme(page, theme);
-      const input = page.getByLabel('Number input');
+      const input = page.getByLabel('Decimal integer');
       const results: { what: string; ratio: number; min: number }[] = [];
       const check = (what: string, fg: string, bg: string, min: number) => results.push({ what, ratio: contrast(hex(fg), hex(bg)), min });
 
@@ -351,18 +351,62 @@ test.describe('design system on the components', () => {
       }));
       check('number input placeholder', field.placeholder, field.background, 4.5);
       check('number input boundary', field.border, field.card, 3);
+
+      /** The text colour of an element, and the first opaque background behind it */
+      const colours = (target: ReturnType<Page['locator']>) => target.evaluate((el) => {
+        let bg = 'rgba(0, 0, 0, 0)';
+        for (let e: Element | null = el; e && bg.startsWith('rgba'); e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
+        return { color: getComputedStyle(el).color, border: getComputedStyle(el).borderTopColor, bg };
+      });
+      // Why Copy and the steps are unavailable, shown while the field is empty
+      const reason = await colours(page.getByText('Enter a whole number to copy it or use the steps.', { exact: true }));
+      check('unavailable reason', reason.color, reason.bg, 4.5);
+
       await input.fill('8000400019');
       await settle(page);
       check('number input text', await input.evaluate((el) => getComputedStyle(el).color), field.background, 4.5);
 
       // Muted labels on their cards
-      for (const text of ['Choose Input Mode', 'SVG Display Settings', 'Background color:', 'Show Grid:']) {
-        const label = await page.getByText(text, { exact: true }).first().evaluate((el) => {
-          let bg = 'rgba(0, 0, 0, 0)';
-          for (let e: Element | null = el; e && bg.startsWith('rgba'); e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
-          return { color: getComputedStyle(el).color, bg };
-        });
+      for (const text of [
+        'Input Type', 'Decimal integer', '10 digits', 'Steps',
+        'SVG Display Settings', 'Background color:', 'Show Grid:',
+      ]) {
+        const label = await colours(page.getByText(text, { exact: true }).first());
         check(`label "${text}"`, label.color, label.bg, 4.5);
+      }
+
+      // The quick steps and Zero: their labels on their fills, their boundaries against the card
+      for (const name of ['+20', 'Zero']) {
+        const button = await colours(page.getByRole('button', { name, exact: true }));
+        check(`"${name}" label`, button.color, button.bg, 4.5);
+        check(`"${name}" boundary`, button.border, field.card, 3);
+      }
+      // Zero while hovered: its gold tint and border
+      const zero = page.getByRole('button', { name: 'Zero', exact: true });
+      await zero.hover();
+      await settle(page);
+      const zeroHovered = await colours(zero);
+      check('"Zero" label (hover)', zeroHovered.color, zeroHovered.bg, 4.5);
+      check('"Zero" boundary (hover)', zeroHovered.border, field.card, 3);
+      await page.mouse.move(0, 0);
+
+      // The input-type segments: the selected (gold) and the other one, and their dots, which
+      // mark each option (the control itself has no border, as in design-reference concept 3)
+      for (const name of ['Number', 'Date']) {
+        const segment = await page.getByRole('radio', { name }).evaluate((radio) => {
+          const label = radio.closest('label')!;
+          let bg = 'rgba(0, 0, 0, 0)';
+          for (let e: Element | null = label; e && bg.startsWith('rgba'); e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
+          return { checked: (radio as HTMLInputElement).checked, color: getComputedStyle(label).color, dot: getComputedStyle(radio).borderTopColor, bg };
+        });
+        check(`"${name}" segment label (${segment.checked ? 'selected' : 'not selected'})`, segment.color, segment.bg, 4.5);
+        check(`"${name}" segment dot`, segment.dot, segment.bg, 3);
+      }
+
+      // The icons of the in-field buttons against the field (non-text contrast)
+      for (const name of ['Random number', 'Copy number', 'Clear input']) {
+        const icon = await colours(page.getByRole('button', { name }));
+        check(`"${name}" icon`, icon.color, field.background, 3);
       }
 
       // The Export button's label, default and hovered
@@ -392,17 +436,21 @@ test.describe('design system on the components', () => {
       // Error text on its card
       await input.fill('12a');
       await settle(page);
-      const error = await page.locator(`#${await input.getAttribute('aria-describedby')}`).evaluate((el) => ({
+      // The input lists its error first among its descriptions
+      const errorId = (await input.getAttribute('aria-describedby'))!.split(' ')[0];
+      const error = await page.locator(`#${errorId}`).evaluate((el) => ({
         color: getComputedStyle(el).color, card: getComputedStyle(el.closest('section')!).backgroundColor,
       }));
       check('error text', error.color, error.card, 4.5);
+      // The field's red border while invalid, against its card
+      check('number input error boundary', await input.evaluate((el) => getComputedStyle(el).borderTopColor), field.card, 3);
 
       expect(results.filter(({ ratio, min }) => ratio < min)).toEqual([]);
     });
 
     test(`draws gold controls with the accent-fg border in every state in the ${theme} theme`, async ({ page }) => {
       await openWithTheme(page, theme);
-      await page.getByLabel('Number input').fill('20');
+      await page.getByLabel('Decimal integer').fill('20');
       const accentFg = await token(page, 'accent-fg');
       const border = async (target: ReturnType<Page['locator']>) => {
         await settle(page);
@@ -429,19 +477,55 @@ test.describe('design system on the components', () => {
       expect(await states(page.getByRole('button', { name: /^Export SVG image/ }))).toEqual(expected);
     });
 
+    test(`marks the selected input type in forced-colours mode in the ${theme} theme`, async ({ page }) => {
+      // Forced colours replace the segments' gold and the dot's fill with the background, so
+      // only the dot, filled in the system text colour, still tells the modes apart
+      await page.emulateMedia({ forcedColors: 'active' });
+      await openWithTheme(page, theme);
+      const dots = () => page.locator('input[name="renderMode"]').evaluateAll((radios) =>
+        radios.map((radio) => {
+          const s = getComputedStyle(radio);
+          return { checked: (radio as HTMLInputElement).checked, filled: s.backgroundColor === s.borderTopColor };
+        }));
+      expect(await page.evaluate(() => matchMedia('(forced-colors: active)').matches)).toBe(true);
+      expect(await dots()).toEqual([{ checked: true, filled: true }, { checked: false, filled: false }]);
+      await page.getByRole('radio', { name: 'Date' }).check();
+      expect(await dots()).toEqual([{ checked: false, filled: false }, { checked: true, filled: true }]);
+    });
+
     test(`shows the focus ring on keyboard focus in the ${theme} theme`, async ({ page }) => {
       await openWithTheme(page, theme);
-      await page.getByLabel('Number input').fill('20');
+      await page.getByLabel('Decimal integer').fill('20');
       const ring = `solid 2px ${await token(page, 'focus')} 2px`;
+      // Text fields draw it over their own boundary, inside the field's box
+      const insetRing = `solid 2px ${await token(page, 'focus')} -2px`;
       const seen: Record<string, { focusVisible: boolean; outline: string }> = {};
       const expected: typeof seen = {};
-      const focusOn = async (name: string, target: ReturnType<Page['locator']>) => {
+      const focusOn = async (name: string, target: ReturnType<Page['locator']>, outline = ring) => {
         seen[name] = await keyboardFocus(page, target);
-        expected[name] = { focusVisible: true, outline: ring };
+        expected[name] = { focusVisible: true, outline };
       };
 
-      await focusOn('number input', page.getByLabel('Number input'));
-      await focusOn('radio button', page.getByRole('radio', { name: 'Number' }));
+      await focusOn('number input', page.getByLabel('Decimal integer'), insetRing);
+      // The inset ring lies between the card and the field's fill, so it needs 3:1 against both
+      const sides = await page.getByLabel('Decimal integer').evaluate((el) => ({
+        ring: getComputedStyle(el).outlineColor, fill: getComputedStyle(el).backgroundColor,
+        card: getComputedStyle(el.closest('section')!).backgroundColor,
+      }));
+      expect(contrast(hex(sides.ring), hex(sides.fill))).toBeGreaterThanOrEqual(3);
+      expect(contrast(hex(sides.ring), hex(sides.card))).toBeGreaterThanOrEqual(3);
+      for (const name of ['Random number', 'Copy number', 'Clear input']) {
+        await focusOn(`"${name}" button`, page.getByRole('button', { name }));
+      }
+      await focusOn('quick step', page.getByRole('button', { name: '+20', exact: true }));
+      await focusOn('Zero button', page.getByRole('button', { name: 'Zero', exact: true }));
+      // A radio button: its segment draws the ring
+      seen['input-type segment'] = await keyboardFocus(page, page.getByRole('radio', { name: 'Number' })).then(() =>
+        page.getByRole('radio', { name: 'Number' }).evaluate((radio) => {
+          const s = getComputedStyle(radio.closest('label')!);
+          return { focusVisible: radio.matches(':focus-visible'), outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}` };
+        }));
+      expected['input-type segment'] = { focusVisible: true, outline: ring };
       await focusOn('zoom button', page.getByRole('button', { name: 'Zoom in' }));
       await focusOn('colour swatch', page.getByRole('button', { name: 'Background color:' }));
       const trigger = page.getByRole('button', { name: '📦 Export' });
@@ -464,6 +548,12 @@ test.describe('design system on the components', () => {
       await page.getByRole('radio', { name: 'Date' }).check();
       await page.keyboard.press('Tab');
       await expect(page.getByRole('gridcell', { name: /^Choose / }).first()).toBeVisible();
+      await settle(page);
+      seen['date input'] = await page.getByLabel('Date input').evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { focusVisible: el.matches(':focus-visible'), outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}` };
+      });
+      expected['date input'] = { focusVisible: true, outline: insetRing };
       await page.keyboard.press('ArrowDown');
       await settle(page);
       seen['date-picker day'] = await page.evaluate(() => {
@@ -479,7 +569,7 @@ test.describe('design system on the components', () => {
       await openWithTheme(page, theme);
       const raised = await token(page, 'surface-raised');
       const fg = await token(page, 'fg');
-      await page.getByLabel('Number input').fill('20');
+      await page.getByLabel('Decimal integer').fill('20');
       const surfaces: Record<string, string> = {};
 
       // The colour-picker popover
@@ -489,7 +579,7 @@ test.describe('design system on the components', () => {
 
       // A toast, after an export
       await exportFile(page, 'svg');
-      surfaces.toast = await page.getByRole('status').locator('xpath=..').evaluate((el) => `${getComputedStyle(el).backgroundColor} / ${getComputedStyle(el).color}`);
+      surfaces.toast = await page.getByRole('status').filter({ hasText: 'download started' }).locator('xpath=..').evaluate((el) => `${getComputedStyle(el).backgroundColor} / ${getComputedStyle(el).color}`);
 
       // The date picker
       await page.getByRole('radio', { name: 'Date' }).check();

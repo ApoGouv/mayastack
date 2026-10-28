@@ -81,3 +81,87 @@ export function validateNumberInput(text: string): NumberInputValidation {
 
   return { status: 'invalid', reason: 'invalid-characters' };
 }
+
+/**
+ * The largest value the number input converts: 500 nines, i.e. 10^500 - 1.
+ */
+export const MAX_NUMBER_VALUE = 10n ** BigInt(MAX_SIGNIFICANT_DIGITS) - 1n;
+
+/**
+ * Counts the significant digits of a non-negative integer. Zero has one.
+ *
+ * A bigint has no leading zeros, so this is the length of its decimal digits.
+ *
+ * Example:
+ *   countSignificantDigits(0n)    => 1
+ *   countSignificantDigits(1000n) => 4
+ *
+ * @param value - A non-negative integer
+ * @returns The number of significant digits
+ */
+export function countSignificantDigits(value: bigint): number {
+  return value.toString().length;
+}
+
+/**
+ * Counts the leading zeros that can be removed from the text of the number
+ * input without changing its value, e.g. the "0" of "05" (typed after the
+ * initial 0) or the "00" of a pasted "007". A single "0" keeps its zero.
+ *
+ * Only text that is exactly the digits of a valid integer counts: text with
+ * surrounding whitespace, invalid text and over-long text are left as they are
+ * (0), so they keep their validation message.
+ *
+ * Example:
+ *   countRedundantLeadingZeros('05')   => 1
+ *   countRedundantLeadingZeros('000')  => 2
+ *   countRedundantLeadingZeros('0')    => 0
+ *   countRedundantLeadingZeros('012a') => 0
+ *
+ * @param text - The raw text of the input
+ * @returns The number of leading zeros to remove
+ */
+export function countRedundantLeadingZeros(text: string): number {
+  if (!/^\d+$/.test(text) || validateNumberInput(text).status !== 'valid') return 0;
+
+  return text.match(/^0+(?=\d)/)?.[0].length ?? 0;
+}
+
+/**
+ * Adds 1 to or subtracts 1 from a value of the number input, exactly.
+ *
+ * The result stays within 0 to MAX_NUMBER_VALUE: at either end, the value is
+ * returned unchanged rather than leaving the supported range.
+ *
+ * Example:
+ *   stepNumberValue(41n, 1)  => 42n
+ *   stepNumberValue(0n, -1)  => 0n
+ *
+ * @param value - A value from 0 to MAX_NUMBER_VALUE
+ * @param direction - 1 to increment, -1 to decrement
+ * @returns The new value, or the same value at the end of the range
+ */
+export function stepNumberValue(value: bigint, direction: 1 | -1): bigint {
+  const next = value + BigInt(direction);
+  return next < 0n || next > MAX_NUMBER_VALUE ? value : next;
+}
+
+/**
+ * Adds a step to a value of the number input, exactly, or returns null when
+ * the result would leave 0 to MAX_NUMBER_VALUE. The result is never clamped,
+ * so a step that cannot be taken in full is not taken at all. Landing exactly
+ * on either end is allowed.
+ *
+ * Example:
+ *   addToNumberValue(41n, 20n)                    => 61n
+ *   addToNumberValue(MAX_NUMBER_VALUE - 5n, 5n)   => MAX_NUMBER_VALUE
+ *   addToNumberValue(MAX_NUMBER_VALUE - 4n, 5n)   => null
+ *
+ * @param value - A value from 0 to MAX_NUMBER_VALUE
+ * @param step - The amount to add (negative to subtract)
+ * @returns The new value, or null when it would be out of range
+ */
+export function addToNumberValue(value: bigint, step: bigint): bigint | null {
+  const next = value + step;
+  return next < 0n || next > MAX_NUMBER_VALUE ? null : next;
+}

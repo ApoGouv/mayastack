@@ -71,12 +71,13 @@ Detailed requirements are in section G; the design system itself is documented i
 
 - **Visual identity:** obsidian and warm parchment surfaces, ceremonial gold and selective jade accents, with light and dark themes designed intentionally rather than inverted (G §3.3).
 - **Colour roles:** gold for primary actions, selection and focus; jade for success and active or on states; red for errors. Status is never communicated by colour alone. Gold fills always have a 1 px `accent-fg` border, in both themes, with dark text on gold.
-- **Foundation:** semantic colour tokens in `src/index.css` (light values in `@theme static`, dark values under `.dark`), WCAG 2.2 AA contrast, a shared `focus-ring` utility (2 px outline, 2 px offset), a reduced-motion rule and `color-scheme` per theme. Details and contrast tables are in `docs/DESIGN_SYSTEM.md`.
+- **Foundation:** semantic colour tokens in `src/index.css` (light values in `@theme static`, dark values under `.dark`), WCAG 2.2 AA contrast, a shared `focus-ring` utility (2 px outline, 2 px offset; on text fields `focus-ring-inset`, with a -2 px offset, since UI-06), a reduced-motion rule and `color-scheme` per theme. Details and contrast tables are in `docs/DESIGN_SYSTEM.md`.
 - **Typography:** one display font, Playfair Display, for the main heading and section headings only: the unmodified official file, self-hosted with its OFL licence, never subset, converted or loaded from a CDN. Interface text and numbers use system fonts, with `tabular-nums` where digits must align.
 - **Brand mark:** the logo and favicon keep their geometry and identity, recoloured to a gold disc with dark marks and a contrasting `accent-fg` ring. The main heading uses `fg`; "Stack" in the wordmark uses `accent-fg`.
-- **Shape:** no zero-radius rule; controls `rounded-md`, cards and popovers `rounded-lg`, pills `rounded-full` (G §3.4, `docs/DESIGN_SYSTEM.md` §7).
+- **Shape:** no zero-radius rule; buttons and form fields `rounded` (revised in UI-06 from `rounded-md`), cards and popovers `rounded-lg`, pills `rounded-full` (G §3.4, `docs/DESIGN_SYSTEM.md` §7).
 - **Workspace:** a two-column workspace based on the first design-reference concept, without a permanent third panel (G §3.1–§3.2).
-- **Product decisions:** Number mode starts at `0`; Clear resets it to `0`; Random generates 1–500 significant digits; stepper presets 1, 5, 20, 400 and 8,000 plus a custom increment; a significant-digit count; a compact breakdown with on-demand exact contributions and Copy Formula; the existing shell zero glyph is kept; display preferences, including colours, are remembered (G §4).
+- **Product decisions:** Number mode starts at `0`; Zero sets it to `0` and Clear empties the field (revised in UI-06; G §4.1 had Clear reset to `0`); Random generates 1–10 significant digits (revised in UI-06; G §4.2 had 1–500), while the input still accepts 500; quick steps +1, +5, +20 and +400, with decrement controls, the 8,000 preset and a custom increment deferred (revised in UI-06, see section D); Copy number; a significant-digit count; a compact breakdown with on-demand exact contributions and Copy Formula; the existing shell zero glyph is kept; display preferences, including colours, are remembered (G §4).
+- **Number input:** follows the input card of the third design-reference concept (approved 2026-10-28, UI-06): an "Input Type" title with the Number/Date modes as a segmented control beside it, a full-width field with a visible "Decimal integer" label and the count beside it, Random, Copy and Clear inside the field, and a row of quick steps with Zero at its end. Its mockup wording and styling framework are not taken over, and the date picker is unchanged.
 - **Viewer and export:** the exportable grid stays an independent setting; tier guides and annotations are screen-only and never exported; export output does not depend on zoom, scroll or theme; Export stays reachable when the result is off-screen (G §5–§6).
 - **Domain:** the date mode is a component-wise numerical representation of a Gregorian date, not a Mayan calendar conversion. A Long Count mode is deferred (G §2, §10.1).
 
@@ -87,9 +88,9 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-01 | Fix theme defects | 0 Theme defects | completed | none | 0 |
 | UI-02 | Design-system foundation | 1 Design system | completed | UI-01 | 1 (PR 1) |
 | UI-03 | Apply the foundation to existing components | 1 Design system | completed | UI-02 | 1 (PR 2) |
-| UI-04 | Two-column workspace layout | 2 Workspace | in progress | UI-03 | 2 |
-| UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | not started | UI-04 | 3 |
-| UI-06 | Random, stepper presets and custom increment | 3 Input controls | not started | UI-05 | 3 |
+| UI-04 | Two-column workspace layout | 2 Workspace | completed | UI-03 | 2 |
+| UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | completed | UI-04 | 3 |
+| UI-06 | Random, quick steps, Clear and Zero, and Copy number | 3 Input controls | in progress | UI-05 | 3 |
 | UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | not started | UI-04 | 4 |
 | UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | not started | UI-03 | 6 (persistence) |
 | UI-09 | Screen-only tier guides | 5 Preferences and viewer aids | not started | UI-04, UI-08 | 5 |
@@ -160,7 +161,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-04: Two-column workspace layout
 
-- **Status:** in progress, on the branch `feat/ui-04-workspace-layout`.
+- **Status:** completed. Its acceptance criteria were verified on 2026-10-27 on the branch `feat/ui-04-workspace-layout`, before it was committed.
+- **Evidence:** PR #20 (commit `30edea2`, merge `8600117`).
 - **Goal:** the approved responsive two-column workspace, with a prominent numeral viewer.
 - **Scope and acceptance:** G §3.2 and §8, Stage 2. Export must stay reachable when the result is off-screen (G §6).
 - **Approved layout (2026-10-27),** following the first design-reference concept:
@@ -170,24 +172,89 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - The floating Export trigger stays, with only the adjustments needed to avoid collisions. Moving Export into the viewer header is not part of UI-04 (see UI-11).
   - All four cards stay in place for empty, invalid and valid input. Without a valid result, the viewer and the base-20 card each show a short instruction instead of a result, and there are no viewer controls or Export (an initial value is UI-05).
   - The section headings become `h2`. The emoji in labels and the theme menu's Escape and arrow keys are deferred (section D).
-- **Next action:** review the implementation on its branch.
 
 ### UI-05: Initial value, Clear and significant-digit count
 
-- **Status:** not started.
+- **Status:** completed. Approved at its review checkpoint on 2026-10-28, on the branch `feat/ui-05-06-input-controls`, which it shares with UI-06 (section A).
+- **Evidence:** commit `5408013`. The pull request is opened together with UI-06's.
+- **Changed later by UI-06:** Clear now empties the field, and a separate Zero sets it to `0`. The count is above the field rather than below it and reads "N digits". The arrow-key hint is the field's title and a visually hidden description instead of visible text.
 - **Scope and acceptance:** G §4.1 and §4.4, and the matching parts of §8, Stage 3. Tests that assume an initially empty input are updated deliberately (G §4.1).
-- **Next action:** define the detailed scope when the task is selected.
+- **Approved scope (2026-10-28),** after the UI-05 preflight:
+  - Number mode starts at `0`, with the existing shell zero glyph, its base-20 representation and Export.
+  - A secondary Clear button in the number input card sets the input to `0` from any text, stays enabled at `0` and keeps the focus.
+  - A count for valid input only, such as "1 significant digit" or "500 significant digits", without the limit; hidden for empty, invalid and over-limit input and in Date mode.
+  - Leading zeros typed or pasted before a valid integer are removed in the field, keeping the caret or selection on the same digits, so typing 5 after the initial 0 gives 5. Invalid, over-long and whitespace-padded text is left as it is, with its message.
+  - While the number input has focus, Up and Down add or subtract exactly 1 from a valid integer, with bigint arithmetic. The value stays as it is at 0 and at the 500-digit maximum, and empty or invalid text is not changed. Arrow keys with modifiers keep their usual effect. A visible hint and `aria-keyshortcuts` describe the keys.
+  - The count and the hint are linked with `aria-describedby`, after the error message, without a new live region.
+  - The zoom level is kept when the value changes, including through Clear and the arrow keys. Date mode, the date picker's clear button, the viewer, rendering and export are unchanged.
+  - Not included: select-on-focus (section D) and the UI-06 controls.
+- **Validation (2026-10-28, on the branch, before any commit):**
+  - `npm test`: 16 files, 308 tests passed.
+  - `npx tsc -b --noEmit`: no errors.
+  - `npm run lint`: 0 errors and the 4 existing warnings.
+  - `npm run build`: succeeded.
+  - `npm run test:e2e`: 82 passed.
+  - Negative controls:
+    - Against a build of `main` (`8600117`), 12 of the 14 new or updated UI-05 browser tests failed as expected. The other two check preserved behaviour (clipboard shortcuts, Date mode).
+    - With the caret restoration removed, three unit tests and the browser editing test failed.
+  - Screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors.
+### UI-06: Random, quick steps, Clear and Zero, and Copy number
 
-### UI-06: Random, stepper presets and custom increment
-
-- **Status:** not started.
-- **Scope and acceptance:** G §4.2 and §4.3, and the matching parts of §8, Stage 3.
-- **Next action:** define the detailed scope when the task is selected.
+- **Status:** in progress, on the branch `feat/ui-05-06-input-controls`, after UI-05 (section A).
+- **Scope and acceptance:** G §4.2, the parts of G §4.3 kept below, and the matching parts of §8, Stage 3, as revised on 2026-10-28 (plan-change log). The number input follows the third design-reference concept (section B).
+- **Approved scope (2026-10-28):**
+  - **Label:** the field's visible and accessible label is "Decimal integer". The significant-digit count moves beside it, still for valid input only.
+  - **In the field:** icon buttons Random, Copy and Clear, named "Random number", "Copy number" and "Clear input".
+  - **Clear** empties the field, from any text, including `0`. **Zero** sets it to `0`, from any text, including empty text. Both stay available and keep the focus. The initial value is still `0`.
+  - **Quick steps** +1, +5, +20 and +400 add exactly their amount to a valid integer, with bigint arithmetic, and give canonical text. Their native titles add the third concept's notes: "+5 (1 Bar)", "+20 (Tier ×1)" and "+400 (Tier ×2)".
+  - **Unavailable steps:** a step that would go past 10^500 − 1 is unavailable, never clamped; landing exactly on it is allowed. All steps are unavailable while the input is empty or invalid, and the text is not changed. Unavailable buttons use `aria-disabled`, keep their focus and are linked to a visible reason.
+  - **Whitespace:** text with surrounding whitespace is stepped as `validateNumberInput` and the arrow keys accept it, giving canonical text. The validation is not tightened.
+  - **Random** replaces any text, including empty or invalid text, with a positive integer whose length is chosen uniformly from 1 to 10 digits (`MAX_RANDOM_DIGITS`; first planned as 1 to 500, revised in review). The input's 500-digit maximum is unchanged. The first digit is 1–9. It uses `crypto.getRandomValues` with rejection sampling, with no `Number` arithmetic on the value. A visually hidden polite status gives the digit count, not the number.
+  - **Copy** copies the valid integer as canonical text, through the reusable `copyText` helper (`src/utils/clipboard.ts`), and reports success or failure in the existing toasts. It is unavailable for empty or invalid input, with a visible reason.
+  - **Unchanged:** the Up and Down arrow keys still add or subtract 1. Date mode, the viewer, rendering and export, and the zoom through value changes, are unchanged.
+  - **Not included, deferred in section D:** decrement controls, the 8,000 preset and a custom increment.
+- **Refinements requested in review (2026-10-28):**
+  - The number input fills its card's width (no `max-w-sm`) and is taller.
+  - Random, Copy and Clear get native titles that match their names.
+  - Zero gets a gold tint and an `accent-fg` border on hover and keyboard focus.
+  - The Number/Date selector follows the third concept: an icon and the stable title "Input Type" on the left, and the modes on the right as a compact segmented control, the selected one gold. It still uses native radio buttons in a fieldset named by its legend, without the extra `radiogroup` label. The date picker and the modes' behaviour are unchanged.
+- **Visual polish requested in review (2026-10-28):**
+  - The arrow-key hint is no longer visible text: the field has the title "Enter a decimal integer. Use ↑/↓ to change by 1.", and the hint stays as a visually hidden description with `aria-keyshortcuts`.
+  - The count reads "1 digit" or "N digits", smaller and secondary. The count itself is unchanged.
+  - The field keeps its 1 px `line-strong` boundary, now with an inset shadow; the red error border and the focus ring stay. A borderless field was tried and reverted after a contrast review: no field fill reaches 3:1 against the card (at most 1.30:1 in the light theme and 1.49:1 in the dark one, against 4.12:1 and 4.91:1 for `line-strong`), and a boundary shown only on hover would not help on touch screens or before any interaction.
+  - Zero's title is "0 (Shell)".
+  - The selector is lower and has no container border. The Number option reads "Number (Decimal)". The Date option stays "Date": the third concept's "Date (Long Count)" would describe a conversion the date mode does not do (G §2). On a phone, the options wrap under the title, on the right.
+- **Visual refinements requested in review (2026-10-28):**
+  - Buttons and the form fields are `rounded` instead of `rounded-md`: the decimal and date inputs, Random, Copy and Clear, the steps and Zero. The others already were. Left as they are: the selector's track (`rounded-md`, concentric with its segments), the round theme button, the Export pill and the toggle switch (`rounded-full`), and the cards, popovers, settings group, count badge and base-20 boxes, which are not buttons or fields.
+  - The steps' row is 4 px further from the field (`mt-4`).
+  - The number and date inputs draw the focus ring over their own boundary (`focus-ring-inset`, a -2 px offset). Buttons keep the outer ring, because an inset one would be gold on gold on the Export buttons and the selected segment.
+  - The four workspace cards have 16 px padding (`p-4`) instead of 24 px; the gap between them stays 24 px.
+- **Validation (2026-10-28, on the branch, before any commit):**
+  - `npm test`: 18 files, 401 tests. 5 of 7 full runs passed. Each of the other 2 had one HomeView test that renders a 500-digit numeral exceed the 5 s default timeout. A run with the verbose reporter had 7 timeouts, all in files UI-06 does not touch (the Git workflow scripts, DateInput and exportUtils). Running only `src/`, the baseline and the branch both passed twice, in about the same time (57–60 s). Alone, the slowest affected test takes about 2 s.
+  - `npx tsc -b --noEmit`: no errors.
+  - `npm run lint`: 0 errors and the 4 existing warnings.
+  - `npm run build`: succeeded.
+  - `npm run test:e2e`: 87 passed.
+  - `git diff --check`: clean.
+  - Negative controls:
+    - With steps clamped at the maximum and Clear setting `0` again, 18 unit and component tests failed.
+    - Against a build of `5408013`, 45 of the 53 tests in the two changed browser test files failed, most of them because of the new label.
+  - Screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors.
+- **Validation of the review refinements (2026-10-28, rerun):**
+  - Focused unit and component tests (random number, clipboard, number input and steps, mode selector, HomeView): all passed. The full unit suite was not rerun.
+  - `npx tsc -b --noEmit`: no errors.
+  - `npm run lint`: 0 errors and the 4 existing warnings.
+  - `npm run build`: succeeded.
+  - The affected browser tests (`workspace-layout`, `design-foundation`, `numeral-viewport`): 79 passed.
+  - Screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors.
+- **Validation of the visual polish (2026-10-28, rerun):** focused tests for NumberInput, RenderModeSelector and HomeView: 178 passed; `npx tsc -b --noEmit`: no errors; `npm run lint`: 0 errors and the 4 existing warnings; `git diff --check`: clean; the affected browser tests: 79 passed; screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors. The full unit suite was not rerun.
+- **Validation of the visual refinements (2026-10-28, rerun):** focused tests for the input components and HomeView: 182 passed; `npx tsc -b --noEmit`: no errors; `npm run lint`: 0 errors and the 4 existing warnings; `npm run build`: succeeded; `git diff --check`: clean; the affected browser tests, now also checking the inset ring on both fields and its 3:1 contrast against the card and the field's fill: 79 passed; screenshots at 375, 768 and 1280 px in both themes, including keyboard focus on the fields and buttons, with no page overflow or console errors. The full unit suite was not rerun.
+- **Next action:** review checkpoint (section A).
 
 ### UI-07: Base-20 breakdown and Copy Formula
 
 - **Status:** not started.
-- **Scope and acceptance:** G §4.5 and §8, Stage 4. `getPlaceValues` (`src/utils/base20.ts`) exists and is tested, but no component uses it yet.
+- **Scope and acceptance:** G §4.5 and §8, Stage 4. `getPlaceValues` (`src/utils/base20.ts`) exists and is tested, but no component uses it yet. Copy Formula copies plain text, so it can reuse `copyText` (`src/utils/clipboard.ts`, from UI-06) and its own wording for the success and failure messages.
 - **Next action:** define the detailed scope when the task is selected.
 
 ### UI-08: Shared persistence for display preferences
@@ -242,7 +309,7 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Alternative zero glyph | deferred | Needs artwork, attribution, licensing and rendering review (G §4.6, §10) |
 | Long Count date mode | deferred | Needs its own research and specification (G §10.1) |
 | Material colour presets | proposed | Listed as not approved (G §10) |
-| Copy SVG code | proposed | Listed as not approved (G §10) |
+| Copy SVG code | proposed | Listed as not approved (G §10). Copies the SVG markup as text, so it could reuse `copyText` (`src/utils/clipboard.ts`); see the renderer copy and export options below |
 | Separate Date tab | proposed | Listed as not approved (G §10) |
 | Tier-count chip | proposed | Listed as not approved (G §10) |
 | Glyph legend (dot = 1, bar = 5, shell = 0) | proposed | Seen in design references; to be reviewed separately |
@@ -254,14 +321,21 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Date picker's clear button reachable with the keyboard | proposed | react-datepicker renders it with `tabIndex={-1}`; needs a replacement button in `DateInput.tsx`. Found during UI-03 |
 | Lining figures in the headings | proposed | Playfair Display's default old-style figures lower the "20" in "Base-20 Representation". Found during UI-03 |
 | A visible focus ring on the colour picker's sliders | proposed | react-colorful shows focus only by enlarging the pointer. Found during UI-03 |
+| Select the number on focus | proposed | Would let a click or Tab into the field replace the whole value. Not implemented: UI-05 removes redundant leading zeros instead. Found during UI-05 |
+| Export trigger over the footer at the end of the page | proposed | Below 640 px, the floating trigger covers part of the footer's copyright line at the very end of the page, whenever there is a result, now also from the start because of the initial 0. Found during UI-05; see UI-11 |
+| Decrement controls | deferred | From G §4.3. Left out of UI-06, which follows the third design-reference concept's add-only quick steps (2026-10-28). The Down arrow key still subtracts 1 |
+| Stepper preset 8,000 | deferred | From G §4.3. Left out of UI-06 with the decrement controls (2026-10-28) |
+| Custom increment | deferred | From G §4.3: a positive integer of up to 500 digits, validated with `validateNumberInput`. Left out of UI-06 (2026-10-28) |
+| Copy the base-20 breakdown | proposed | A plain-text copy of the representation shown in the base-20 card, next to UI-07's Copy Formula. Text, so it can reuse `copyText`. Its format needs a decision. Added 2026-10-28 |
+| Renderer copy and export options | proposed | Three distinct operations, to be decided separately: copying the SVG markup as text (as "Copy SVG code", which can reuse `copyText`); copying the rendered image to the clipboard where the browser supports it (`ClipboardItem` with an image, which needs its own helper and support checks rather than `copyText`); and downloading SVG or PNG files, which exists today and is reviewed in UI-11. Added 2026-10-28 |
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1.
-- **In progress:** UI-04, on the branch `feat/ui-04-workspace-layout`.
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, and UI-05 (commit `5408013`, not yet merged).
+- **In progress:** UI-06, on the branch `feat/ui-05-06-input-controls`, at its review checkpoint. One pull request follows for UI-05 and UI-06.
 - **Blockers:** none.
 - **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11.
-- **Next task: UI-04,** in progress. Six later tasks depend on it (UI-05, UI-07, UI-09, UI-11, UI-12 and UI-13). See its entry in section C.
+- **Next task: UI-06,** in progress. See its entry in section C.
 
 ### Plan-change log
 
@@ -275,6 +349,12 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-26 | Recorded UI-03 as completed (verified on its branch, before the commit and PR), and added three proposals found during it to section D: a keyboard-reachable clear button for the date picker, lining figures in the headings, and a focus ring on the colour picker's sliders. | Checked against the acceptance criteria, the tests, the export comparison and screenshots; the proposals need separate decisions |
 | 2026-10-27 | Recorded UI-03's merge (PR #19) and started UI-04 with the approved layout (UI-04 in section C): two columns from 1024 px, the floating Export trigger kept, the section headings as `h2`, and the emoji and theme-menu proposals deferred. | Approved after the UI-04 preflight, which compared the first design-reference concept with the existing layout |
 | 2026-10-27 | Changed UI-04 to keep every card in place without a valid result, with an instruction in the viewer and the base-20 card and still no Export. The base-20 representation becomes its own card, between the input and the settings, as in the design reference. | Requested in the UI-04 review: a persistent workspace, which UI-05 can then fill with its initial value without panels appearing or disappearing |
+| 2026-10-28 | Recorded UI-04 as completed (PR #20, commit `30edea2`, merge `8600117`), and started UI-05 on the shared branch `feat/ui-05-06-input-controls`. | Verified against the merged `main` and the UI-04 validation |
+| 2026-10-28 | Extended UI-05's approved scope (UI-05 in section C): leading zeros typed or pasted before a valid integer are removed, so typing replaces the initial 0, and the Up and Down arrow keys add or subtract 1. Select-on-focus is recorded as a proposal (section D). Stepper buttons, presets, custom increments and Random stay in UI-06. | Approved after the UI-05 preflight, so that starting at 0 does not lead to values such as "05" |
+| 2026-10-28 | Recorded UI-05 as completed (approved at its review checkpoint, commit `5408013`), and started UI-06 on the same branch. | Approved after the UI-05 review; its pull request is opened with UI-06's |
+| 2026-10-28 | Revised UI-06's scope (UI-06 in section C): the number input follows the third design-reference concept's input card, which is recorded as its interaction reference (section B). Clear now empties the field instead of resetting it to `0` (superseding that part of G §4.1), and a separate Zero sets it to `0`. The quick steps are +1, +5, +20 and +400. Decrement controls, the 8,000 preset and a custom increment (G §4.3) are deferred to section D, not removed. Copy number is added, with a reusable plain-text clipboard helper. Section D gains proposals for copying the base-20 breakdown and for renderer copy and export options. Section G is unchanged. | Approved after the revised UI-06 investigation: a compact input matching the chosen design reference, with empty input and numeric zero kept distinct |
+| 2026-10-28 | Capped Random at 10 significant digits, uniformly 1 to 10 (UI-06 in section C), instead of the 1 to 500 of G §4.2, which stays as first written. The input still accepts 500 digits, and the steps still reach the 500-digit maximum. | Requested in the UI-06 review: shorter random numbers are easier to read and compare |
+| 2026-10-28 | Revised two design-system rules in UI-06 (UI-06 in section C): buttons and form fields are `rounded` instead of `rounded-md`, with the round and pill shapes and the selector's track kept; the number and date inputs draw the focus ring over their own boundary with a new `focus-ring-inset` utility, while buttons keep `focus-ring`. The four workspace cards have `p-4` instead of `p-6`. Section B and `docs/DESIGN_SYSTEM.md` §6–§7 were updated to match. | Requested in the UI-06 review: a tighter, more consistent shape, a focus ring that adds nothing around a field, and more room for content on small screens |
 
 ## F. Completion record
 

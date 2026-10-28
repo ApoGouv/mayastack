@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DisplaySettingsProvider } from '@/context/DisplaySettingsContext';
-import { prepareSvgCloneForExport } from '@utils/exportUtils';
+import { MAX_DIGITS_IN_FILENAME, prepareSvgCloneForExport } from '@utils/exportUtils';
 import HomeView from './HomeView';
 
 afterEach(() => {
@@ -16,7 +16,7 @@ const renderHomeView = () => {
       <HomeView />
     </DisplaySettingsProvider>
   );
-  const input = screen.getByLabelText('Number input') as HTMLInputElement;
+  const input = screen.getByLabelText('Decimal integer') as HTMLInputElement;
   const enter = (text: string) => fireEvent.change(input, { target: { value: text } });
   /** The base-10 place value (digit × 20^exponent) of each rendered digit stack */
   const renderedPlaceValues = () =>
@@ -29,8 +29,18 @@ const renderHomeView = () => {
   /** The rendered numeral SVG, the source of SVG and PNG export */
   const numeralSvg = () => container.querySelector('svg.mep-svg') as SVGSVGElement;
 
-  return { enter, renderedPlaceValues, numeralSvg };
+  /** Presses a key in the number input, as the arrow keys are pressed */
+  const press = (key: string) => fireEvent.keyDown(input, { key });
+  const clear = () => fireEvent.click(screen.getByRole('button', { name: 'Clear input' }));
+  const zero = () => fireEvent.click(screen.getByRole('button', { name: 'Zero' }));
+  const step = (amount: string) => fireEvent.click(screen.getByRole('button', { name: amount }));
+
+  return { input, enter, press, clear, zero, step, renderedPlaceValues, numeralSvg };
 };
+
+/** The whole text of a workspace card, from its heading */
+const cardText = (heading: string) =>
+  screen.getByRole('heading', { level: 2, name: heading }).parentElement!.textContent;
 
 /** The export clone of an SVG at its logical size, serialized as an exported file would be */
 const exportedMarkup = (svg: SVGSVGElement) => {
@@ -45,9 +55,17 @@ const exportedMarkup = (svg: SVGSVGElement) => {
 };
 
 describe('HomeView number mode', () => {
-  it('renders no glyphs while the input is empty', () => {
-    const { enter, renderedPlaceValues } = renderHomeView();
-    expect(renderedPlaceValues()).toEqual([]);
+  // Changed deliberately in UI-05 (roadmap G §4.1): the input starts at 0 instead of empty
+  it('starts at 0 with the zero glyph, and renders no glyphs while the input is emptied', () => {
+    const { input, enter, renderedPlaceValues, numeralSvg } = renderHomeView();
+    expect(input.value).toBe('0');
+    expect(renderedPlaceValues()).toEqual(['0']);
+    // The existing zero digit stack: one shell, no dots or bars
+    const stack = numeralSvg().querySelector('g[data-digit-index]')!;
+    expect(stack.getAttribute('data-digit-value')).toBe('0');
+    expect(stack.getAttribute('data-digit-exponent')).toBe('0');
+    expect(cardText('Base-20 Representation')).toContain('0 × 200');
+
     enter('42');
     enter('');
     expect(renderedPlaceValues()).toEqual([]);
@@ -134,21 +152,29 @@ describe('HomeView numeral viewport', () => {
     expect(viewer.style.maxHeight).toBe('480px');
   });
 
+  // Changed deliberately in UI-05 (roadmap G §4.1): the initial 0 is a result, so Export is offered at once
   it('offers Export exactly while there is a result to export', () => {
-    const { enter } = renderHomeView();
+    const { enter, clear, zero } = renderHomeView();
     const exportButton = () => screen.queryByRole('button', { name: '📦 Export' });
 
+    expect(exportButton()).not.toBeNull();
+    enter('');
     expect(exportButton()).toBeNull();
     enter('9'.repeat(500));
     expect(exportButton()).not.toBeNull();
     enter('12.5');
     expect(exportButton()).toBeNull();
+    zero();
+    expect(exportButton()).not.toBeNull();
+    clear();
+    expect(exportButton()).toBeNull();
   });
 
+  // Changed deliberately in UI-05: starts at 0 instead of empty. Changed in UI-06: Zero returns
+  // to 0, and Clear empties the field
   it('keeps every workspace card in place for empty, invalid and valid input, without stale results', () => {
-    const { enter, renderedPlaceValues } = renderHomeView();
-    // The whole text of a card, from its heading
-    const card = (heading: string) => screen.getByRole('heading', { level: 2, name: heading }).parentElement!.textContent;
+    const { input, enter, clear, zero, renderedPlaceValues } = renderHomeView();
+    const card = cardText;
     const expectNoResult = (viewer: string, base20: string) => {
       expect(card('Mayan Numeral')).toBe(`Mayan Numeral${viewer}`);
       expect(card('Base-20 Representation')).toBe(`Base-20 Representation${base20}`);
@@ -156,7 +182,9 @@ describe('HomeView numeral viewport', () => {
       expect(renderedPlaceValues()).toEqual([]);
     };
 
-    expect(screen.getByLabelText('Number input')).toHaveProperty('value', '');
+    expect(input.value).toBe('0');
+    expect(renderedPlaceValues()).toEqual(['0']);
+    enter('');
     expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
     enter('123');
     expect(card('Base-20 Representation')).toContain('6 × 201 • 3 × 200');
@@ -164,6 +192,11 @@ describe('HomeView numeral viewport', () => {
     // Invalid after a valid number: nothing of 123 is left
     enter('12.5');
     expectNoResult('Correct the number to see its Mayan numeral.', 'Correct the number to see it in base 20.');
+    zero();
+    expect(renderedPlaceValues()).toEqual(['0']);
+    clear();
+    expect(input.value).toBe('');
+    expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
     enter('123');
     enter('');
     expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
@@ -267,5 +300,251 @@ describe('HomeView export filenames', () => {
 
     enter('1'.repeat(250) + '2' + '1'.repeat(249));
     expect(viewer.scrollTop).toBe(0);
+  });
+});
+
+describe('HomeView initial 0, Zero, Clear and arrow keys', () => {
+  const numeralName = (number: string, digits: number) =>
+    `Mayan numeral for ${number}: ${digits} stacked base-20 ${digits === 1 ? 'digit' : 'digits'}, highest place value at the top`;
+  const zoomText = () => screen.getByRole('group', { name: 'Zoom controls' }).textContent;
+
+  /** The name of the SVG file the Export menu downloads */
+  async function exportedSvgName() {
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '📦 Export' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Export SVG image/ }));
+    await waitFor(() => expect(names).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: '📦 Export' }));
+    vi.mocked(HTMLAnchorElement.prototype.click).mockRestore();
+    return names[0];
+  }
+
+  it('exports the initial 0 as its zero glyph, under the zero filename', async () => {
+    const { numeralSvg } = renderHomeView();
+    expect(screen.getByRole('img', { name: numeralName('0', 1) })).toBeTruthy();
+    expect(screen.getByText('1 digit')).toBeTruthy();
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-0.svg');
+    const markup = exportedMarkup(numeralSvg());
+    expect(markup.match(/data-digit-index=/g)).toHaveLength(1);
+    expect(markup).toContain('data-digit-value="0"');
+  });
+
+  // Changed deliberately in UI-06: Zero, not Clear, returns to 0
+  it('rebuilds everything from 0 after Zero, with nothing left of a 500-digit number', async () => {
+    const { input, enter, zero, renderedPlaceValues, numeralSvg } = renderHomeView();
+    enter('9'.repeat(500));
+    expect(renderedPlaceValues()).toHaveLength(385);
+
+    zero();
+    expect(input.value).toBe('0');
+    expect(renderedPlaceValues()).toEqual(['0']);
+    expect(screen.getByRole('img', { name: numeralName('0', 1) })).toBeTruthy();
+    expect(cardText('Base-20 Representation')).toBe('Base-20 RepresentationNumber0 × 200');
+    expect(screen.getByText('1 digit')).toBeTruthy();
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-0.svg');
+    expect(exportedMarkup(numeralSvg()).match(/data-digit-index=/g)).toHaveLength(1);
+  });
+
+  it('resets empty and invalid input to 0 with Zero', () => {
+    const { input, enter, zero, renderedPlaceValues } = renderHomeView();
+    for (const text of ['', '12.5', '9'.repeat(501)]) {
+      enter(text);
+      expect(renderedPlaceValues()).toEqual([]);
+      zero();
+      expect(input.value).toBe('0');
+      expect(renderedPlaceValues()).toEqual(['0']);
+    }
+  });
+
+  // Changed deliberately in UI-06: Clear empties the field instead of setting it to 0
+  it('empties zero, valid and invalid input with Clear, leaving no result rather than the zero glyph', () => {
+    const { input, enter, clear, renderedPlaceValues } = renderHomeView();
+    for (const text of ['0', '123', '12.5', '9'.repeat(501)]) {
+      enter(text);
+      clear();
+      expect(input.value).toBe('');
+      expect(renderedPlaceValues()).toEqual([]);
+      expect(screen.queryByText(/^\d+ digits?$/)).toBeNull();
+      expect(screen.queryByRole('button', { name: '📦 Export' })).toBeNull();
+      expect(cardText('Base-20 Representation')).toBe('Base-20 RepresentationEnter a whole number to see it in base 20.');
+    }
+  });
+
+  it('updates the input, count, numeral, base-20 card and filename together with the arrow keys', async () => {
+    const { input, press, renderedPlaceValues } = renderHomeView();
+    for (let i = 0; i < 20; i++) press('ArrowUp');
+    expect(input.value).toBe('20');
+    expect(screen.getByText('2 digits')).toBeTruthy();
+    expect(renderedPlaceValues()).toEqual(['20', '0']);
+    expect(screen.getByRole('img', { name: numeralName('20', 2) })).toBeTruthy();
+    expect(cardText('Base-20 Representation')).toContain('1 × 201 • 0 × 200');
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-20.svg');
+
+    press('ArrowDown');
+    expect(input.value).toBe('19');
+    expect(screen.getByText('2 digits')).toBeTruthy();
+    expect(renderedPlaceValues()).toEqual(['19']);
+    expect(cardText('Base-20 Representation')).toContain('19 × 200');
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-19.svg');
+  });
+
+  it('keeps zero at zero and the largest value at 500 digits with the arrow keys', () => {
+    const { input, enter, press, renderedPlaceValues } = renderHomeView();
+    press('ArrowDown');
+    expect(input.value).toBe('0');
+    expect(renderedPlaceValues()).toEqual(['0']);
+
+    const maxDigits = '9'.repeat(500);
+    enter(maxDigits);
+    press('ArrowUp');
+    expect(input.value).toBe(maxDigits);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(renderedPlaceValues().reduce((sum, value) => sum + BigInt(value), 0n)).toBe(BigInt(maxDigits));
+  });
+
+  it('steps exactly beyond Number.MAX_SAFE_INTEGER', () => {
+    const { input, enter, press, renderedPlaceValues } = renderHomeView();
+    enter('9007199254740992');
+    press('ArrowUp');
+    expect(input.value).toBe('9007199254740993');
+    expect(screen.getByRole('img', { name: numeralName('9007199254740993', 13) })).toBeTruthy();
+    expect(renderedPlaceValues().reduce((sum, value) => sum + BigInt(value), 0n)).toBe(9007199254740993n);
+  });
+
+  it('leaves empty and invalid input unchanged with the arrow keys', () => {
+    const { input, enter, press, renderedPlaceValues } = renderHomeView();
+    for (const text of ['', '12.5']) {
+      enter(text);
+      press('ArrowUp');
+      press('ArrowDown');
+      expect(input.value).toBe(text);
+      expect(renderedPlaceValues()).toEqual([]);
+    }
+  });
+
+  it('keeps the zoom level through Zero, the quick steps, Random and the arrow keys', () => {
+    const { enter, press, zero, step } = renderHomeView();
+    enter('123');
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    const zoomed = zoomText();
+    expect(zoomed).not.toBe('100%');
+    press('ArrowUp');
+    expect(zoomText()).toBe(zoomed);
+    zero();
+    expect(zoomText()).toBe(zoomed);
+    step('+400');
+    expect(zoomText()).toBe(zoomed);
+    // A fixed random source: a 3-digit number, so the test stays quick
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+      (array as Uint32Array)[0] = 2;
+      return array;
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Random number' }));
+    expect(screen.getByLabelText<HTMLInputElement>('Decimal integer').value).toBe('322');
+    expect(zoomText()).toBe(zoomed);
+  });
+
+  it('keeps the number through a switch to Date mode, where there are no number actions or count', () => {
+    const { enter } = renderHomeView();
+    enter('57');
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    for (const name of ['Random number', 'Copy number', 'Clear input', '+1', '+5', '+20', '+400', 'Zero']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    }
+    expect(screen.queryByText(/^\d+ digits?$/)).toBeNull();
+    expect(screen.queryByText('Up and Down arrow keys add or subtract 1.')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Number (Decimal)' }));
+    expect((screen.getByLabelText('Decimal integer') as HTMLInputElement).value).toBe('57');
+    expect(screen.getByText('2 digits')).toBeTruthy();
+  });
+});
+
+describe('HomeView quick steps and Random', () => {
+  const numeralName = (number: string, digits: number) =>
+    `Mayan numeral for ${number}: ${digits} stacked base-20 ${digits === 1 ? 'digit' : 'digits'}, highest place value at the top`;
+
+  /** The name of the SVG file the Export menu downloads */
+  async function exportedSvgName() {
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '📦 Export' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Export SVG image/ }));
+    await waitFor(() => expect(names).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: '📦 Export' }));
+    vi.mocked(HTMLAnchorElement.prototype.click).mockRestore();
+    return names[0];
+  }
+
+  it('updates the input, count, numeral, base-20 card and filename together with each step', async () => {
+    const { input, step, renderedPlaceValues } = renderHomeView();
+    step('+20');
+    expect(input.value).toBe('20');
+    expect(screen.getByText('2 digits')).toBeTruthy();
+    expect(renderedPlaceValues()).toEqual(['20', '0']);
+    expect(screen.getByRole('img', { name: numeralName('20', 2) })).toBeTruthy();
+    expect(cardText('Base-20 Representation')).toContain('1 × 201 • 0 × 200');
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-20.svg');
+
+    step('+400');
+    step('+5');
+    step('+1');
+    expect(input.value).toBe('426');
+    expect(renderedPlaceValues()).toEqual(['400', '20', '6']);
+    expect(cardText('Base-20 Representation')).toContain('1 × 202 • 1 × 201 • 6 × 200');
+    expect(await exportedSvgName()).toBe('mayan-numeral-number-426.svg');
+  });
+
+  it('renders the largest value reached with a step, and goes no further', () => {
+    const { input, enter, step, renderedPlaceValues } = renderHomeView();
+    const max = BigInt('9'.repeat(500));
+    enter((max - 400n).toString());
+    step('+400');
+    expect(input.value).toBe('9'.repeat(500));
+    step('+1');
+    expect(input.value).toBe('9'.repeat(500));
+    expect(renderedPlaceValues()).toHaveLength(385);
+    expect(renderedPlaceValues().reduce((sum, value) => sum + BigInt(value), 0n)).toBe(max);
+  });
+
+  it('leaves empty and invalid input unchanged with the steps', () => {
+    const { input, enter, step, renderedPlaceValues } = renderHomeView();
+    for (const text of ['', '12.5', '9'.repeat(501)]) {
+      enter(text);
+      step('+1');
+      step('+400');
+      expect(input.value).toBe(text);
+      expect(renderedPlaceValues()).toEqual([]);
+    }
+  });
+
+  it('renders and names a Random number like a typed one, from empty or invalid input too', async () => {
+    const { input, enter, renderedPlaceValues } = renderHomeView();
+    // A fixed random source, so the test always renders a 10-digit number (9 + 1, the longest);
+    // the generator itself is tested in randomNumber.test.ts
+    const draws = [9, 4, 7, 0, 9, 2, 5];
+    for (const text of ['', '12.5']) {
+      let i = 0;
+      vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+        (array as Uint32Array)[0] = draws[i++ % draws.length];
+        return array;
+      });
+      enter(text);
+      fireEvent.click(screen.getByRole('button', { name: 'Random number' }));
+      const generated = input.value;
+      vi.mocked(crypto.getRandomValues).mockRestore();
+      expect(generated).toMatch(/^[1-9]\d{9}$/);
+      expect(renderedPlaceValues().reduce((sum, value) => sum + BigInt(value), 0n)).toBe(BigInt(generated));
+      expect(screen.getByText(`${generated.length} ${generated.length === 1 ? 'digit' : 'digits'}`)).toBeTruthy();
+      expect(screen.getByRole('status').textContent).toMatch(/^Random number generated, \d+ digits?\.$/);
+      const name = await exportedSvgName();
+      if (generated.length <= MAX_DIGITS_IN_FILENAME) expect(name).toBe(`mayan-numeral-number-${generated}.svg`);
+      else expect(name).toBe(`mayan-numeral-number-${generated.slice(0, 10)}...${generated.slice(-10)}-${generated.length}-digits.svg`);
+    }
   });
 });

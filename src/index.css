@@ -151,6 +151,16 @@
   }
 }
 
+/* The same indicator drawn over a text field's own boundary (-2px offset), for fields only: the
+   ring covers the 1px border and sits between the card and the field's fill, so it adds nothing
+   around the field. Not for buttons: on a gold fill it would be gold on gold. */
+@utility focus-ring-inset {
+  &:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
+  }
+}
+
 .mep-svg {
   background: transparent;
   width: 100%;

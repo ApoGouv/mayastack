@@ -140,7 +140,7 @@ describe('DisplaySettingsProvider without usable storage', () => {
     );
 
     expect(screen.getByRole('heading', { name: /Convert to Mayan Numerals/ })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Number input'), { target: { value: '123' } });
+    fireEvent.change(screen.getByLabelText('Decimal integer'), { target: { value: '123' } });
     expect(
       screen.getByRole('img', {
         name: 'Mayan numeral for 123: 2 stacked base-20 digits, highest place value at the top',
