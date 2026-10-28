@@ -90,7 +90,7 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-03 | Apply the foundation to existing components | 1 Design system | completed | UI-02 | 1 (PR 2) |
 | UI-04 | Two-column workspace layout | 2 Workspace | completed | UI-03 | 2 |
 | UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | completed | UI-04 | 3 |
-| UI-06 | Random, quick steps, Clear and Zero, and Copy number | 3 Input controls | in progress | UI-05 | 3 |
+| UI-06 | Random, quick steps, Clear and Zero, and Copy number | 3 Input controls | completed | UI-05 | 3 |
 | UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | not started | UI-04 | 4 |
 | UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | not started | UI-03 | 6 (persistence) |
 | UI-09 | Screen-only tier guides | 5 Preferences and viewer aids | not started | UI-04, UI-08 | 5 |
@@ -175,8 +175,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-05: Initial value, Clear and significant-digit count
 
-- **Status:** completed. Approved at its review checkpoint on 2026-10-28, on the branch `feat/ui-05-06-input-controls`, which it shares with UI-06 (section A).
-- **Evidence:** commit `5408013`. The pull request is opened together with UI-06's.
+- **Status:** completed. Approved at its review checkpoint on 2026-10-28, on the branch `feat/ui-05-06-input-controls`, which it shared with UI-06 (section A).
+- **Evidence:** PR #21, shared with UI-06 (commit `5408013`, merge `95af270`).
 - **Changed later by UI-06:** Clear now empties the field, and a separate Zero sets it to `0`. The count is above the field rather than below it and reads "N digits". The arrow-key hint is the field's title and a visually hidden description instead of visible text.
 - **Scope and acceptance:** G §4.1 and §4.4, and the matching parts of §8, Stage 3. Tests that assume an initially empty input are updated deliberately (G §4.1).
 - **Approved scope (2026-10-28),** after the UI-05 preflight:
@@ -200,7 +200,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - Screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors.
 ### UI-06: Random, quick steps, Clear and Zero, and Copy number
 
-- **Status:** in progress, on the branch `feat/ui-05-06-input-controls`, after UI-05 (section A).
+- **Status:** completed. Its acceptance criteria were verified on 2026-10-28 on the branch `feat/ui-05-06-input-controls`, which it shared with UI-05 (section A), and it was merged with UI-05 in PR #21.
+- **Evidence:** PR #21, shared with UI-05 (commit `3e987b7`, merge `95af270`).
 - **Scope and acceptance:** G §4.2, the parts of G §4.3 kept below, and the matching parts of §8, Stage 3, as revised on 2026-10-28 (plan-change log). The number input follows the third design-reference concept (section B).
 - **Approved scope (2026-10-28):**
   - **Label:** the field's visible and accessible label is "Decimal integer". The significant-digit count moves beside it, still for valid input only.
@@ -249,7 +250,6 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - Screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors.
 - **Validation of the visual polish (2026-10-28, rerun):** focused tests for NumberInput, RenderModeSelector and HomeView: 178 passed; `npx tsc -b --noEmit`: no errors; `npm run lint`: 0 errors and the 4 existing warnings; `git diff --check`: clean; the affected browser tests: 79 passed; screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors. The full unit suite was not rerun.
 - **Validation of the visual refinements (2026-10-28, rerun):** focused tests for the input components and HomeView: 182 passed; `npx tsc -b --noEmit`: no errors; `npm run lint`: 0 errors and the 4 existing warnings; `npm run build`: succeeded; `git diff --check`: clean; the affected browser tests, now also checking the inset ring on both fields and its 3:1 contrast against the card and the field's fill: 79 passed; screenshots at 375, 768 and 1280 px in both themes, including keyboard focus on the fields and buttons, with no page overflow or console errors. The full unit suite was not rerun.
-- **Next action:** review checkpoint (section A).
 
 ### UI-07: Base-20 breakdown and Copy Formula
 
@@ -331,11 +331,11 @@ None of these are committed scope. Each needs a separate decision before impleme
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, and UI-05 (commit `5408013`, not yet merged).
-- **In progress:** UI-06, on the branch `feat/ui-05-06-input-controls`, at its review checkpoint. One pull request follows for UI-05 and UI-06.
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, and UI-05 and UI-06 (PR #21), which complete phase 3.
+- **In progress:** none.
 - **Blockers:** none.
 - **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11.
-- **Next task: UI-06,** in progress. See its entry in section C.
+- **Next task: UI-07,** Base-20 breakdown and Copy Formula, not started. Its detailed scope is defined and approved before implementation. See its entry in section C.
 
 ### Plan-change log
 
@@ -355,6 +355,7 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-28 | Revised UI-06's scope (UI-06 in section C): the number input follows the third design-reference concept's input card, which is recorded as its interaction reference (section B). Clear now empties the field instead of resetting it to `0` (superseding that part of G §4.1), and a separate Zero sets it to `0`. The quick steps are +1, +5, +20 and +400. Decrement controls, the 8,000 preset and a custom increment (G §4.3) are deferred to section D, not removed. Copy number is added, with a reusable plain-text clipboard helper. Section D gains proposals for copying the base-20 breakdown and for renderer copy and export options. Section G is unchanged. | Approved after the revised UI-06 investigation: a compact input matching the chosen design reference, with empty input and numeric zero kept distinct |
 | 2026-10-28 | Capped Random at 10 significant digits, uniformly 1 to 10 (UI-06 in section C), instead of the 1 to 500 of G §4.2, which stays as first written. The input still accepts 500 digits, and the steps still reach the 500-digit maximum. | Requested in the UI-06 review: shorter random numbers are easier to read and compare |
 | 2026-10-28 | Revised two design-system rules in UI-06 (UI-06 in section C): buttons and form fields are `rounded` instead of `rounded-md`, with the round and pill shapes and the selector's track kept; the number and date inputs draw the focus ring over their own boundary with a new `focus-ring-inset` utility, while buttons keep `focus-ring`. The four workspace cards have `p-4` instead of `p-6`. Section B and `docs/DESIGN_SYSTEM.md` §6–§7 were updated to match. | Requested in the UI-06 review: a tighter, more consistent shape, a focus ring that adds nothing around a field, and more room for content on small screens |
+| 2026-10-28 | Recorded UI-05 and UI-06 as completed and merged together in PR #21 (commits `5408013` and `3e987b7`, merge `95af270`), which completes phase 3. UI-07 is the next task. | Verified against the merged `main` and the pull request's merge commit |
 
 ## F. Completion record
 
