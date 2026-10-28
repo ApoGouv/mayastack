@@ -86,13 +86,17 @@ Ratios for the main pairs, calculated from the values in `src/index.css` (light 
 
 All interactive controls must use the shared `focus-ring` utility instead of their own focus styles. This is a required convention, and the application's own controls follow it. Of the third-party elements that cannot take the class, only the date picker's days and its clear button get the same outline, from `src/components/inputs/DateInput.css`. On `:focus-visible` it draws a 2 px outline in `focus`, 2 px away from the control. Because of the offset, the outline sits on the surrounding surface, so it stays visible even around a gold button, where gold on gold would not. Outlines, unlike `box-shadow` rings, remain visible in forced-colours (high contrast) mode.
 
+Text fields with a `well` fill and a 1 px boundary (the number and date inputs) use `focus-ring-inset` instead: the same outline with a -2 px offset, drawn over the field's own boundary, so it adds nothing around the field. It lies between the card and the field's fill, and `focus` meets 3:1 against both (the `focus` row in section 5). Buttons keep `focus-ring`: on a gold fill an inset ring would be gold on gold, and on a colour swatch it would sit on the user's colour.
+
+The render-mode selector (`RenderModeSelector.tsx`) draws the same outer outline on the focused segment's label (`has-focus-visible:outline-2 outline-offset-2 outline-focus`), because its radio is only the small dot inside it. The radio suppresses its own outline (`focus:outline-none`), so there is one indicator, not two.
+
 Do not remove the outline (`outline-none`) without replacing it with `focus-ring`.
 
 Two library limitations remain. The colour picker's sliders keep react-colorful's own focus cue (an enlarged pointer). react-datepicker renders its clear button with `tabIndex={-1}`, so it is not in the Tab order and shows the ring only when focused another way. The date picker's month and year selects and its previous and next month buttons keep their existing library or browser focus styles; their focus appearance has not been verified separately.
 
 ## 7. Shape, elevation and spacing
 
-- **Radius:** controls `rounded-md`, cards and popovers `rounded-lg`, pills and round buttons `rounded-full`. There is no zero-radius rule.
+- **Radius:** buttons and form fields `rounded` (4 px, since UI-06), cards and popovers `rounded-lg`, pills and round buttons `rounded-full`. A segmented control's track is `rounded-md`, so its corners stay concentric with the `rounded` segments 2 px inside it. There is no zero-radius rule.
 - **Shadows:** `shadow-sm` on cards in the light theme only, `shadow-lg` on popovers and floating menus.
 - **Spacing:** Tailwind's default spacing scale. There are no custom spacing tokens.
 

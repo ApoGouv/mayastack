@@ -34,7 +34,7 @@ const MAX_DIGITS_IN_LABEL = 30;
  */
 export default function HomeView() {
   const [mode, setMode] = useState<RenderMode>('number');
-  // Number mode starts at 0, with the zero glyph shown; Clear returns to it
+  // Number mode starts at 0, with the zero glyph shown; Zero returns to it, Clear empties the field
   const [numberInput, setNumberInput] = useState('0');
   const [dateInputRaw, setDateInputRaw] = useState('');
   const [dateParts, setDateParts] = useState<DateParts | null>(null);
@@ -116,7 +116,7 @@ export default function HomeView() {
           Every card stays in place without a valid input; only their results need one. */}
       <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12 lg:grid-rows-[auto_auto_1fr]">
         {/* Input Section: Render Mode + Input */}
-        <section className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none space-y-4 lg:col-span-5">
+        <section className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none space-y-4 lg:col-span-5">
           <RenderModeSelector mode={mode} onChange={setMode} />
 
           {mode === 'number' ? (
@@ -133,7 +133,7 @@ export default function HomeView() {
         </section>
 
         {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result */}
-        <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
+        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
           <h2 className="font-heading text-lg font-semibold mb-4">Mayan Numeral</h2>
           {hasValidinput && mayanData ? (
             /* MayanRenderer and ExportPanel */
@@ -159,7 +159,7 @@ export default function HomeView() {
         </div>
 
         {/* Left, under the input (below lg, under the viewer): Base-20 Display */}
-        <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none lg:col-span-5 lg:col-start-1 lg:row-start-2">
+        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-5 lg:col-start-1 lg:row-start-2">
           <h2 className="font-heading text-lg font-semibold mb-2">
             Base-20 Representation
           </h2>
@@ -196,7 +196,7 @@ export default function HomeView() {
         {/* Left, under the base-20 card: Display Settings. Below sm it is the last card, with the floating
             Export trigger in the corner of the screen (bottom-4, 40px tall): the margin lets it and
             its colour popovers, which reach below it, scroll clear of the trigger */}
-        <div className="bg-surface rounded-lg p-6 shadow-sm dark:shadow-none mb-20 sm:mb-0 lg:col-span-5 lg:col-start-1 lg:row-start-3">
+        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none mb-20 sm:mb-0 lg:col-span-5 lg:col-start-1 lg:row-start-3">
           {/* Color pickers and grid toggle */}
           <DisplaySettings />
         </div>

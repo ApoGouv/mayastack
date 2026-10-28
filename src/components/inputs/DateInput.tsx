@@ -78,7 +78,7 @@ const parseDateParts = (date: Date): DateParts => ({
           value={value}
           placeholder={placeholder}
           aria-haspopup="dialog"
-          className="w-full pl-10 pr-4 py-2 rounded-md px-4 border border-line-strong bg-well text-fg placeholder-fg-subtle focus-ring transition cursor-pointer"
+          className="w-full pl-10 pr-4 py-2 rounded px-4 border border-line-strong bg-well text-fg placeholder-fg-subtle focus-ring-inset transition cursor-pointer"
         />
         <CalendarMonth className="absolute left-3 w-5 h-5 text-fg-subtle pointer-events-none" />
       </div>

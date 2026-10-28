@@ -6,7 +6,7 @@ const MAX_DIGITS = '9'.repeat(500);
 
 /** Enters a number and waits for its numeral viewer */
 async function showNumber(page: Page, digits: string) {
-  await page.getByLabel('Number input').fill(digits);
+  await page.getByLabel('Decimal integer').fill(digits);
   const viewer = page.getByRole('group', { name: 'Numeral viewer' });
   await expect(viewer).toBeVisible();
   return viewer;
@@ -132,7 +132,7 @@ test.describe('bounded numeral viewport', () => {
 
     // Typing in the number input is not a shortcut: "0" is typed, the zoom stays
     await page.keyboard.press('+');
-    const input = page.getByLabel('Number input');
+    const input = page.getByLabel('Decimal integer');
     await input.focus();
     await input.press('End');
     await input.press('0');
@@ -194,7 +194,7 @@ test.describe('export with the viewport', () => {
       await expect(exportButton).toBeInViewport();
 
       // No result, no Export
-      await page.getByLabel('Number input').fill('12.5');
+      await page.getByLabel('Decimal integer').fill('12.5');
       await expect(exportButton).toHaveCount(0);
     });
   }
@@ -277,7 +277,7 @@ test.describe('PNG export size limits', () => {
   });
 
   test('offers the real sizes immediately after a number is entered, with no transient 0 × 0', async ({ page }) => {
-    await page.getByLabel('Number input').fill(FIFTY_DIGITS);
+    await page.getByLabel('Decimal integer').fill(FIFTY_DIGITS);
     await openExportMenu(page, 'png');
 
     const sizes = page.getByLabel('Size Preset');

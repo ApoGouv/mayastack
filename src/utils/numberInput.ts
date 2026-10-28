@@ -145,3 +145,23 @@ export function stepNumberValue(value: bigint, direction: 1 | -1): bigint {
   const next = value + BigInt(direction);
   return next < 0n || next > MAX_NUMBER_VALUE ? value : next;
 }
+
+/**
+ * Adds a step to a value of the number input, exactly, or returns null when
+ * the result would leave 0 to MAX_NUMBER_VALUE. The result is never clamped,
+ * so a step that cannot be taken in full is not taken at all. Landing exactly
+ * on either end is allowed.
+ *
+ * Example:
+ *   addToNumberValue(41n, 20n)                    => 61n
+ *   addToNumberValue(MAX_NUMBER_VALUE - 5n, 5n)   => MAX_NUMBER_VALUE
+ *   addToNumberValue(MAX_NUMBER_VALUE - 4n, 5n)   => null
+ *
+ * @param value - A value from 0 to MAX_NUMBER_VALUE
+ * @param step - The amount to add (negative to subtract)
+ * @returns The new value, or null when it would be out of range
+ */
+export function addToNumberValue(value: bigint, step: bigint): bigint | null {
+  const next = value + step;
+  return next < 0n || next > MAX_NUMBER_VALUE ? null : next;
+}

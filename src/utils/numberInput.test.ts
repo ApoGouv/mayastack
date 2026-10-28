@@ -4,6 +4,7 @@ import {
   MAX_NUMBER_VALUE,
   MAX_SIGNIFICANT_DIGITS,
   countRedundantLeadingZeros,
+  addToNumberValue,
   countSignificantDigits,
   stepNumberValue,
   validateNumberInput,
@@ -204,5 +205,38 @@ describe('stepNumberValue', () => {
     expect(stepNumberValue(MAX_NUMBER_VALUE, 1)).toBe(MAX_NUMBER_VALUE);
     expect(stepNumberValue(MAX_NUMBER_VALUE, -1)).toBe(MAX_NUMBER_VALUE - 1n);
     expect(stepNumberValue(MAX_NUMBER_VALUE - 1n, 1)).toBe(MAX_NUMBER_VALUE);
+  });
+});
+
+describe('addToNumberValue', () => {
+  it.each([1n, 5n, 20n, 400n])('adds exactly %s', (step) => {
+    expect(addToNumberValue(0n, step)).toBe(step);
+    expect(addToNumberValue(41n, step)).toBe(41n + step);
+  });
+
+  it('crosses digit boundaries and base-20 place values exactly', () => {
+    expect(addToNumberValue(9n, 1n)).toBe(10n);
+    expect(addToNumberValue(19n, 1n)).toBe(20n);
+    expect(addToNumberValue(399n, 1n)).toBe(400n);
+    expect(addToNumberValue(7600n, 400n)).toBe(8000n);
+  });
+
+  it('stays exact beyond Number.MAX_SAFE_INTEGER', () => {
+    expect(addToNumberValue(9007199254740992n, 1n)).toBe(9007199254740993n);
+    expect(addToNumberValue(BigInt('9'.repeat(400)), 5n)).toBe(BigInt('1' + '0'.repeat(399) + '4'));
+  });
+
+  it.each([1n, 5n, 20n, 400n])('lands exactly on the largest value with %s', (step) => {
+    expect(addToNumberValue(MAX_NUMBER_VALUE - step, step)).toBe(MAX_NUMBER_VALUE);
+  });
+
+  it.each([1n, 5n, 20n, 400n])('returns null instead of going past the largest value with %s', (step) => {
+    expect(addToNumberValue(MAX_NUMBER_VALUE - step + 1n, step)).toBeNull();
+    expect(addToNumberValue(MAX_NUMBER_VALUE, step)).toBeNull();
+  });
+
+  it('returns null instead of going below 0, and allows landing on 0', () => {
+    expect(addToNumberValue(4n, -5n)).toBeNull();
+    expect(addToNumberValue(5n, -5n)).toBe(0n);
   });
 });
