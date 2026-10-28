@@ -34,7 +34,8 @@ const MAX_DIGITS_IN_LABEL = 30;
  */
 export default function HomeView() {
   const [mode, setMode] = useState<RenderMode>('number');
-  const [numberInput, setNumberInput] = useState('');
+  // Number mode starts at 0, with the zero glyph shown; Clear returns to it
+  const [numberInput, setNumberInput] = useState('0');
   const [dateInputRaw, setDateInputRaw] = useState('');
   const [dateParts, setDateParts] = useState<DateParts | null>(null);
 

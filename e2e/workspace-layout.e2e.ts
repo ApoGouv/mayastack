@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 type Theme = 'light' | 'dark';
@@ -122,7 +123,14 @@ test.describe('workspace layout', () => {
         await expectWorkspace();
       };
 
-      await expect(page.getByLabel('Number input')).toHaveValue('');
+      // Changed deliberately in UI-05: the input starts at 0, with its numeral and Export
+      await expect(page.getByLabel('Number input')).toHaveValue('0');
+      await expect(page.getByRole('img', { name: /^Mayan numeral for 0: 1 stacked base-20 digit,/ })).toBeVisible();
+      await expect(base20).toContainText('0 × 200');
+      await expect(exportButton).toBeVisible();
+      await expectWorkspace();
+
+      await page.getByLabel('Number input').fill('');
       await expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
 
       await page.getByLabel('Number input').fill('8000400019');
@@ -137,6 +145,14 @@ test.describe('workspace layout', () => {
 
       await page.getByLabel('Number input').fill('');
       await expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
+
+      // Clear returns to 0, with its numeral and Export
+      await page.getByRole('button', { name: 'Clear', exact: true }).click();
+      await expect(page.getByLabel('Number input')).toHaveValue('0');
+      await expect(page.getByRole('img', { name: /^Mayan numeral for 0: 1 stacked base-20 digit,/ })).toBeVisible();
+      await expect(base20).toHaveText('Base-20 RepresentationNumber0 × 200');
+      await expect(exportButton).toBeVisible();
+      await expectWorkspace();
       expect(errors).toEqual([]);
     });
   }
@@ -210,5 +226,257 @@ test.describe('floating Export with the workspace', () => {
       expect(await pageOverflow(page)).toBe(0);
       await page.keyboard.press('Escape');
     }
+  });
+});
+
+test.describe('number input: initial 0, Clear, count and arrow keys', () => {
+  const zeroNumeral = /^Mayan numeral for 0: 1 stacked base-20 digit,/;
+
+  /** The caret (or selection) of the number input */
+  const selection = (input: Locator) =>
+    input.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]);
+
+  /** Opens the app as it starts, without entering anything, and collects page errors */
+  async function openApp(page: Page, theme: Theme, width: number, height = 900) {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    await page.setViewportSize({ width, height });
+    await page.addInitScript((saved) => localStorage.setItem('theme', saved), theme);
+    await page.goto('./');
+    await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
+    return errors;
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
+    for (const width of [375, 768, 1280]) {
+      test(`starts at 0 with Clear and the count in the input card at ${width}px in the ${theme} theme`, async ({ page }) => {
+        const errors = await openApp(page, theme, width);
+        const { input: inputCard, base20 } = cards(page);
+        const input = page.getByLabel('Number input');
+        const clear = page.getByRole('button', { name: 'Clear', exact: true });
+        const count = page.getByText('1 significant digit', { exact: true });
+        const hint = page.getByText('Up and Down arrow keys add or subtract 1.', { exact: true });
+
+        await expect(input).toHaveValue('0');
+        await expect(page.getByRole('img', { name: zeroNumeral })).toBeVisible();
+        await expect(base20).toHaveText('Base-20 RepresentationNumber0 × 200');
+        await expect(page.getByRole('button', { name: '📦 Export' })).toBeVisible();
+
+        // Clear on the input's row, the count and hint under it, all inside the input card
+        const [card, field, button, countBox, hintBox] = [
+          await box(inputCard), await box(input), await box(clear), await box(count), await box(hint),
+        ];
+        expect(button.x).toBeGreaterThanOrEqual(field.x + field.width);
+        expect(button.y + button.height / 2).toBeCloseTo(field.y + field.height / 2, 0);
+        expect(countBox.y).toBeGreaterThanOrEqual(field.y + field.height);
+        expect(hintBox.y).toBeGreaterThanOrEqual(field.y + field.height);
+        for (const b of [field, button, countBox, hintBox]) {
+          expect(b.x).toBeGreaterThanOrEqual(card.x);
+          expect(b.x + b.width).toBeLessThanOrEqual(card.x + card.width);
+          expect(b.y + b.height).toBeLessThanOrEqual(card.y + card.height);
+        }
+        // Nothing, e.g. the floating Export trigger, covers Clear or the input
+        expect(await onTopAtCentre(clear)).toBe(true);
+        expect(await onTopAtCentre(input)).toBe(true);
+        expect(await pageOverflow(page)).toBe(0);
+        expect(errors).toEqual([]);
+      });
+    }
+  }
+
+  test('replaces the initial 0 with typed digits and edits without redundant leading zeros', async ({ page }) => {
+    await openApp(page, 'light', 1280);
+    const input = page.getByLabel('Number input');
+    await input.click();
+    await page.keyboard.press('End');
+
+    await page.keyboard.type('5');
+    await expect(input).toHaveValue('5');
+    await page.keyboard.type('7');
+    await expect(input).toHaveValue('57');
+    expect(await selection(input)).toEqual([2, 2]);
+    await expect(page.getByRole('img', { name: /^Mayan numeral for 57: 2 stacked/ })).toBeVisible();
+
+    // A digit typed in the middle stays where it was typed, with the caret after it
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.type('3');
+    await expect(input).toHaveValue('537');
+    expect(await selection(input)).toEqual([2, 2]);
+
+    // Deleting the first digit of 1052 leaves 52, with the caret before the 5
+    await input.fill('1052');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Delete');
+    await expect(input).toHaveValue('52');
+    expect(await selection(input)).toEqual([0, 0]);
+    await page.keyboard.type('9');
+    await expect(input).toHaveValue('952');
+
+    // Select all and type over it
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('4');
+    await expect(input).toHaveValue('4');
+
+    // Emptied while editing: no result, then a new value
+    await page.keyboard.press('Backspace');
+    await expect(input).toHaveValue('');
+    await expect(page.getByText('Enter a whole number to see its Mayan numeral.', { exact: true })).toBeVisible();
+    await page.keyboard.type('0');
+    await expect(input).toHaveValue('0');
+    await page.keyboard.type('0');
+    await expect(input).toHaveValue('0');
+
+    // Pasted text with leading zeros keeps its value, without the zeros
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.insertText('007');
+    await expect(input).toHaveValue('7');
+    await expect(page.getByText('1 significant digit', { exact: true })).toBeVisible();
+
+    // Invalid text keeps its leading zeros and its message
+    await input.fill('012a');
+    await expect(input).toHaveValue('012a');
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText(/^Use digits 0–9 only/)).toBeVisible();
+    await expect(page.getByText(/significant digit/)).toHaveCount(0);
+  });
+
+  test('copies, cuts and pastes with the usual shortcuts', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openApp(page, 'light', 1280);
+    const input = page.getByLabel('Number input');
+    await input.fill('8000400019');
+    await input.focus();
+
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('ControlOrMeta+x');
+    await expect(input).toHaveValue('');
+    await page.keyboard.press('ControlOrMeta+v');
+    await expect(input).toHaveValue('8000400019');
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('ControlOrMeta+c');
+    await page.keyboard.press('End');
+    await page.keyboard.press('ControlOrMeta+v');
+    await expect(input).toHaveValue('80004000198000400019');
+
+    // Shift with the arrow keys selects, as usual, without stepping
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.keyboard.press('Shift+ArrowLeft');
+    expect(await selection(input)).toEqual([18, 20]);
+    await page.keyboard.press('Shift+ArrowUp');
+    await expect(input).toHaveValue('80004000198000400019');
+    expect(await selection(input)).toEqual([0, 20]);
+  });
+
+  test('adds and subtracts 1 with the arrow keys, within 0 and 500 digits, without scrolling', async ({ page }) => {
+    const errors = await openApp(page, 'light', 375, 500);
+    const input = page.getByLabel('Number input');
+    await input.focus();
+    // The page can scroll at this size; the arrow keys must not scroll it
+    await page.evaluate(() => window.scrollTo(0, 40));
+    const scrollY = await page.evaluate(() => window.scrollY);
+    expect(scrollY).toBeGreaterThan(0);
+
+    await page.keyboard.press('ArrowDown');
+    await expect(input).toHaveValue('0');
+    for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowUp');
+    await expect(input).toHaveValue('20');
+    await expect(page.getByText('2 significant digits', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: /^Mayan numeral for 20: 2 stacked base-20 digits,/ })).toBeAttached();
+    await expect(cards(page).base20).toContainText('1 × 201 • 0 × 200');
+    await page.keyboard.press('ArrowDown');
+    await expect(input).toHaveValue('19');
+    await expect(cards(page).base20).toContainText('19 × 200');
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+
+    // Exact beyond Number.MAX_SAFE_INTEGER
+    await input.fill('9007199254740992');
+    await page.keyboard.press('ArrowUp');
+    await expect(input).toHaveValue('9007199254740993');
+
+    // At the largest value, ArrowUp keeps it
+    const maxDigits = '9'.repeat(500);
+    await input.fill(maxDigits);
+    await page.keyboard.press('ArrowUp');
+    await expect(input).toHaveValue(maxDigits);
+    await expect(input).toHaveAttribute('aria-invalid', 'false');
+    await expect(page.getByText('500 significant digits', { exact: true })).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await expect(input).toHaveValue('9'.repeat(499) + '8');
+
+    // Empty and invalid text stay as they are
+    for (const text of ['', '12.5']) {
+      await input.fill(text);
+      await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('ArrowDown');
+      await expect(input).toHaveValue(text);
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test('clears to 0 from the keyboard, keeping the focus on Clear', async ({ page }) => {
+    await openApp(page, 'dark', 768);
+    const input = page.getByLabel('Number input');
+    const clear = page.getByRole('button', { name: 'Clear', exact: true });
+
+    for (const [text, key] of [['9'.repeat(500), 'Enter'], ['12.5', 'Space'], ['', 'Enter'], ['0', 'Space']]) {
+      await input.fill(text);
+      await input.focus();
+      await page.keyboard.press('Tab');
+      await expect(clear).toBeFocused();
+      await page.keyboard.press(key);
+      await expect(input).toHaveValue('0');
+      await expect(clear).toBeFocused();
+      await expect(page.getByRole('img', { name: zeroNumeral })).toBeAttached();
+      await expect(page.getByText('1 significant digit', { exact: true })).toBeVisible();
+    }
+  });
+
+  test('exports the initial 0 and stepped values under their filenames', async ({ page }) => {
+    await openApp(page, 'light', 1280);
+    const exportSvg = async () => {
+      await page.getByRole('button', { name: '📦 Export' }).click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('button', { name: /^Export SVG image/ }).click(),
+      ]);
+      await page.getByRole('button', { name: '📦 Export' }).click();
+      return download;
+    };
+
+    const zero = await exportSvg();
+    expect(zero.suggestedFilename()).toBe('mayan-numeral-number-0.svg');
+    const svg = await readFile(await zero.path(), 'utf8');
+    expect(svg.match(/data-digit-index=/g)).toHaveLength(1);
+    expect(svg).toContain('data-digit-value="0"');
+
+    await page.getByLabel('Number input').focus();
+    await page.keyboard.press('ArrowUp');
+    expect((await exportSvg()).suggestedFilename()).toBe('mayan-numeral-number-1.svg');
+  });
+
+  test('leaves Date mode and its clear button as they were, and keeps the number', async ({ page }) => {
+    await openApp(page, 'light', 1280);
+    await page.getByLabel('Number input').fill('57');
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await expect(page.getByRole('button', { name: 'Clear', exact: true })).toHaveCount(0);
+    await expect(page.getByText(/significant digit/)).toHaveCount(0);
+
+    const dateInput = page.getByLabel('Date input');
+    await dateInput.click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 15,/ })).toBeVisible();
+    const date = await dateInput.inputValue();
+    // The arrow keys are the date picker's own, never number steps
+    await dateInput.focus();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Escape');
+    expect(await dateInput.inputValue()).toBe(date);
+    await page.locator('.react-datepicker__close-icon').click();
+    await expect(dateInput).toHaveValue('');
+    await expect(page.getByText('Choose a date to see its Mayan numerals.', { exact: true })).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Number' }).check();
+    await expect(page.getByLabel('Number input')).toHaveValue('57');
   });
 });

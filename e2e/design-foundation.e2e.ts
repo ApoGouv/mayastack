@@ -356,7 +356,10 @@ test.describe('design system on the components', () => {
       check('number input text', await input.evaluate((el) => getComputedStyle(el).color), field.background, 4.5);
 
       // Muted labels on their cards
-      for (const text of ['Choose Input Mode', 'SVG Display Settings', 'Background color:', 'Show Grid:']) {
+      for (const text of [
+        'Choose Input Mode', '10 significant digits', 'Up and Down arrow keys add or subtract 1.',
+        'SVG Display Settings', 'Background color:', 'Show Grid:',
+      ]) {
         const label = await page.getByText(text, { exact: true }).first().evaluate((el) => {
           let bg = 'rgba(0, 0, 0, 0)';
           for (let e: Element | null = el; e && bg.startsWith('rgba'); e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
@@ -392,7 +395,9 @@ test.describe('design system on the components', () => {
       // Error text on its card
       await input.fill('12a');
       await settle(page);
-      const error = await page.locator(`#${await input.getAttribute('aria-describedby')}`).evaluate((el) => ({
+      // The input lists its error first among its descriptions
+      const errorId = (await input.getAttribute('aria-describedby'))!.split(' ')[0];
+      const error = await page.locator(`#${errorId}`).evaluate((el) => ({
         color: getComputedStyle(el).color, card: getComputedStyle(el.closest('section')!).backgroundColor,
       }));
       check('error text', error.color, error.card, 4.5);

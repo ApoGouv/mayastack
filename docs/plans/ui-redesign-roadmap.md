@@ -87,8 +87,8 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-01 | Fix theme defects | 0 Theme defects | completed | none | 0 |
 | UI-02 | Design-system foundation | 1 Design system | completed | UI-01 | 1 (PR 1) |
 | UI-03 | Apply the foundation to existing components | 1 Design system | completed | UI-02 | 1 (PR 2) |
-| UI-04 | Two-column workspace layout | 2 Workspace | in progress | UI-03 | 2 |
-| UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | not started | UI-04 | 3 |
+| UI-04 | Two-column workspace layout | 2 Workspace | completed | UI-03 | 2 |
+| UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | in progress | UI-04 | 3 |
 | UI-06 | Random, stepper presets and custom increment | 3 Input controls | not started | UI-05 | 3 |
 | UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | not started | UI-04 | 4 |
 | UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | not started | UI-03 | 6 (persistence) |
@@ -160,7 +160,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-04: Two-column workspace layout
 
-- **Status:** in progress, on the branch `feat/ui-04-workspace-layout`.
+- **Status:** completed. Its acceptance criteria were verified on 2026-10-27 on the branch `feat/ui-04-workspace-layout`, before it was committed.
+- **Evidence:** PR #20 (commit `30edea2`, merge `8600117`).
 - **Goal:** the approved responsive two-column workspace, with a prominent numeral viewer.
 - **Scope and acceptance:** G §3.2 and §8, Stage 2. Export must stay reachable when the result is off-screen (G §6).
 - **Approved layout (2026-10-27),** following the first design-reference concept:
@@ -170,13 +171,31 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - The floating Export trigger stays, with only the adjustments needed to avoid collisions. Moving Export into the viewer header is not part of UI-04 (see UI-11).
   - All four cards stay in place for empty, invalid and valid input. Without a valid result, the viewer and the base-20 card each show a short instruction instead of a result, and there are no viewer controls or Export (an initial value is UI-05).
   - The section headings become `h2`. The emoji in labels and the theme menu's Escape and arrow keys are deferred (section D).
-- **Next action:** review the implementation on its branch.
 
 ### UI-05: Initial value, Clear and significant-digit count
 
-- **Status:** not started.
+- **Status:** in progress, on the branch `feat/ui-05-06-input-controls`, which it shares with UI-06 (section A).
 - **Scope and acceptance:** G §4.1 and §4.4, and the matching parts of §8, Stage 3. Tests that assume an initially empty input are updated deliberately (G §4.1).
-- **Next action:** define the detailed scope when the task is selected.
+- **Approved scope (2026-10-28),** after the UI-05 preflight:
+  - Number mode starts at `0`, with the existing shell zero glyph, its base-20 representation and Export.
+  - A secondary Clear button in the number input card sets the input to `0` from any text, stays enabled at `0` and keeps the focus.
+  - A count for valid input only, such as "1 significant digit" or "500 significant digits", without the limit; hidden for empty, invalid and over-limit input and in Date mode.
+  - Leading zeros typed or pasted before a valid integer are removed in the field, keeping the caret or selection on the same digits, so typing 5 after the initial 0 gives 5. Invalid, over-long and whitespace-padded text is left as it is, with its message.
+  - While the number input has focus, Up and Down add or subtract exactly 1 from a valid integer, with bigint arithmetic. The value stays as it is at 0 and at the 500-digit maximum, and empty or invalid text is not changed. Arrow keys with modifiers keep their usual effect. A visible hint and `aria-keyshortcuts` describe the keys.
+  - The count and the hint are linked with `aria-describedby`, after the error message, without a new live region.
+  - The zoom level is kept when the value changes, including through Clear and the arrow keys. Date mode, the date picker's clear button, the viewer, rendering and export are unchanged.
+  - Not included: select-on-focus (section D) and the UI-06 controls.
+- **Validation (2026-10-28, on the branch, before any commit):**
+  - `npm test`: 16 files, 308 tests passed.
+  - `npx tsc -b --noEmit`: no errors.
+  - `npm run lint`: 0 errors and the 4 existing warnings.
+  - `npm run build`: succeeded.
+  - `npm run test:e2e`: 82 passed.
+  - Negative controls:
+    - Against a build of `main` (`8600117`), 12 of the 14 new or updated UI-05 browser tests failed as expected. The other two check preserved behaviour (clipboard shortcuts, Date mode).
+    - With the caret restoration removed, three unit tests and the browser editing test failed.
+  - Screenshots at 375, 768 and 1280 px in both themes, with no page overflow or console errors.
+- **Next action:** review checkpoint (section A). UI-06 starts only after UI-05 is approved.
 
 ### UI-06: Random, stepper presets and custom increment
 
@@ -254,14 +273,16 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Date picker's clear button reachable with the keyboard | proposed | react-datepicker renders it with `tabIndex={-1}`; needs a replacement button in `DateInput.tsx`. Found during UI-03 |
 | Lining figures in the headings | proposed | Playfair Display's default old-style figures lower the "20" in "Base-20 Representation". Found during UI-03 |
 | A visible focus ring on the colour picker's sliders | proposed | react-colorful shows focus only by enlarging the pointer. Found during UI-03 |
+| Select the number on focus | proposed | Would let a click or Tab into the field replace the whole value. Not implemented: UI-05 removes redundant leading zeros instead. Found during UI-05 |
+| Export trigger over the footer at the end of the page | proposed | Below 640 px, the floating trigger covers part of the footer's copyright line at the very end of the page, whenever there is a result, now also from the start because of the initial 0. Found during UI-05; see UI-11 |
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1.
-- **In progress:** UI-04, on the branch `feat/ui-04-workspace-layout`.
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, and UI-04 (PR #20), which completes phase 2.
+- **In progress:** UI-05, on the branch `feat/ui-05-06-input-controls`, at its review checkpoint. UI-06 follows on the same branch after approval.
 - **Blockers:** none.
 - **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11.
-- **Next task: UI-04,** in progress. Six later tasks depend on it (UI-05, UI-07, UI-09, UI-11, UI-12 and UI-13). See its entry in section C.
+- **Next task: UI-05,** in progress, then UI-06 on the same branch. See their entries in section C.
 
 ### Plan-change log
 
@@ -275,6 +296,8 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-26 | Recorded UI-03 as completed (verified on its branch, before the commit and PR), and added three proposals found during it to section D: a keyboard-reachable clear button for the date picker, lining figures in the headings, and a focus ring on the colour picker's sliders. | Checked against the acceptance criteria, the tests, the export comparison and screenshots; the proposals need separate decisions |
 | 2026-10-27 | Recorded UI-03's merge (PR #19) and started UI-04 with the approved layout (UI-04 in section C): two columns from 1024 px, the floating Export trigger kept, the section headings as `h2`, and the emoji and theme-menu proposals deferred. | Approved after the UI-04 preflight, which compared the first design-reference concept with the existing layout |
 | 2026-10-27 | Changed UI-04 to keep every card in place without a valid result, with an instruction in the viewer and the base-20 card and still no Export. The base-20 representation becomes its own card, between the input and the settings, as in the design reference. | Requested in the UI-04 review: a persistent workspace, which UI-05 can then fill with its initial value without panels appearing or disappearing |
+| 2026-10-28 | Recorded UI-04 as completed (PR #20, commit `30edea2`, merge `8600117`), and started UI-05 on the shared branch `feat/ui-05-06-input-controls`. | Verified against the merged `main` and the UI-04 validation |
+| 2026-10-28 | Extended UI-05's approved scope (UI-05 in section C): leading zeros typed or pasted before a valid integer are removed, so typing replaces the initial 0, and the Up and Down arrow keys add or subtract 1. Select-on-focus is recorded as a proposal (section D). Stepper buttons, presets, custom increments and Random stay in UI-06. | Approved after the UI-05 preflight, so that starting at 0 does not lead to values such as "05" |
 
 ## F. Completion record
 
