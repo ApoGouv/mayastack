@@ -106,7 +106,7 @@ const NumberInput: React.FC<NumberInputProps> = ({ value, onChange, placeholder 
     changeValue(digits);
   };
 
-  // Up and Down add or subtract 1 from a valid integer, within 0 to the 500-digit maximum.
+  // Up and Down add or subtract 1 from a valid integer, within 0 to the MAX_SIGNIFICANT_DIGITS maximum.
   // With modifiers (e.g. Shift to select), while composing, or for empty or invalid text,
   // the keys keep their usual effect
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -192,6 +192,10 @@ test.describe('heading font', () => {
     'h1: 🌄 Convert to Mayan Numerals',
     'h2: Mayan Numeral',
     'h2: Base-20 Representation',
+    // Changed deliberately in UI-07: the decorative icon in the base-20 heading inherits its font,
+    // but has no text for it to render
+    'svg: ',
+    'path: ',
   ];
 
   /** The URL the stylesheet loads the heading font from */

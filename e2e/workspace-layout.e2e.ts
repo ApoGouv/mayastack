@@ -32,6 +32,18 @@ async function box(locator: Locator) {
 const pageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
+/** An element's text as a screen reader gets it: with visually hidden text, without aria-hidden content */
+const spokenText = (locator: Locator) =>
+  locator.evaluate((el) => {
+    const clone = el.cloneNode(true) as Element;
+    clone.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
+    return clone.textContent;
+  });
+
+/** The base-20 card at 0, as a screen reader gets it (UI-07: tier badge, label, Copy Formula, formula, breakdown) */
+const ZERO_BASE20_SPOKEN =
+  'Base-20 Representation1 tier, 20 to the power of 0Positional Sum FormulaCopy Formula0 × 20 to the power of 0Analytical breakdown';
+
 /** Whether the element on top at the centre of `target` belongs to it, i.e. a click there reaches it */
 const onTopAtCentre = (target: Locator) =>
   target.evaluate((el) => {
@@ -126,7 +138,8 @@ test.describe('workspace layout', () => {
       // Changed deliberately in UI-05: the input starts at 0, with its numeral and Export
       await expect(page.getByLabel('Decimal integer')).toHaveValue('0');
       await expect(page.getByRole('img', { name: /^Mayan numeral for 0: 1 stacked base-20 digit,/ })).toBeVisible();
-      await expect(base20).toContainText('0 × 200');
+      // Changed deliberately in UI-07: the expansion with its badge, Copy Formula and breakdown
+      await expect.poll(() => spokenText(base20)).toBe(ZERO_BASE20_SPOKEN);
       await expect(exportButton).toBeVisible();
       await expectWorkspace();
 
@@ -135,7 +148,7 @@ test.describe('workspace layout', () => {
 
       await page.getByLabel('Decimal integer').fill('8000400019');
       await expect(numeral).toBeVisible();
-      await expect(base20).toContainText('6 × 207 • 5 × 206');
+      await expect.poll(() => spokenText(base20)).toContain('6 × 20 to the power of 7 + 5 × 20 to the power of 6');
       await expect(exportButton).toBeVisible();
       await expectWorkspace();
 
@@ -151,7 +164,7 @@ test.describe('workspace layout', () => {
       await page.getByRole('button', { name: 'Zero', exact: true }).click();
       await expect(page.getByLabel('Decimal integer')).toHaveValue('0');
       await expect(page.getByRole('img', { name: /^Mayan numeral for 0: 1 stacked base-20 digit,/ })).toBeVisible();
-      await expect(base20).toHaveText('Base-20 RepresentationNumber0 × 200');
+      await expect.poll(() => spokenText(base20)).toBe(ZERO_BASE20_SPOKEN);
       await expect(exportButton).toBeVisible();
       await expectWorkspace();
       await page.getByRole('button', { name: 'Clear input' }).click();
@@ -266,7 +279,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
 
         await expect(input).toHaveValue('0');
         await expect(page.getByRole('img', { name: zeroNumeral })).toBeVisible();
-        await expect(base20).toHaveText('Base-20 RepresentationNumber0 × 200');
+        await expect.poll(() => spokenText(base20)).toBe(ZERO_BASE20_SPOKEN);
         await expect(page.getByRole('button', { name: '📦 Export' })).toBeVisible();
 
         const [card, field, labelBox, countBox, zeroBox] = [
@@ -331,7 +344,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
         expect(await pageOverflow(page)).toBe(0);
 
         // The longest number scrolls inside the field without widening anything
-        await input.fill('9'.repeat(500));
+        await input.fill('9'.repeat(128));
         expect(await pageOverflow(page)).toBe(0);
         expect((await box(input)).width).toBeCloseTo(field.width, 0);
         expect(errors).toEqual([]);
@@ -422,7 +435,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     expect(await selection(input)).toEqual([0, 20]);
   });
 
-  test('adds and subtracts 1 with the arrow keys, within 0 and 500 digits, without scrolling', async ({ page }) => {
+  test('adds and subtracts 1 with the arrow keys, within 0 and 128 digits, without scrolling', async ({ page }) => {
     const errors = await openApp(page, 'light', 375, 500);
     const input = page.getByLabel('Decimal integer');
     await input.focus();
@@ -437,10 +450,10 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     await expect(input).toHaveValue('20');
     await expect(page.getByText('2 digits', { exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: /^Mayan numeral for 20: 2 stacked base-20 digits,/ })).toBeAttached();
-    await expect(cards(page).base20).toContainText('1 × 201 • 0 × 200');
+    await expect.poll(() => spokenText(cards(page).base20)).toContain('Copy Formula1 × 20 to the power of 1 + 0 × 20 to the power of 0Analytical');
     await page.keyboard.press('ArrowDown');
     await expect(input).toHaveValue('19');
-    await expect(cards(page).base20).toContainText('19 × 200');
+    await expect.poll(() => spokenText(cards(page).base20)).toContain('Copy Formula19 × 20 to the power of 0Analytical');
     expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
 
     // Exact beyond Number.MAX_SAFE_INTEGER
@@ -449,14 +462,14 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     await expect(input).toHaveValue('9007199254740993');
 
     // At the largest value, ArrowUp keeps it
-    const maxDigits = '9'.repeat(500);
+    const maxDigits = '9'.repeat(128);
     await input.fill(maxDigits);
     await page.keyboard.press('ArrowUp');
     await expect(input).toHaveValue(maxDigits);
     await expect(input).toHaveAttribute('aria-invalid', 'false');
-    await expect(page.getByText('500 digits', { exact: true })).toBeVisible();
+    await expect(page.getByText('128 digits', { exact: true })).toBeVisible();
     await page.keyboard.press('ArrowDown');
-    await expect(input).toHaveValue('9'.repeat(499) + '8');
+    await expect(input).toHaveValue('9'.repeat(127) + '8');
 
     // Empty and invalid text stay as they are
     for (const text of ['', '12.5']) {
@@ -484,7 +497,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     const clear = page.getByRole('button', { name: 'Clear input' });
     const zero = page.getByRole('button', { name: 'Zero', exact: true });
 
-    for (const [text, key] of [['9'.repeat(500), 'Enter'], ['12.5', 'Space'], ['', 'Enter'], ['0', 'Space'], ['9'.repeat(501), 'Enter']]) {
+    for (const [text, key] of [['9'.repeat(128), 'Enter'], ['12.5', 'Space'], ['', 'Enter'], ['0', 'Space'], ['9'.repeat(129), 'Enter']]) {
       await input.fill(text);
       await clear.focus();
       await page.keyboard.press(key);
@@ -503,7 +516,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     }
   });
 
-  test('adds the quick steps exactly, up to the 500-digit maximum and not past it', async ({ page }) => {
+  test('adds the quick steps exactly, up to the 128-digit maximum and not past it', async ({ page }) => {
     const errors = await openApp(page, 'light', 375);
     const input = page.getByLabel('Decimal integer');
     const step = (name: string) => page.getByRole('button', { name, exact: true });
@@ -518,7 +531,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     await step('+5').click();
     await step('+1').click();
     await expect(input).toHaveValue('446');
-    await expect(cards(page).base20).toContainText('1 × 202 • 2 × 201 • 6 × 200');
+    await expect.poll(() => spokenText(cards(page).base20)).toContain('1 × 20 to the power of 2 + 2 × 20 to the power of 1 + 6 × 20 to the power of 0');
     await expect(page.getByText('3 digits', { exact: true })).toBeVisible();
     // The title names what the step adds in the numeral
     await expect(step('+400')).toHaveAttribute('title', '+400 (Tier ×2)');
@@ -529,23 +542,23 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     await expect(input).toHaveValue('12');
 
     // Near the maximum: the steps that would go past it are unavailable, and do nothing
-    const max = BigInt('9'.repeat(500));
+    const max = BigInt('9'.repeat(128));
     await input.fill((max - 20n).toString());
     for (const [name, blocked] of [['+1', 'false'], ['+5', 'false'], ['+20', 'false'], ['+400', 'true']]) {
       await expect(step(name)).toHaveAttribute('aria-disabled', blocked);
     }
-    await expect(page.getByText('Steps that would go past the 500-digit maximum are unavailable.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Steps that would go past the 128-digit maximum are unavailable.', { exact: true })).toBeVisible();
     // Pressed from the keyboard: Playwright doesn't click aria-disabled buttons
     await step('+400').focus();
     await page.keyboard.press('Enter');
     await expect(input).toHaveValue((max - 20n).toString());
     await step('+20').click();
-    await expect(input).toHaveValue('9'.repeat(500));
+    await expect(input).toHaveValue('9'.repeat(128));
     await expect(input).toHaveAttribute('aria-invalid', 'false');
     for (const name of ['+1', '+5', '+20', '+400']) await expect(step(name)).toHaveAttribute('aria-disabled', 'true');
 
     // Empty and invalid text: every step unavailable, with the reason, and the text kept
-    for (const text of ['', '12.5', '9'.repeat(501)]) {
+    for (const text of ['', '12.5', '9'.repeat(129)]) {
       await input.fill(text);
       await expect(page.getByText('Enter a whole number to copy it or use the steps.', { exact: true })).toBeVisible();
       await step('+1').focus();
@@ -563,7 +576,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     const random = page.getByRole('button', { name: 'Random number' });
     const lengths = new Set<number>();
 
-    for (const text of ['0', '', '12.5', '9'.repeat(501), '57', '', '-3', '42', '', '1']) {
+    for (const text of ['0', '', '12.5', '9'.repeat(129), '57', '', '-3', '42', '', '1']) {
       await input.fill(text);
       await random.focus();
       await page.keyboard.press('Enter');
@@ -591,7 +604,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     const copy = page.getByRole('button', { name: 'Copy number' });
     const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
 
-    for (const [text, copied] of [['8000400019', '8000400019'], ['9'.repeat(500), '9'.repeat(500)], [' 007', '7']]) {
+    for (const [text, copied] of [['8000400019', '8000400019'], ['9'.repeat(128), '9'.repeat(128)], [' 007', '7']]) {
       await input.fill(text);
       await copy.focus();
       await page.keyboard.press('Enter');
@@ -696,5 +709,493 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
 
     await page.getByRole('radio', { name: 'Number' }).check();
     await expect(page.getByLabel('Decimal integer')).toHaveValue('57');
+  });
+});
+
+test.describe('base-20 expansion: formula, Copy Formula and analytical breakdown', () => {
+  /** Opens the app, enters a number, and collects page errors */
+  async function showNumber(page: Page, theme: Theme, width: number, text: string) {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((saved) => localStorage.setItem('theme', saved), theme);
+    await page.goto('./');
+    await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
+    await page.getByLabel('Decimal integer').fill(text);
+    return errors;
+  }
+
+  const breakdown = (page: Page) => page.getByRole('region', { name: 'Analytical breakdown' });
+  const toggle = (page: Page) => page.getByRole('button', { name: 'Analytical breakdown' });
+
+  test('copies the canonical plain-text formula with the keyboard, says so, and keeps the focus', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const errors = await showNumber(page, 'light', 1280, '0');
+    const input = page.getByLabel('Decimal integer');
+    const copy = page.getByRole('button', { name: 'Copy Formula' });
+    const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+
+    for (const [text, formula] of [
+      ['1202', '3 × 20² + 0 × 20¹ + 2 × 20⁰ = 1202'],
+      ['20', '1 × 20¹ + 0 × 20⁰ = 20'],
+      ['9007199254740993', '2 × 20¹² + 3 × 20¹¹ + 19 × 20¹⁰ + 12 × 20⁹ + 3 × 20⁸ + 14 × 20⁷ + 8 × 20⁶ + 7 × 20⁵ + 2 × 20⁴ + 2 × 20³ + 12 × 20² + 9 × 20¹ + 13 × 20⁰ = 9007199254740993'],
+    ]) {
+      await input.fill(text);
+      await copy.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByText('Formula copied to the clipboard.', { exact: true })).toBeVisible();
+      await expect(copy).toBeFocused();
+      expect(await clipboard()).toBe(formula);
+    }
+
+    // The largest number: every tier, no grouping, ending with its exact value
+    await input.fill('9'.repeat(128));
+    await copy.click();
+    await expect.poll(clipboard).toMatch(/ = 9{128}$/);
+    const copied = await clipboard();
+    expect(copied.split(' + ')).toHaveLength(99);
+    expect(copied).not.toMatch(/[,<>]/);
+    await expect(page.getByText('Formula copied to the clipboard.', { exact: true })).toHaveCount(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('reports a failed formula copy without claiming success or telling to copy by hand', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: () => Promise.reject(new DOMException('Denied', 'NotAllowedError')) },
+      });
+    });
+    await showNumber(page, 'dark', 375, '1202');
+    await page.getByRole('button', { name: 'Copy Formula' }).click();
+    await expect(page.getByText('The formula could not be copied. Please try again.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Formula copied to the clipboard.', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/select/i)).toHaveCount(0);
+  });
+
+  test('gives screen readers exponents and table headers in words', async ({ page }) => {
+    await showNumber(page, 'light', 1280, '1202');
+    const base20 = cards(page).base20;
+    await toggle(page).click();
+
+    const snapshot = await base20.ariaSnapshot();
+    expect(snapshot).toContain('- text: 3 tiers, powers of 20 from 0 to 2 Positional Sum Formula\n');
+    expect(snapshot).toContain('- text: 3 × 20 to the power of 2 + 0 × 20 to the power of 1 + 2 × 20 to the power of 0\n');
+    expect(snapshot).not.toMatch(/20[²¹⁰]|× 20[0-2] /);
+    for (const name of ['Tier', 'Multiplier, 20 to the power of n', 'Digit', 'Subtotal, digit times multiplier']) {
+      await expect(page.getByRole('columnheader', { name, exact: true })).toHaveCount(1);
+    }
+    const rows = breakdown(page).locator('tbody tr');
+    await expect(rows.first()).toHaveAccessibleName('Tier 2 20 to the power of 2 3 1,200');
+    await expect(rows.nth(1).getByRole('cell').first()).toHaveAccessibleName('20 to the power of 1');
+    // The region takes its name from the button, and the caption does not repeat it
+    await expect(breakdown(page)).toHaveAttribute('aria-labelledby', (await toggle(page).getAttribute('id'))!);
+    await expect(breakdown(page).getByRole('table')).toHaveAccessibleName('Place-value contribution of each base-20 tier');
+  });
+
+  test('lays out the formula panel, the full-width disclosure and the table as designed', async ({ page }) => {
+    await showNumber(page, 'light', 1280, '1202');
+    const base20 = cards(page).base20;
+    const label = base20.getByText('Positional Sum Formula', { exact: true });
+    const panel = label.locator('../..');
+
+    // An inset panel, darker than the card, with an uppercase label, Copy Formula beside it and a
+    // monospace formula whose digits stand out
+    const styles = await panel.evaluate((el) => {
+      const style = getComputedStyle(el);
+      const card = getComputedStyle(el.closest('.bg-surface')!);
+      return { panel: style.backgroundColor, card: card.backgroundColor, shadow: style.boxShadow };
+    });
+    expect(styles.panel).not.toBe(styles.card);
+    expect(styles.shadow).toContain('inset');
+    expect(await label.evaluate((el) => getComputedStyle(el).textTransform)).toBe('uppercase');
+    const copy = page.getByRole('button', { name: 'Copy Formula' });
+    expect(Math.abs((await box(copy)).y + (await box(copy)).height / 2 - ((await box(label)).y + (await box(label)).height / 2))).toBeLessThanOrEqual(2);
+    expect((await box(copy)).height).toBeGreaterThanOrEqual(24);
+    const formula = label.locator('xpath=../following-sibling::div[1]');
+    expect(await formula.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/mono/i);
+    const digit = formula.locator('.font-bold').first();
+    expect(await digit.evaluate((el) => getComputedStyle(el).fontWeight)).toBe('700');
+
+    // The disclosure spans the expansion's width, tinted apart from the card and darker on hover,
+    // with a chevron pointing down while closed; it opens and closes with Enter and Space
+    const expansion = panel.locator('..');
+    expect((await box(toggle(page))).width).toBeCloseTo((await box(expansion)).width, 0);
+    const background = () => toggle(page).evaluate((el) => getComputedStyle(el).backgroundColor);
+    const rotation = () => toggle(page).locator('svg').evaluate((el) => getComputedStyle(el).rotate);
+    const resting = await background();
+    expect(resting).not.toBe(styles.card);
+    expect(resting).not.toBe('rgba(0, 0, 0, 0)');
+    expect(await rotation()).toBe('none');
+    await toggle(page).hover();
+    await expect.poll(background).not.toBe(resting);
+    await page.mouse.move(0, 0);
+    await toggle(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(breakdown(page)).toBeVisible();
+    // Up while open
+    await expect.poll(rotation).toBe('180deg');
+    expect(await toggle(page).evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+    await page.keyboard.press('Space');
+    await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false');
+    await expect(breakdown(page)).toHaveCount(0);
+    await page.keyboard.press('Space');
+    await expect(breakdown(page)).toBeVisible();
+
+    // Uppercase headers, but not their notation; centred digits; "20ⁿ" alone on one line
+    const table = breakdown(page).getByRole('table');
+    const header = table.getByRole('columnheader', { name: 'Digit', exact: true });
+    expect(await header.evaluate((el) => getComputedStyle(el).textTransform)).toBe('uppercase');
+    expect(await header.locator('[aria-hidden="true"]').evaluate((el) => getComputedStyle(el).textTransform)).toBe('none');
+    expect(await header.evaluate((el) => getComputedStyle(el).textAlign)).toBe('center');
+    const firstRow = table.locator('tbody tr').first();
+    expect(await firstRow.locator('td').nth(1).evaluate((el) => getComputedStyle(el).textAlign)).toBe('center');
+    await expect(firstRow.locator('th')).toHaveText('Tier 2');
+    const multiplier = firstRow.locator('td').first();
+    const lineHeight = await multiplier.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+    const padding = await multiplier.evaluate((el) => parseFloat(getComputedStyle(el).paddingTop) + parseFloat(getComputedStyle(el).paddingBottom));
+    expect((await box(multiplier)).height - padding).toBeLessThan(lineHeight * 1.5);
+    await expect(multiplier).toHaveText(/^202/);
+    await expect(multiplier).not.toContainText('=');
+  });
+
+  for (const [theme, width] of [['light', 375], ['dark', 768], ['dark', 1280]] as const) {
+    test(`gives Tier, Multiplier and Digit fixed widths and the rest to Subtotal at ${width}px`, async ({ page }) => {
+      await showNumber(page, theme, width, '1202');
+      await toggle(page).click();
+      const table = breakdown(page).getByRole('table');
+      const widths = await table.getByRole('columnheader').evaluateAll((cells) => cells.map((cell) => cell.getBoundingClientRect().width));
+      const tableWidth = (await box(table)).width;
+
+      // Subtotal takes what the others leave, and the table never scrolls sideways
+      expect(widths[3]).toBeCloseTo(tableWidth - widths[0] - widths[1] - widths[2], 0);
+      // The widest column from 640px; at 375px about as wide as Multiplier, the narrowest that
+      // fits "Multiplier" (Subtotal had about 82px when the two shared the space)
+      expect(widths[3]).toBeGreaterThan(width < 640 ? widths[0] : Math.max(widths[0], widths[1], widths[2]));
+      expect(await breakdown(page).evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await pageOverflow(page)).toBe(0);
+      // The notation never spills out of its column
+      for (const cell of await table.locator('thead th, tbody tr:first-child > *').all()) {
+        expect(await cell.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+      }
+    });
+  }
+
+  for (const [theme, width] of [['dark', 375], ['light', 1280]] as const) {
+    test(`wraps long subtotals only between groups of digits at ${width}px`, async ({ page }) => {
+      const errors = await showNumber(page, theme, width, '9'.repeat(128));
+      await toggle(page).click();
+      const cells = breakdown(page).locator('tbody tr > td:last-child');
+
+      const layout = await cells.evaluateAll((tds) => tds.map((td) => {
+        const lineHeight = parseFloat(getComputedStyle(td).lineHeight);
+        // Each group of digits is its own text node, so a group split over two lines has two boxes
+        const groups: Text[] = [];
+        const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (/^\d+$/.test(node.textContent!) && !node.parentElement!.closest('sup, .sr-only')) groups.push(node as Text);
+        }
+        const splitGroups = groups.filter((node) => {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getClientRects().length > 1;
+        }).length;
+        const power = td.querySelector('.whitespace-nowrap [aria-hidden="true"]');
+        return {
+          groups: groups.length,
+          splitGroups,
+          powerLines: power ? Math.round(power.getBoundingClientRect().height / lineHeight) : 1,
+          spill: td.scrollWidth - td.clientWidth,
+        };
+      }));
+
+      expect(layout).toHaveLength(99);
+      expect(layout.reduce((sum, cell) => sum + cell.groups, 0)).toBeGreaterThan(99);
+      expect(layout.filter((cell) => cell.splitGroups > 0)).toEqual([]);
+      expect(layout.filter((cell) => cell.powerLines > 1 || cell.spill > 0)).toEqual([]);
+      // At 375px the longest values do wrap, so the breaks above were actually tested
+      if (width === 375) expect(await cells.first().evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(60);
+      expect(await breakdown(page).evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await pageOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
+
+  for (const width of [375, 1280]) {
+    test(`keeps the focused value clear of the sticky header while tabbing backwards at ${width}px`, async ({ page }) => {
+      const errors = await showNumber(page, 'light', width, '9'.repeat(128));
+      await toggle(page).click();
+      const focusable = breakdown(page).locator('[tabindex="0"]');
+      await focusable.last().focus();
+
+      // Backwards from the last value, the browser scrolls each one to the top of the box: it,
+      // with its focus ring, must end below the sticky header and inside the box
+      for (let press = 0; press < 30; press++) {
+        await page.keyboard.press('Shift+Tab');
+        const placement = await page.evaluate(() => {
+          const focused = document.activeElement as HTMLElement;
+          const box = focused.closest('[role="region"]')!;
+          const header = box.querySelector('thead th')!.getBoundingClientRect();
+          const style = getComputedStyle(focused);
+          const ring = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+          const rect = focused.getBoundingClientRect();
+          return {
+            inTable: focused.closest('tbody') != null,
+            ringTop: rect.top - ring,
+            bottom: rect.bottom,
+            headerBottom: header.bottom,
+            boxBottom: box.getBoundingClientRect().bottom,
+          };
+        });
+        expect(placement.inTable, `press ${press + 1}`).toBe(true);
+        // 0.5px for sub-pixel rounding
+        expect(placement.ringTop, `press ${press + 1}`).toBeGreaterThanOrEqual(placement.headerBottom - 0.5);
+        expect(placement.bottom, `press ${press + 1}`).toBeLessThanOrEqual(placement.boxBottom + 0.5);
+      }
+      expect(errors).toEqual([]);
+    });
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`shows a multiplier's exact value in a tooltip on hover and keyboard focus in the ${theme} theme`, async ({ page }) => {
+      const errors = await showNumber(page, theme, 1280, '1202');
+      await toggle(page).click();
+      const multiplier = breakdown(page).locator('tbody tr').first().locator('[data-exponent]');
+      const tooltip = page.getByRole('tooltip');
+
+      await multiplier.hover();
+      await expect(tooltip).toHaveText('400');
+      await expect(multiplier).toHaveAttribute('aria-describedby', (await tooltip.getAttribute('id'))!);
+      // Inverse colours, legible in either theme
+      const colours = await tooltip.evaluate((el) => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]);
+      expect(colours[0]).not.toBe(colours[1]);
+      await page.mouse.move(0, 0);
+      await expect(tooltip).toHaveCount(0);
+
+      // The keyboard: the multiplier is the only stop in its row, and Escape closes the tooltip
+      await toggle(page).focus();
+      await page.keyboard.press('Tab');
+      await expect(multiplier).toBeFocused();
+      await expect(tooltip).toHaveText('400');
+      await page.keyboard.press('Escape');
+      await expect(tooltip).toHaveCount(0);
+      await page.keyboard.press('Tab');
+      await expect(breakdown(page).locator('tbody tr').nth(1).locator('[data-exponent]')).toBeFocused();
+      await expect(tooltip).toHaveText('20');
+      expect(errors).toEqual([]);
+    });
+  }
+
+  for (const [theme, width] of [['light', 375], ['dark', 768], ['light', 1280]] as const) {
+    test(`writes subtotals with 6 or more trailing zeros compactly, exact in a tooltip, at ${width}px`, async ({ page }) => {
+      // 2 × 20⁷ + 5 × 20⁵ + 3 × 20²: 2,560,000,000, 16,000,000 and 1,200
+      const errors = await showNumber(page, theme, width, '2576001200');
+      await toggle(page).click();
+      const rows = breakdown(page).locator('tbody tr');
+      const subtotal = (row: number) => rows.nth(row).locator('td').last();
+      const compact = subtotal(0).locator('[data-subtotal]');
+
+      await expect(subtotal(0)).toHaveAccessibleName('2,560 times 10 to the power of 6');
+      expect(await spokenText(subtotal(2))).toBe('16 times 10 to the power of 6');
+      await expect(subtotal(5)).toHaveText('1,200');
+      await expect(subtotal(5).locator('[data-subtotal]')).toHaveCount(0);
+      // On one line, right-aligned, with nothing spilling out
+      const lineHeight = await subtotal(0).evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+      expect((await box(compact)).height).toBeLessThan(lineHeight * 1.5);
+      expect(await subtotal(0).evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await pageOverflow(page)).toBe(0);
+
+      // The exact value on hover, then from the keyboard: the multiplier, then the compact subtotal
+      const tooltip = page.getByRole('tooltip');
+      await compact.hover();
+      await expect(tooltip).toHaveText('2,560,000,000');
+      await expect(compact).toHaveAttribute('aria-describedby', (await tooltip.getAttribute('id'))!);
+      await page.mouse.move(0, 0);
+      await expect(tooltip).toHaveCount(0);
+      await rows.first().locator('[data-exponent]').focus();
+      await page.keyboard.press('Tab');
+      await expect(compact).toBeFocused();
+      await expect(tooltip).toHaveText('2,560,000,000');
+      expect(await compact.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test('keeps the formula panel header in view while its 128-digit formula scrolls, with themed scrollbars', async ({ page }) => {
+    for (const theme of ['light', 'dark'] as const) {
+      const errors = await showNumber(page, theme, 375, '9'.repeat(128));
+      const label = cards(page).base20.getByText('Positional Sum Formula', { exact: true });
+      const copy = page.getByRole('button', { name: 'Copy Formula' });
+      const formula = page.getByRole('region', { name: 'Positional Sum Formula' });
+
+      expect((await box(formula)).height).toBeLessThanOrEqual(258);
+      const scroll = await formula.evaluate((el) => ({
+        colour: getComputedStyle(el).scrollbarColor,
+        sideways: el.scrollWidth - el.clientWidth,
+        lineStrong: getComputedStyle(document.documentElement).getPropertyValue('--color-line-strong').trim(),
+      }));
+      // The scrollbar in the theme's line-strong colour (headless Chromium hides scrollbars, so
+      // their visibility is checked in screenshots), and nothing to scroll sideways
+      expect(scroll.colour).toMatch(/^rgb\(/);
+      expect(scroll.colour).toContain(await page.evaluate((hex) => {
+        const n = parseInt(hex.slice(1), 16);
+        return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`;
+      }, scroll.lineStrong));
+      expect(scroll.sideways).toBeLessThanOrEqual(0);
+
+      await formula.focus();
+      await page.keyboard.press('End');
+      await expect.poll(() => formula.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1)).toBe(true);
+      // The label and Copy Formula stay above the scrolled formula
+      await expect(label).toBeInViewport();
+      await expect(copy).toBeInViewport();
+      expect((await box(copy)).y + (await box(copy)).height).toBeLessThanOrEqual((await box(formula)).y);
+      expect(await pageOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    }
+  });
+
+  for (const width of [375, 768]) {
+    test(`moves the focused disclosure clear of the floating Export trigger at ${width}px`, async ({ page }) => {
+      await showNumber(page, 'light', width, '1202');
+      const exportTrigger = page.getByRole('button', { name: /Export/ });
+      const exportTop = (await box(exportTrigger)).y;
+      // Scroll so that the disclosure sits in the trigger's band, then Tab onto it
+      const toggleTop = await toggle(page).evaluate((el) => el.getBoundingClientRect().top + scrollY);
+      await page.evaluate((y) => window.scrollTo(0, y), toggleTop - exportTop - 4);
+      expect((await box(toggle(page))).y + (await box(toggle(page))).height).toBeGreaterThan(exportTop);
+      await page.getByRole('button', { name: 'Copy Formula' }).evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
+
+      await page.keyboard.press('Tab');
+      await expect(toggle(page)).toBeFocused();
+      await expect.poll(async () => (await box(toggle(page))).y + (await box(toggle(page))).height).toBeLessThanOrEqual(exportTop);
+      // The chevron, on the right, is clear of the trigger, and the trigger still works
+      await expect(toggle(page).locator('svg')).toBeInViewport();
+      await exportTrigger.click();
+      await expect(page.getByRole('heading', { name: 'Export Options' })).toBeAttached();
+    });
+  }
+
+  for (const width of [375, 768, 1280]) {
+    test(`lets the end of the page scroll clear of the floating Export trigger at ${width}px`, async ({ page }) => {
+      for (const open of [false, true]) {
+        await showNumber(page, 'light', width, '1202');
+        await page.setViewportSize({ width, height: 600 });
+        if (open) await toggle(page).click();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        const exportTop = (await box(page.getByRole('button', { name: /Export/ }))).y;
+
+        // At the end of the page, every card ends above the trigger, with a gap
+        const cardBottoms = await page.locator('main .bg-surface.rounded-lg').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().bottom));
+        expect(cardBottoms.length).toBeGreaterThan(0);
+        for (const bottom of cardBottoms) expect(bottom).toBeLessThanOrEqual(exportTop - 8);
+
+        // The disclosure, chevron included, can be brought fully above the trigger by scrolling
+        await toggle(page).evaluate((el) => el.scrollIntoView({ block: 'end' }));
+        expect((await box(toggle(page))).y + (await box(toggle(page))).height).toBeLessThanOrEqual(exportTop);
+        expect(await pageOverflow(page)).toBe(0);
+      }
+    });
+  }
+
+  test('fades the breakdown out and removes it at once when reduced motion is preferred', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await showNumber(page, 'dark', 375, '1202');
+    await toggle(page).click();
+    const fading = breakdown(page).locator('..');
+    expect(await fading.evaluate((el) => getComputedStyle(el).animationDuration)).toBe('1e-05s');
+    expect(await toggle(page).locator('svg').evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('1e-05s');
+
+    await toggle(page).click();
+    await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false');
+    await expect(breakdown(page)).toHaveCount(0);
+  });
+
+  test('groups the table values exactly, beyond Number.MAX_SAFE_INTEGER', async ({ page }) => {
+    await showNumber(page, 'light', 1280, '9007199254740993');
+    await toggle(page).click();
+    const top = breakdown(page).locator('tbody tr').first();
+    await top.locator('[data-exponent]').focus();
+    await expect(page.getByRole('tooltip')).toHaveText('4,096,000,000,000,000');
+    // 8,192,000,000,000,000, compact, exact in the tooltip
+    await expect(top.locator('td').last()).toHaveAccessibleName('8,192 times 10 to the power of 12');
+    await top.locator('[data-subtotal]').focus();
+    await expect(page.getByRole('tooltip')).toHaveText('8,192,000,000,000,000');
+
+    await page.getByLabel('Decimal integer').fill('1202');
+    await expect(breakdown(page).locator('tbody tr').first().locator('td').last()).toHaveText('1,200');
+  });
+
+  for (const [theme, width] of [['dark', 375], ['light', 768], ['light', 1280]] as const) {
+    test(`opens the 128-digit breakdown without overflow, with a sticky header and keyboard scrolling at ${width}px`, async ({ page }) => {
+      const errors = await showNumber(page, theme, width, '9'.repeat(128));
+      const base20 = cards(page).base20;
+      await expect(base20.getByText('99 tiers · 20⁰–20⁹⁸', { exact: true })).toBeVisible();
+      await expect(breakdown(page)).toHaveCount(0);
+
+      await toggle(page).focus();
+      await page.keyboard.press('Enter');
+      await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
+      const region = breakdown(page);
+      await expect(region.locator('tbody tr')).toHaveCount(99);
+
+      // Bounded: about 300px tall, no horizontal scrolling inside or on the page
+      expect((await box(region)).height).toBeLessThanOrEqual(302);
+      expect(await region.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await pageOverflow(page)).toBe(0);
+      // The top subtotal, 3 × 20⁹⁸, compact; a long coefficient may wrap, but never "× 10⁹⁶"
+      const topSubtotal = region.locator('tbody tr').first().locator('td').last();
+      await expect(topSubtotal).toHaveAccessibleName('95,073,795,017,117,205,112,252,740,403,200 times 10 to the power of 96');
+      const lineHeight = await topSubtotal.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+      const powerHeights = await region.locator('td .whitespace-nowrap').evaluateAll((powers) => powers.map((el) => el.getBoundingClientRect().height));
+      expect(powerHeights.length).toBeGreaterThan(80);
+      for (const height of powerHeights) expect(height).toBeLessThan(lineHeight * 1.5);
+      expect(await region.locator('td, th').evaluateAll((cells) => cells.filter((cell) => cell.scrollWidth > cell.clientWidth).length)).toBe(0);
+
+      // The longest multiplier, 20⁹⁸, and subtotal, exact in a tooltip that wraps inside the
+      // screen, without scrolling
+      const tooltip = page.getByRole('tooltip');
+      for (const [anchor, exact] of [['[data-exponent]', 20n ** 98n], ['[data-subtotal]', 3n * 20n ** 98n]] as const) {
+        await region.locator('tbody tr').first().locator(anchor).hover();
+        await expect(tooltip).toHaveText(/^\d{1,3}(,\d{3})+$/);
+        expect((await tooltip.textContent())!.replaceAll(',', '')).toBe(exact.toString());
+        const tip = await box(tooltip);
+        expect(tip.x).toBeGreaterThanOrEqual(0);
+        expect(tip.x + tip.width).toBeLessThanOrEqual(width);
+        expect(tip.y).toBeGreaterThanOrEqual(0);
+        expect(await tooltip.evaluate((el) => [getComputedStyle(el).overflowWrap, getComputedStyle(el).overflowY])).toEqual(['anywhere', 'visible']);
+        expect(await pageOverflow(page)).toBe(0);
+        await page.mouse.move(0, 0);
+        await expect(tooltip).toHaveCount(0);
+      }
+
+      // Next in the tab order, with the focus ring, and scrollable with the keyboard
+      await toggle(page).focus();
+      await page.keyboard.press('Tab');
+      await expect(region).toBeFocused();
+      expect(await region.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
+      await page.keyboard.press('End');
+      await expect.poll(() => region.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1)).toBe(true);
+      // The header stays at the top of the scrolled region
+      const header = region.getByRole('columnheader', { name: 'Tier', exact: true });
+      expect(Math.abs((await box(header)).y - (await box(region)).y)).toBeLessThanOrEqual(2);
+      await expect(region.locator('tbody tr').last().locator('th')).toBeInViewport();
+      expect(await pageOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test('leaves Date mode without the badge, Copy Formula or breakdown', async ({ page }) => {
+    await showNumber(page, 'light', 1280, '1202');
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    const base20 = cards(page).base20;
+
+    await expect(base20.getByText('Day', { exact: true })).toBeVisible();
+    expect(await base20.getByText('Day', { exact: true }).locator('xpath=following-sibling::div[1]').innerHTML()).toBe('15 × 20<sup>0</sup>');
+    await expect(base20.getByText(/tiers?|Positional Sum Formula/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Copy Formula' })).toHaveCount(0);
+    await expect(toggle(page)).toHaveCount(0);
   });
 });

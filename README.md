@@ -18,9 +18,9 @@ Explore and convert numbers or dates into Mayan numeral glyphs. MayaStack brings
 ## 🚀 Features
 
 - Convert numbers and dates into authentic Mayan numeral representations
-- Convert whole numbers of up to 500 digits exactly (leading zeros aside; the input itself can be at most 1,000 characters)
-- Number mode starts at 0, shown with the shell zero glyph. A count shows the number's significant digits, and while the input has focus the Up and Down arrow keys add or subtract 1, from 0 up to the 500-digit maximum. Leading zeros typed or pasted before a whole number are removed, so typing 5 after the initial 0 gives 5
-- Number input actions: Random fills in a random whole number of 1 to 10 digits, Copy copies the number to the clipboard, Clear empties the field and Zero sets it to 0. The quick steps +1, +5, +20 and +400 add to the number, as long as the result stays within 500 digits
+- Convert whole numbers of up to 128 digits exactly, enough for a googol (10^100) or 2^256 (leading zeros aside; the input itself can be at most 1,000 characters)
+- Number mode starts at 0, shown with the shell zero glyph. A count shows the number's significant digits, and while the input has focus the Up and Down arrow keys add or subtract 1, from 0 up to the 128-digit maximum. Leading zeros typed or pasted before a whole number are removed, so typing 5 after the initial 0 gives 5
+- Number input actions: Random fills in a random whole number of 1 to 10 digits, Copy copies the number to the clipboard, Clear empties the field and Zero sets it to 0. The quick steps +1, +5, +20 and +400 add to the number, as long as the result stays within 128 digits
 - Interactive visual stacks using dots, bars, and shells
 - Export numeral stacks as SVG or PNG for sharing or printing
 - SVG export works at every size. PNG export is limited to 32,767 px in width and height and 8,192 × 8,192 pixels in total, because larger images fail or need too much memory in some browsers; sizes beyond that are marked unavailable. A PNG within these limits can still fail on some browsers or devices (notably mobile), in which case the app says so and suggests a smaller size or SVG

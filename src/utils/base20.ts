@@ -138,3 +138,42 @@ export function getPlaceValues(digits: number[]): PlaceValue[] {
     return { digit, exponent, multiplier, value: BigInt(digit) * multiplier };
   });
 }
+
+/**
+ * Unicode superscript digits, indexed by digit (¹, ² and ³ come from a different block)
+ */
+const SUPERSCRIPT_DIGITS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+
+/**
+ * Writes a non-negative integer with Unicode superscript digits, for plain-text exponents.
+ *
+ * Example:
+ *   toSuperscript(384) => "³⁸⁴"
+ *
+ * @throws RangeError for negative, fractional or unsafe values
+ */
+export function toSuperscript(n: number): string {
+  if (!Number.isSafeInteger(n) || n < 0) {
+    throw new RangeError(`Expected a non-negative safe integer, received ${n}.`);
+  }
+
+  return [...n.toString()].map((digit) => SUPERSCRIPT_DIGITS[Number(digit)]).join('');
+}
+
+/**
+ * Writes the positional sum of base-20 digits as a plain-text formula, ending with its
+ * exact decimal value. Every tier is included, also those whose digit is 0.
+ *
+ * Example:
+ *   toBase20Formula([3, 0, 2]) => "3 × 20² + 0 × 20¹ + 2 × 20⁰ = 1202"
+ *
+ * @param digits - Base-20 digits, most significant digit first
+ * @returns The formula, without markup or digit grouping
+ */
+export function toBase20Formula(digits: number[]): string {
+  const placeValues = getPlaceValues(digits);
+  const terms = placeValues.map(({ digit, exponent }) => `${digit} × ${BASE_20}${toSuperscript(exponent)}`);
+  const total = placeValues.reduce((sum, { value }) => sum + value, 0n);
+
+  return `${terms.join(' + ')} = ${total}`;
+}

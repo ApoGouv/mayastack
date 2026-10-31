@@ -123,6 +123,18 @@
   :root {
     color-scheme: light;
   }
+
+  /* The floating Export trigger covers a band at the bottom of the viewport (bottom-4, from
+     sm bottom-16, 40px tall). Focusing a control, or scrolling one into view, keeps it above
+     that band, so the trigger never hides it, e.g. the analytical breakdown's chevron. Layout
+     is unchanged. */
+  :root {
+    scroll-padding-bottom: 4.5rem;
+
+    @media (width >= 40rem) {
+      scroll-padding-bottom: 7rem;
+    }
+  }
   :root.dark {
     color-scheme: dark;
   }
@@ -159,6 +171,13 @@
     outline: 2px solid var(--color-focus);
     outline-offset: -2px;
   }
+}
+
+/* Scrollbars of capped scrolling boxes: a line-strong thumb (at least 3:1 against the
+   surfaces) on a transparent track, in both themes. Browsers without scrollbar-color keep
+   their native scrollbar, which follows color-scheme. */
+@utility scrollbar-themed {
+  scrollbar-color: var(--color-line-strong) transparent;
 }
 
 .mep-svg {

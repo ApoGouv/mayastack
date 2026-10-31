@@ -1,9 +1,11 @@
 /**
  * The maximum number of significant digits (leading zeros aside) the number
- * input converts. 500 decimal digits are at most 385 base-20 digits, which
- * keeps the glyph stack and its SVG to a size the browser renders quickly.
+ * input converts. 128 decimal digits are at most 99 base-20 digits, which keeps
+ * the glyph stack, its SVG and PNG exports and the analytical breakdown to a size
+ * that stays quick to render and readable. It still takes a googol (10^100, 101
+ * digits) and 2^256 (78 digits).
  */
-export const MAX_SIGNIFICANT_DIGITS = 500;
+export const MAX_SIGNIFICANT_DIGITS = 128;
 
 /**
  * The maximum length of the raw input text, surrounding whitespace and
@@ -83,7 +85,7 @@ export function validateNumberInput(text: string): NumberInputValidation {
 }
 
 /**
- * The largest value the number input converts: 500 nines, i.e. 10^500 - 1.
+ * The largest value the number input converts: 128 nines, i.e. 10^128 - 1.
  */
 export const MAX_NUMBER_VALUE = 10n ** BigInt(MAX_SIGNIFICANT_DIGITS) - 1n;
 

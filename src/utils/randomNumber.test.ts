@@ -26,7 +26,7 @@ describe('generateRandomNumberText', () => {
     expect(generateRandomNumberText(sequence([[10, 3], [9, 4], [10, 0], [10, 9], [10, 7]]))).toBe('5097');
   });
 
-  it('generates at most 10 digits, well within the input’s 500-digit maximum', () => {
+  it('generates at most 10 digits, well within the input’s 128-digit maximum', () => {
     expect(MAX_RANDOM_DIGITS).toBe(10);
     expect(MAX_RANDOM_DIGITS).toBeLessThan(MAX_SIGNIFICANT_DIGITS);
   });

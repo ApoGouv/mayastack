@@ -28,7 +28,7 @@ const stepClassName =
  *
  * A step adds its amount to the current value, exactly, and gives canonical
  * text. While the input is empty or invalid, or where a step would go past the
- * 500-digit maximum, the step is unavailable instead of changing the text or
+ * MAX_SIGNIFICANT_DIGITS maximum, the step is unavailable instead of changing the text or
  * stopping at the maximum. Zero sets the input to 0 from any text.
  */
 const NumberQuickActions: React.FC<NumberQuickActionsProps> = ({ value, onChange, unavailableReasonId }) => {

@@ -62,13 +62,13 @@ const FILENAME_END_DIGITS = 10;
  *
  * A number of up to MAX_DIGITS_IN_FILENAME digits is written out in full. A longer one is
  * abbreviated to its first and last 10 digits and its length, which keeps the filename within
- * 55 characters (most file systems allow at most 255 per filename, and a 500-digit number would
- * need 521). Only the filename is shortened, never the exported numeral.
+ * 55 characters (written out in full, the largest 128-digit number would need 149, and the name
+ * would be hard to read). Only the filename is shortened, never the exported numeral.
  *
  * Example:
  *   getNumberExportFilename('123')       => 'mayan-numeral-number-123'
- *   getNumberExportFilename('9'.repeat(500))
- *     => 'mayan-numeral-number-9999999999...9999999999-500-digits'
+ *   getNumberExportFilename('9'.repeat(128))
+ *     => 'mayan-numeral-number-9999999999...9999999999-128-digits'
  *
  * @param decimal - The number's decimal digits, without leading zeros
  */

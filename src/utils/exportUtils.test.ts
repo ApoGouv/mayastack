@@ -40,19 +40,19 @@ const renderNumberSvg = (value: bigint) => {
 };
 
 describe('prepareSvgCloneForExport', () => {
-  it('keeps every digit stack and its metadata for the largest 500-digit number', () => {
-    const value = 10n ** 500n - 1n;
+  it('keeps every digit stack and its metadata for the largest 128-digit number', () => {
+    const value = 10n ** 128n - 1n;
     const svg = renderNumberSvg(value);
     const placeholder = document.createElement('div');
 
-    const clone = prepareSvgCloneForExport(svg, 700, 61600, placeholder);
+    const clone = prepareSvgCloneForExport(svg, 700, 15840, placeholder);
 
     expect(clone).not.toBeNull();
     expect(clone?.getAttribute('width')).toBe('700');
-    expect(clone?.getAttribute('height')).toBe('61600');
+    expect(clone?.getAttribute('height')).toBe('15840');
 
     const groups = [...(clone?.querySelectorAll('g[data-digit-index]') ?? [])];
-    expect(groups).toHaveLength(385);
+    expect(groups).toHaveLength(99);
     // The exported digit stacks still describe exactly the original number
     expect(
       groups.reduce(
@@ -72,9 +72,11 @@ describe('checkPngSize', () => {
     expect(MAX_PNG_AREA).toBe(67_108_864);
   });
 
-  it('allows the original size of the largest 500-digit number', () => {
-    // 385 base-20 digits × 80 units tall, 350 units wide
-    expect(checkPngSize(350, 30800)).toEqual({ supported: true });
+  it('allows the original size of the largest 128-digit number, and its Small and Medium presets', () => {
+    // 99 base-20 digits × 80 units tall, 350 units wide
+    expect(checkPngSize(350, 7920)).toEqual({ supported: true });
+    expect(checkPngSize(600, 13577)).toEqual({ supported: true });
+    expect(checkPngSize(1200, 27154)).toEqual({ supported: true });
   });
 
   it('allows sizes exactly at the limits', () => {
@@ -82,13 +84,13 @@ describe('checkPngSize', () => {
     expect(checkPngSize(8192, 8192)).toEqual({ supported: true });
   });
 
-  it('refuses a side longer than the limit, e.g. the Small preset for 500 digits', () => {
+  it('refuses a side longer than the limit, e.g. the Large preset for 128 digits', () => {
     expect(checkPngSize(350, MAX_PNG_SIDE + 1)).toEqual({
       supported: false,
       reason:
         'PNG export is limited to 32,767 px in width and height, the most some browsers can draw; this one would be 350 × 32,768 px.',
     });
-    expect(checkPngSize(600, 52800).supported).toBe(false);
+    expect(checkPngSize(2400, 54309).supported).toBe(false);
   });
 
   it('refuses more pixels than the area limit, even with both sides allowed', () => {
@@ -110,7 +112,7 @@ describe('exportPng', () => {
     ['too large', 600, 52800],
     ['empty', 0, 0],
   ])('refuses a %s size (%i × %i) before creating any canvas', async (_, width, height) => {
-    const svg = renderNumberSvg(10n ** 500n - 1n);
+    const svg = renderNumberSvg(10n ** 128n - 1n);
     const clone = prepareSvgCloneForExport(svg, width, height, document.createElement('div')) as SVGSVGElement;
     const createElement = vi.spyOn(document, 'createElement');
 
@@ -136,17 +138,17 @@ describe('getNumberExportFilename', () => {
     );
   });
 
-  it('keeps the filename of the largest 500-digit number short', () => {
-    const name = getNumberExportFilename('9'.repeat(500));
+  it('keeps the filename of the largest 128-digit number short', () => {
+    const name = getNumberExportFilename('9'.repeat(128));
 
-    expect(name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits');
+    expect(name).toBe('mayan-numeral-number-9999999999...9999999999-128-digits');
     expect(name).toHaveLength(55);
     // With either extension, well within the 255 characters most file systems allow
     for (const extension of ['.svg', '.png']) expect(`${name}${extension}`.length).toBeLessThanOrEqual(59);
   });
 
   it('gives every supported number a filename of at most 55 safe characters', () => {
-    for (let digits = 1; digits <= 500; digits++) {
+    for (let digits = 1; digits <= 128; digits++) {
       const name = getNumberExportFilename('8'.repeat(digits));
       expect(name.length).toBeLessThanOrEqual(55);
       expect(name).toMatch(/^[a-z0-9.-]+$/);

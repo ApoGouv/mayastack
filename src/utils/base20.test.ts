@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPlaceValues, toBase20 } from './base20';
+import { getPlaceValues, toBase20, toBase20Formula, toSuperscript } from './base20';
 
 // Large reference values are written as bigint literals: building them as a
 // JavaScript number first would already lose precision.
@@ -70,12 +70,12 @@ describe('toBase20', () => {
     }
   });
 
-  it('converts the largest 500-digit integer, the number input limit, exactly', () => {
-    const largest500Digit = 10n ** 500n - 1n;
-    const digits = toBase20(largest500Digit);
+  it('converts the largest 128-digit integer, the number input limit, exactly', () => {
+    const largest128Digit = 10n ** 128n - 1n;
+    const digits = toBase20(largest128Digit);
 
-    expect(digits).toHaveLength(385);
-    expect(fromBase20Digits(digits)).toBe(largest500Digit);
+    expect(digits).toHaveLength(99);
+    expect(fromBase20Digits(digits)).toBe(largest128Digit);
   });
 
   it('rejects negative values', () => {
@@ -126,5 +126,62 @@ describe('getPlaceValues', () => {
       value: 83886080000000000000000000000n,
     });
     expect(placeValues.reduce((total, { value }) => total + value, 0n)).toBe(THIRTY_DIGIT);
+  });
+});
+
+describe('toSuperscript', () => {
+  it('writes every digit as a superscript, including those of multi-digit exponents', () => {
+    expect([...Array(10).keys()].map(toSuperscript).join('')).toBe('⁰¹²³⁴⁵⁶⁷⁸⁹');
+    expect(toSuperscript(10)).toBe('¹⁰');
+    expect(toSuperscript(11)).toBe('¹¹');
+    expect(toSuperscript(98)).toBe('⁹⁸');
+  });
+
+  it('rejects values that are not exponents', () => {
+    expect(() => toSuperscript(-1)).toThrow(RangeError);
+    expect(() => toSuperscript(1.5)).toThrow(RangeError);
+    expect(() => toSuperscript(Number.NaN)).toThrow(RangeError);
+  });
+});
+
+describe('toBase20Formula', () => {
+  /** Reads a formula's terms back: [digit, exponent] pairs and the stated total */
+  function parseFormula(formula: string) {
+    const fromSuperscript = (text: string) => Number([...text].map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(c)).join(''));
+    const [sum, total] = formula.split(' = ');
+    const terms = sum.split(' + ').map((term) => {
+      const [, digit, exponent] = term.match(/^(\d+) × 20([⁰¹²³⁴⁵⁶⁷⁸⁹]+)$/)!;
+      return [Number(digit), fromSuperscript(exponent)] as const;
+    });
+    return { terms, total };
+  }
+
+  it('writes zero as its single tier', () => {
+    expect(toBase20Formula(toBase20(0))).toBe('0 × 20⁰ = 0');
+  });
+
+  it('keeps every zero-valued tier across the positional boundaries', () => {
+    expect(toBase20Formula(toBase20(19))).toBe('19 × 20⁰ = 19');
+    expect(toBase20Formula(toBase20(20))).toBe('1 × 20¹ + 0 × 20⁰ = 20');
+    expect(toBase20Formula(toBase20(400))).toBe('1 × 20² + 0 × 20¹ + 0 × 20⁰ = 400');
+    expect(toBase20Formula(toBase20(1202))).toBe('3 × 20² + 0 × 20¹ + 2 × 20⁰ = 1202');
+  });
+
+  it('writes digits above 9 and the exact total beyond Number.MAX_SAFE_INTEGER', () => {
+    expect(toBase20Formula(BEYOND_MAX_SAFE_DIGITS)).toBe(
+      '2 × 20¹² + 3 × 20¹¹ + 19 × 20¹⁰ + 12 × 20⁹ + 3 × 20⁸ + 14 × 20⁷ + 8 × 20⁶ + 7 × 20⁵ + 2 × 20⁴ + 2 × 20³ + 12 × 20² + 9 × 20¹ + 13 × 20⁰ = 9007199254740993'
+    );
+  });
+
+  it('writes the largest 128-digit number exactly, as plain text without grouping', () => {
+    const value = 10n ** 128n - 1n;
+    const formula = toBase20Formula(toBase20(value));
+    const { terms, total } = parseFormula(formula);
+
+    expect(terms).toHaveLength(99);
+    expect(terms.map(([, exponent]) => exponent)).toEqual([...Array(99).keys()].reverse());
+    expect(terms.reduce((sum, [digit, exponent]) => sum + BigInt(digit) * 20n ** BigInt(exponent), 0n)).toBe(value);
+    expect(total).toBe('9'.repeat(128));
+    expect(formula).not.toMatch(/[<>,]/);
   });
 });

@@ -142,26 +142,26 @@ describe('NumberInput', () => {
 
   it('keeps a very large integer exactly as entered', () => {
     const input = renderNumberInput();
-    const fourHundredDigits = '1234567890'.repeat(40);
-    enterText(input, fourHundredDigits);
-    expect(input.value).toBe(fourHundredDigits);
+    const hundredDigits = '1234567890'.repeat(10);
+    enterText(input, hundredDigits);
+    expect(input.value).toBe(hundredDigits);
     expect(input.getAttribute('aria-invalid')).toBe('false');
   });
 
   it('accepts an integer with the maximum number of digits without a message', () => {
     const input = renderNumberInput();
-    enterText(input, '9'.repeat(500));
+    enterText(input, '9'.repeat(128));
     expect(input.getAttribute('aria-invalid')).toBe('false');
     expect(validationMessage(input)).toBe('');
   });
 
   it('flags an integer with too many digits without shortening it', () => {
     const input = renderNumberInput();
-    const tooManyDigits = '9'.repeat(501);
+    const tooManyDigits = '9'.repeat(129);
     enterText(input, tooManyDigits);
     expect(input.value).toBe(tooManyDigits);
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    expect(validationMessage(input)).toContain('at most 500 digits');
+    expect(validationMessage(input)).toContain('at most 128 digits');
   });
 
   it('flags over-long text without truncating it', () => {
@@ -175,10 +175,10 @@ describe('NumberInput', () => {
 
   it('removes the too-many-digits message once the input is shortened', () => {
     const input = renderNumberInput();
-    enterText(input, '9'.repeat(501));
-    expect(validationMessage(input)).toContain('at most 500 digits');
+    enterText(input, '9'.repeat(129));
+    expect(validationMessage(input)).toContain('at most 128 digits');
 
-    enterText(input, '9'.repeat(500));
+    enterText(input, '9'.repeat(128));
     expect(input.getAttribute('aria-invalid')).toBe('false');
     expect(validationMessage(input)).toBe('');
   });
@@ -273,7 +273,7 @@ describe('NumberInput editing without redundant leading zeros', () => {
     expect(input.selectionStart).toBe(1);
     editText(input, '000');
     expect(input.value).toBe('0');
-    const maxDigits = '9'.repeat(500);
+    const maxDigits = '9'.repeat(128);
     editText(input, '000' + maxDigits);
     expect(input.value).toBe(maxDigits);
     expect(input.getAttribute('aria-invalid')).toBe('false');
@@ -291,7 +291,7 @@ describe('NumberInput editing without redundant leading zeros', () => {
     ['012a', 'Use digits'],
     ['-05', 'Negative numbers'],
     ['05.5', 'Decimal numbers'],
-    ['0' + '9'.repeat(501), 'at most 500 digits'],
+    ['0' + '9'.repeat(129), 'at most 128 digits'],
     ['0'.repeat(1001), 'at most 1000 characters'],
   ])('keeps the leading zeros of invalid text "%s", with its message', (text, message) => {
     const input = renderNumberInput('0');
@@ -339,15 +339,15 @@ describe('NumberInput Up and Down arrow keys', () => {
     expect(input.getAttribute('aria-invalid')).toBe('false');
   });
 
-  it('keeps the largest 500-digit value instead of going to 501 digits', () => {
-    const maxDigits = '9'.repeat(500);
+  it('keeps the largest 128-digit value instead of going to 129 digits', () => {
+    const maxDigits = '9'.repeat(128);
     const input = renderNumberInput(maxDigits);
     expect(press(input, 'ArrowUp')).toBe(false);
     expect(input.value).toBe(maxDigits);
     expect(input.getAttribute('aria-invalid')).toBe('false');
-    expect(digitCount(input)).toBe('500 digits');
+    expect(digitCount(input)).toBe('128 digits');
     press(input, 'ArrowDown');
-    expect(input.value).toBe('9'.repeat(499) + '8');
+    expect(input.value).toBe('9'.repeat(127) + '8');
   });
 
   it('stays exact beyond Number.MAX_SAFE_INTEGER', () => {
@@ -360,7 +360,7 @@ describe('NumberInput Up and Down arrow keys', () => {
     expect(input.value).toBe('9'.repeat(99));
   });
 
-  it.each(['', '12.5', '-3', 'abc', '9'.repeat(501)])(
+  it.each(['', '12.5', '-3', 'abc', '9'.repeat(129)])(
     'leaves "%s" and its message unchanged, and the key its usual effect',
     (text) => {
       const input = renderNumberInput(text);
@@ -429,8 +429,11 @@ describe('NumberInput significant-digit count', () => {
     ['7', '1 digit'],
     ['1000', '4 digits'],
     ['9007199254740993', '16 digits'],
-    ['1' + '0'.repeat(499), '500 digits'],
-    ['9'.repeat(500), '500 digits'],
+    // 2^256 and a googol
+    [(2n ** 256n).toString(), '78 digits'],
+    ['1' + '0'.repeat(100), '101 digits'],
+    ['1' + '0'.repeat(127), '128 digits'],
+    ['9'.repeat(128), '128 digits'],
   ])('counts "%s" as %s', (text, count) => {
     const input = renderNumberInput(text);
     expect(digitCount(input)).toBe(count);
@@ -444,7 +447,7 @@ describe('NumberInput significant-digit count', () => {
     expect(digitCount(input)).toBe('4 digits');
   });
 
-  it.each(['', '   ', '12.5', '-3', '1e5', '9'.repeat(501), '0'.repeat(1001)])('shows no count for "%s"', (text) => {
+  it.each(['', '   ', '12.5', '-3', '1e5', '9'.repeat(129), '0'.repeat(1001)])('shows no count for "%s"', (text) => {
     const input = renderNumberInput(text);
     expect(digitCount(input)).toBeNull();
   });
@@ -487,10 +490,10 @@ describe('NumberInput Clear and Zero', () => {
   const states = [
     ['zero', '0'],
     ['a valid number', '123'],
-    ['a 500-digit number', '9'.repeat(500)],
+    ['a 128-digit number', '9'.repeat(128)],
     ['text with surrounding whitespace', ' 7 '],
     ['an invalid number', '12.5'],
-    ['an over-limit number', '9'.repeat(501)],
+    ['an over-limit number', '9'.repeat(129)],
     ['over-long text', '0'.repeat(1001)],
     ['an empty field', ''],
   ];
@@ -590,9 +593,9 @@ describe('NumberInput quick steps', () => {
     const input = renderNumberInput('9007199254740992');
     fireEvent.click(step('+1'));
     expect(input.value).toBe('9007199254740993');
-    enterText(input, '9'.repeat(400));
+    enterText(input, '9'.repeat(100));
     fireEvent.click(step('+400'));
-    expect(input.value).toBe('1' + '0'.repeat(397) + '399');
+    expect(input.value).toBe('1' + '0'.repeat(97) + '399');
   });
 
   it('gives canonical text for text with surrounding whitespace, as the arrow keys do', () => {
@@ -601,7 +604,7 @@ describe('NumberInput quick steps', () => {
     expect(input.value).toBe('27');
   });
 
-  it.each(['', '   ', '12.5', '-3', 'abc', '9'.repeat(501), '0'.repeat(1001)])(
+  it.each(['', '   ', '12.5', '-3', 'abc', '9'.repeat(129), '0'.repeat(1001)])(
     'leaves "%s" unchanged, with every step unavailable and the reason linked',
     (text) => {
       const input = renderNumberInput(text);
@@ -618,11 +621,11 @@ describe('NumberInput quick steps', () => {
     }
   );
 
-  it('makes available only the steps that stay within 500 digits, landing exactly on the largest value', () => {
-    const max = BigInt('9'.repeat(500));
+  it('makes available only the steps that stay within 128 digits, landing exactly on the largest value', () => {
+    const max = BigInt('9'.repeat(128));
     const input = renderNumberInput((max - 5n).toString());
     expect(['+1', '+5', '+20', '+400'].map((amount) => blocked(step(amount)))).toEqual([false, false, true, true]);
-    const reason = 'Steps that would go past the 500-digit maximum are unavailable.';
+    const reason = 'Steps that would go past the 128-digit maximum are unavailable.';
     expect(description(step('+20'))).toBe(reason);
     expect(step('+5').hasAttribute('aria-describedby')).toBe(false);
 
@@ -634,7 +637,7 @@ describe('NumberInput quick steps', () => {
     expect(document.activeElement).toBe(button);
 
     fireEvent.click(step('+5'));
-    expect(input.value).toBe('9'.repeat(500));
+    expect(input.value).toBe('9'.repeat(128));
     expect(input.getAttribute('aria-invalid')).toBe('false');
     expect(['+1', '+5', '+20', '+400'].map((amount) => blocked(step(amount)))).toEqual([true, true, true, true]);
     expect(description(step('+1'))).toBe(reason);
@@ -661,7 +664,7 @@ describe('NumberInput Random', () => {
   const randomButton = () => screen.getByRole('button', { name: 'Random number' }) as HTMLButtonElement;
   const status = () => screen.getByRole('status');
 
-  it.each(['0', '123', '', '   ', '12.5', '9'.repeat(501), '0'.repeat(1001)])(
+  it.each(['0', '123', '', '   ', '12.5', '9'.repeat(129), '0'.repeat(1001)])(
     'replaces "%s" with the generated number, keeping the focus on the button',
     (text) => {
       vi.mocked(generateRandomNumberText).mockReturnValueOnce('8000400019');
@@ -771,7 +774,7 @@ describe('NumberInput Copy', () => {
 
   it.each([
     ['8000400019', '8000400019'],
-    ['9'.repeat(500), '9'.repeat(500)],
+    ['9'.repeat(128), '9'.repeat(128)],
     ['0', '0'],
     [' 7 ', '7'],
   ])('copies "%s" as the canonical text "%s" and says so, keeping the number and the focus', async (text, copied) => {
@@ -816,7 +819,7 @@ describe('NumberInput Copy', () => {
     expect(screen.getAllByText('Number copied to the clipboard.')).toHaveLength(1);
   });
 
-  it.each(['', '   ', '12.5', '-3', '9'.repeat(501), '0'.repeat(1001)])(
+  it.each(['', '   ', '12.5', '-3', '9'.repeat(129), '0'.repeat(1001)])(
     'is unavailable for "%s", with the reason linked, and copies nothing',
     async (text) => {
       const writeText = vi.fn().mockResolvedValue(undefined);
