@@ -510,7 +510,72 @@ test.describe('browser storage', () => {
     await grid.click();
     await expect(grid).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByRole('button', { name: '📦 Export' })).toBeVisible();
+
+    // Colours too, including the save that waits for the picker to settle, which fails quietly
+    await page.clock.install();
+    await page.getByRole('button', { name: 'Glyph color:' }).click();
+    await page.getByRole('slider', { name: 'Alpha' }).press('ArrowLeft');
+    await expect(page.locator('svg.mep-svg')).toHaveAttribute('style', /rgba\(0, 0, 0, 0\.95\)/);
+    await page.clock.runFor(300);
     expect(errors).toEqual([]);
+  });
+
+  /** The glyph colour (from the SVG's style) and the background fill of the rendered numeral */
+  const renderedColours = (page: Page) =>
+    page.locator('svg.mep-svg').evaluate((svg) => ({
+      glyph: (svg as SVGSVGElement).style.color,
+      background: svg.querySelector('rect')!.getAttribute('fill'),
+    }));
+
+  test('starts from valid saved colours, alpha included, and ignores invalid ones', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('mayastack:backgroundColor', '{"r":10,"g":20,"b":30,"a":0.5}');
+      localStorage.setItem('mayastack:glyphColor', '{"r":300,"g":0,"b":0,"a":1}');
+    });
+    await page.reload();
+
+    // The initial 0 is shown: its numeral has the saved background and the default glyph colour
+    expect(await renderedColours(page)).toEqual({ glyph: 'rgb(0, 0, 0)', background: 'rgba(10, 20, 30, 0.5)' });
+    const exported = (await exportFile(page, 'svg')).data.toString('utf-8');
+    expect(exported).toContain('fill="rgba(10, 20, 30, 0.5)"');
+  });
+
+  test('saves colours chosen with the picker once they settle, or at once when the page is left', async ({ page }) => {
+    // Paused, timers stand still until the test moves them, so only leaving the page can save a
+    // waiting colour
+    await page.clock.install();
+    await page.reload();
+    await showNumber(page, '123');
+    await page.clock.pauseAt(Date.now() + 1000);
+    const saved = () =>
+      page.evaluate(() => [localStorage.getItem('mayastack:backgroundColor'), localStorage.getItem('mayastack:glyphColor')]);
+
+    // The background colour: saved 300 ms after the last change
+    await page.getByRole('button', { name: 'Background color:' }).click();
+    await page.getByRole('slider', { name: 'Color' }).press('ArrowRight');
+    await page.getByRole('slider', { name: 'Alpha' }).press('ArrowLeft');
+    await page.clock.runFor(299);
+    expect(await saved()).toEqual([null, null]);
+    await page.clock.runFor(1);
+    const [background] = await saved();
+    expect(JSON.parse(background!)).toMatchObject({ a: 0.95 });
+    await page.keyboard.press('Escape');
+
+    // The glyph colour: left waiting, then saved by the reload
+    await page.getByRole('button', { name: 'Glyph color:' }).click();
+    await page.getByRole('slider', { name: 'Color' }).press('ArrowRight');
+    await page.getByRole('slider', { name: 'Alpha' }).press('ArrowLeft');
+    expect((await saved())[1]).toBeNull();
+    const chosen = await renderedColours(page);
+    expect(chosen.glyph).not.toBe('rgb(0, 0, 0)');
+
+    await page.reload();
+    expect(JSON.parse((await saved())[1]!)).toMatchObject({ a: 0.95 });
+    expect(await renderedColours(page)).toEqual(chosen);
+    // The export uses the restored colours, alpha included
+    const exported = (await exportFile(page, 'svg')).data.toString('utf-8');
+    expect(exported).toContain(`fill="${chosen.background}"`);
+    expect(exported).toMatch(/style="color: rgba\(\d+, \d+, \d+, 0\.95\);?"/);
   });
 });
 

@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <script>
       // Applies the theme before the first paint, as DisplaySettingsProvider does once React
-      // has mounted: a saved 'light' or 'dark', otherwise the system preference. If storage
-      // can't be read, the system theme is used, so startup never depends on storage.
+      // has mounted: a saved 'light' or 'dark' (under the same key, 'mayastack:theme'),
+      // otherwise the system preference. If storage can't be read, the system theme is used,
+      // so startup never depends on storage.
       (function () {
         var saved = null;
         try {
-          saved = localStorage.getItem('theme');
+          saved = localStorage.getItem('mayastack:theme');
         } catch (e) {
           // Storage blocked: use the system theme
         }

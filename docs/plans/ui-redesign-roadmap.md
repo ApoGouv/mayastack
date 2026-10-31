@@ -358,7 +358,7 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-08: Shared persistence for display preferences
 
-- **Status:** in progress, on the branch `feat/ui-08-09-preferences-tier-guides`, which it shares with UI-09 (section A). Scope approved on 2026-10-31; implementation not started.
+- **Status:** in progress, on the branch `feat/ui-08-09-preferences-tier-guides`, which it shares with UI-09 (section A), at its review checkpoint. Implemented and validated on 2026-10-31, not yet committed.
 - **Goal:** one persistence mechanism for display preferences, including background and glyph colours, before other tasks add preferences. Before UI-08, only the theme and grid visibility are saved (`src/context/DisplaySettingsContext.tsx`), under the unprefixed keys `theme` and `showGrid`.
 - **Scope and acceptance:** G §4.7, and the persistence parts of §8, Stage 6, as approved on 2026-10-31 (below).
 - **Approved scope (2026-10-31),** after the UI-08/UI-09 preflight:
@@ -367,10 +367,22 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - **No migration:** the unprefixed `theme` and `showGrid` keys are not read, migrated or removed; they are ignored. A theme or grid setting saved before UI-08 is therefore not carried over, and the defaults apply until the user chooses again. This is an explicit decision (plan-change log), superseding for these two keys the requirements to preserve existing settings and not to discard existing customizations (G §4.7, §8 Stage 6), which stay as first written.
   - **First paint:** the inline theme script in `index.html` reads `mayastack:theme` instead of `theme`, in step with the context, so the theme is still applied before the first paint without a flash.
   - **Colours:** the background and glyph colours, including alpha, are saved as JSON RGBA values, e.g. `{"r":255,"g":255,"b":255,"a":1}`, and restored on the first render. They reach the SVG and PNG exports through the renderer as today; the export code is unchanged.
-  - **Validation:** stored values are validated strictly before they are applied. A colour must have integer `r`, `g` and `b` from 0 to 255 and a finite `a` from 0 to 1; only those four fields are taken. Malformed JSON, missing or wrongly typed fields and out-of-range values fall back to the existing defaults, never to a clamped or rounded value. Invalid theme and boolean values also fall back to their defaults. Unavailable or failing storage keeps today's behaviour: settings start from their defaults and still change for the visit.
+  - **Validation:** stored values are validated strictly before they are applied. A colour must have integer `r`, `g` and `b` from 0 to 255 and a finite `a` from 0 to 1, and exactly those four fields (made stricter at implementation, on request: a value with any other field is rejected, not trimmed). Malformed JSON, missing, unexpected or wrongly typed fields and out-of-range values fall back to the existing defaults, never to a clamped or rounded value. Invalid theme and boolean values also fall back to their defaults. Unavailable or failing storage keeps today's behaviour: settings start from their defaults and still change for the visit.
   - **Writes:** the colours change continuously while the picker is used, and are saved after about 300 ms without further change. A pending colour is saved at once when the provider unmounts and on the page-lifecycle events that precede leaving or hiding the page (such as `pagehide` and `visibilitychange` to hidden), so the final colour is not lost.
   - **Tests:** tests that seed or read the unprefixed keys (e.g. `DisplaySettingsContext.test.tsx`, `e2e/theme.e2e.ts`, `e2e/design-foundation.e2e.ts`, `e2e/workspace-layout.e2e.ts`) are updated deliberately to the new keys.
-- **Next action:** implement, validate and stop at the review checkpoint (section A), before UI-09.
+- **Implementation notes:**
+  - `DisplaySettingsContext.tsx` keeps one key constant per preference and the existing `readStored`/`writeStored`. Each preference is read once, in its `useState` initializer. `showTierGuides`/`setShowTierGuides` are added to the context, off by default and saved like the grid, without any control or rendering (UI-09).
+  - Preferences are saved when they change, never on mount (corrected at the review checkpoint: before, the theme, grid and tier-guide effects also wrote on mount, and the theme was written again on every OS colour-scheme change). A small local hook, `useSaveOnChange`, saves a value only when it differs from the one held in a ref (the initial value, then the last saved), so React Strict Mode's repeated mount effects save nothing. The theme saved is the one chosen, not the resolved one, so an OS colour-scheme change under the system theme saves nothing; choosing the system theme still removes `mayastack:theme`. The writes stay in effects rather than in the setters, which are also called with updater functions (`toggleTheme`), which Strict Mode calls twice.
+  - `parseRgbaColor` and `serializeRgbaColor` (`src/utils/colors.ts`) read and write the colour JSON. react-colorful's `RgbaColorPicker` produces integer channels and an alpha rounded to 2 decimals, which the validation accepts unchanged.
+  - The colour setters update the state at once and put the colour, serialized, in a pending map (one entry per key, the latest value), restarting one 300 ms timer. The save reads the map, not React state, so it cannot save a stale colour; it runs when the timer fires, on `pagehide`, on `visibilitychange` to hidden, and in the provider's unmount cleanup. Colours are never written on mount. The unused `useDebounce` hook is unchanged: it debounces a value and clears its timer on unmount, so it would lose the final colour.
+  - `ColorPicker`, the renderer and the export code are unchanged.
+- **Validation (2026-10-31, on the branch, before any commit):**
+  - `npm test`: 23 files, 546 tests passed (after the review correction; 540 before it). New: `src/utils/colors.test.ts`, and colour, debounce, lifecycle, old-key, invalid-value, storage-failure, tier-guide, no-write-on-mount (with and without Strict Mode), one-write-per-change and OS colour-scheme tests in `DisplaySettingsContext.test.tsx`.
+  - `npx tsc -b --noEmit`: no errors. `npm run lint`: 0 errors and the 4 existing warnings. `npm run build`: succeeded. `git diff --check`: clean.
+  - `npm run test:e2e`: 121 passed, in one run. New browser tests: an unprefixed `theme` is ignored from the first paint, a chosen theme is applied by the first-paint script after a reload, valid saved colours are rendered and exported while invalid ones are ignored, and a colour is saved 300 ms after the last change or, with timers paused, by an immediate reload, then restored and exported with its alpha.
+  - Negative control: with the unmount, `pagehide` and `visibilitychange` saves removed, 5 unit tests and the reload browser test failed; the code was then restored.
+  - Negative controls for the review correction: with the unchanged-value check removed (saving on mount), 8 unit tests failed; with the theme saved whenever the resolved theme changes, the OS colour-scheme test failed. The code was restored each time. All of the checks above were rerun after the correction, with the results given.
+- **Next action:** review checkpoint, before UI-09.
 
 ### UI-09: Screen-only tier guides
 
@@ -454,10 +466,10 @@ None of these are committed scope. Each needs a separate decision before impleme
 ## E. Current progress and next task
 
 - **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, UI-05 and UI-06 (PR #21), which complete phase 3, and UI-07 (PR #22), which completes phase 4.
-- **In progress:** UI-08, on the branch `feat/ui-08-09-preferences-tier-guides`, which it shares with UI-09. Both scopes were approved on 2026-10-31; implementation has not started.
+- **In progress:** UI-08, on the branch `feat/ui-08-09-preferences-tier-guides`, which it shares with UI-09, at its review checkpoint (implemented and validated, not yet committed). Both scopes were approved on 2026-10-31; UI-09 has not started.
 - **Blockers:** none.
 - **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11. UI-13 and UI-10 form one combined phase on one shared branch, after UI-09 and before UI-11 and UI-12 (section C, "Order of work").
-- **Next task: UI-08,** in progress, then UI-09 on the same branch after UI-08's review checkpoint. See their entries in section C.
+- **Next task: UI-08,** at its review checkpoint, then UI-09 on the same branch after UI-08 is approved. See their entries in section C.
 
 ### Plan-change log
 

@@ -7,10 +7,13 @@ import { expect, test, type Page } from '@playwright/test';
 
 type Theme = 'light' | 'dark';
 
-/** Opens the app with the given saved theme (and, optionally, other saved settings) */
+/**
+ * Opens the app with the given saved theme (and, optionally, other saved settings, by name,
+ * e.g. showGrid; each is saved under its key, e.g. mayastack:showGrid)
+ */
 async function openWithTheme(page: Page, theme: Theme, settings: Record<string, string> = {}) {
   await page.addInitScript(
-    (saved) => Object.entries(saved).forEach(([key, value]) => localStorage.setItem(key, value)),
+    (saved) => Object.entries(saved).forEach(([name, value]) => localStorage.setItem(`mayastack:${name}`, value)),
     { theme, ...settings }
   );
   await page.goto('./');
