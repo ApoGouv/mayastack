@@ -50,6 +50,7 @@ By default, each task has its own branch and pull request. Closely related tasks
 |---|---|---|
 | Input controls | UI-05, UI-06 | Same phase; UI-06 depends on UI-05 and changes the same number input |
 | Preferences and tier guides | UI-08, UI-09 | Same phase; UI-09 is the first feature to use the UI-08 persistence mechanism (G §4.7) |
+| Viewer refinement and annotations | UI-13, UI-10 | One combined phase (2026-10-31). UI-13's viewer and zoom refinement comes first, so that UI-10's annotations are built on the refined viewer instead of being reworked for new positioning, scaling, interactions, responsive behaviour and accessibility |
 
 When tasks share a branch:
 
@@ -91,16 +92,18 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-04 | Two-column workspace layout | 2 Workspace | completed | UI-03 | 2 |
 | UI-05 | Initial value, Clear and significant-digit count | 3 Input controls | completed | UI-04 | 3 |
 | UI-06 | Random, quick steps, Clear and Zero, and Copy number | 3 Input controls | completed | UI-05 | 3 |
-| UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | in progress | UI-04 | 4 |
-| UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | not started | UI-03 | 6 (persistence) |
+| UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | completed | UI-04 | 4 |
+| UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | in progress | UI-03 | 6 (persistence) |
 | UI-09 | Screen-only tier guides | 5 Preferences and viewer aids | not started | UI-04, UI-08 | 5 |
-| UI-10 | Screen-only annotations (evaluate, then implement if suitable) | 5 Preferences and viewer aids | not started | UI-09 | 5 |
+| UI-10 | Screen-only annotations (evaluate, then implement if suitable) | 8 Viewer refinement and annotations | not started | UI-09, UI-13 | 5 |
 | UI-11 | Export controls in the redesigned workspace | 6 Export | not started | UI-04 | 6 (export) |
 | UI-12 | Educational explanations | 7 Education | not started | UI-04 | 7 |
-| UI-13 | Viewer interaction polish | 8 Viewer polish | not started | UI-04, UI-09 | 8 |
+| UI-13 | Viewer interaction polish | 8 Viewer refinement and annotations | not started | UI-04, UI-09 | 8 |
 | UI-14 | Final responsive, accessibility, regression and visual validation | 9 Final validation | not started | UI-01–UI-13 | 9 |
 
-By default, each task has its own branch and pull request. The approved exceptions, currently UI-05 with UI-06 and UI-08 with UI-09, are listed in section A, "Branches and pull requests".
+By default, each task has its own branch and pull request. The approved exceptions, currently UI-05 with UI-06, UI-08 with UI-09, and UI-13 with UI-10, are listed in section A, "Branches and pull requests".
+
+**Order of work (revised 2026-10-31):** UI-08, then UI-09, on their shared branch; then the combined phase 8, UI-13 followed by UI-10, on its shared branch; then UI-11 and UI-12; then UI-14. Phase numbers identify the original roadmap phases and are not execution-order numbers. The combined phase 8 is intentionally scheduled before phases 6 and 7; existing phase numbers and task IDs remain unchanged. Only the order of work and UI-10's dependency on UI-13 changed (plan-change log).
 
 References to "Stage N" in section G correspond to the tasks in the "Old stage" column. Unless a task says otherwise, its validation is: `npm test`, `npm run lint`, `npm run build`, `npm run test:e2e`, `git diff --check`, and a visual review at 375, 768 and 1280 px in the light and dark themes. Export-related tasks also follow G §6 and §9.
 
@@ -253,7 +256,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-07: Base-20 breakdown and Copy Formula
 
-- **Status:** in progress, on the branch `feat/ui-07-base20-breakdown`, at its review checkpoint.
+- **Status:** completed. Approved at its review checkpoint on the branch `feat/ui-07-base20-breakdown` and merged in PR #22 on 2026-10-31, which completes phase 4.
+- **Evidence:** PR #22 (commit `7e83681`, merge `be8a42a`).
 - **Scope and acceptance:** G §4.5 and §8, Stage 4, as approved on 2026-10-28 (below). Number mode only: Date mode, the numeral renderer and SVG/PNG export are unchanged.
 - **Approved scope (2026-10-28),** after the UI-07 preflight, following design-reference concepts 3 (formula, badge, Copy Formula) and 4 (breakdown table):
   - **Card:** the `h2` stays "Base-20 Representation". A tier badge on its right, wrapping under it on narrow screens, reads "12 tiers · 20⁰–20¹¹" ("1 tier · 20⁰" for 0), from the number of base-20 digits, and in words for screen readers.
@@ -351,26 +355,55 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 - **Focus under the sticky header (found in the final review, 2026-10-31):**
   - **Fix:** when tabbing backwards through the breakdown, the browser scrolls each focused value to the top of the box, where the sticky header (about 45 px tall) could hide it. At 10^128 − 1, 5–6 of 30 Shift+Tab presses left it fully hidden (WCAG 2.2, 2.4.11). The scrolling box now has `scroll-pt-14` (56 px), which keeps the value and its focus ring (2 px outline, 2 px offset) below the header. `scroll-pt-12` (48 px) would leave the ring 1 px under it. Nothing else changed.
   - **Test:** a new browser test, at 375 and 1280 px, presses Shift+Tab 30 times from the last focusable value. After each press it checks that the focused value is in the table, that the top of its focus ring is at or below the header's measured bottom edge, and that it ends inside the box. Run before the fix, it failed at both widths (press 8: the ring 7 px under the header); with the fix it passes.
-- **Next action:** review checkpoint.
 
 ### UI-08: Shared persistence for display preferences
 
-- **Status:** not started.
-- **Goal:** one persistence mechanism for display preferences, including background and glyph colours, before other tasks add preferences. Today only the theme and grid visibility are saved (`src/context/DisplaySettingsContext.tsx`).
-- **Scope and acceptance:** G §4.7, and the persistence parts of §8, Stage 6.
-- **Next action:** define the detailed scope when the task is selected.
+- **Status:** in progress, on the branch `feat/ui-08-09-preferences-tier-guides`, which it shares with UI-09 (section A), at its review checkpoint. Implemented and validated on 2026-10-31, not yet committed.
+- **Goal:** one persistence mechanism for display preferences, including background and glyph colours, before other tasks add preferences. Before UI-08, only the theme and grid visibility are saved (`src/context/DisplaySettingsContext.tsx`), under the unprefixed keys `theme` and `showGrid`.
+- **Scope and acceptance:** G §4.7, and the persistence parts of §8, Stage 6, as approved on 2026-10-31 (below).
+- **Approved scope (2026-10-31),** after the UI-08/UI-09 preflight:
+  - **Architecture:** the existing settings context (`DisplaySettingsProvider`, `useDisplaySettings`) stays. No versioned settings record, no new dependency, no reset-preferences control and no cross-tab synchronization.
+  - **Storage keys:** one consistent, namespaced scheme, with a separate key per preference: `mayastack:theme`, `mayastack:showGrid`, `mayastack:backgroundColor`, `mayastack:glyphColor` and, from UI-09, `mayastack:showTierGuides`. The prefix keeps them apart from other projects served from the same origin (`apogouv.github.io`).
+  - **No migration:** the unprefixed `theme` and `showGrid` keys are not read, migrated or removed; they are ignored. A theme or grid setting saved before UI-08 is therefore not carried over, and the defaults apply until the user chooses again. This is an explicit decision (plan-change log), superseding for these two keys the requirements to preserve existing settings and not to discard existing customizations (G §4.7, §8 Stage 6), which stay as first written.
+  - **First paint:** the inline theme script in `index.html` reads `mayastack:theme` instead of `theme`, in step with the context, so the theme is still applied before the first paint without a flash.
+  - **Colours:** the background and glyph colours, including alpha, are saved as JSON RGBA values, e.g. `{"r":255,"g":255,"b":255,"a":1}`, and restored on the first render. They reach the SVG and PNG exports through the renderer as today; the export code is unchanged.
+  - **Validation:** stored values are validated strictly before they are applied. A colour must have integer `r`, `g` and `b` from 0 to 255 and a finite `a` from 0 to 1, and exactly those four fields (made stricter at implementation, on request: a value with any other field is rejected, not trimmed). Malformed JSON, missing, unexpected or wrongly typed fields and out-of-range values fall back to the existing defaults, never to a clamped or rounded value. Invalid theme and boolean values also fall back to their defaults. Unavailable or failing storage keeps today's behaviour: settings start from their defaults and still change for the visit.
+  - **Writes:** the colours change continuously while the picker is used, and are saved after about 300 ms without further change. A pending colour is saved at once when the provider unmounts and on the page-lifecycle events that precede leaving or hiding the page (such as `pagehide` and `visibilitychange` to hidden), so the final colour is not lost.
+  - **Tests:** tests that seed or read the unprefixed keys (e.g. `DisplaySettingsContext.test.tsx`, `e2e/theme.e2e.ts`, `e2e/design-foundation.e2e.ts`, `e2e/workspace-layout.e2e.ts`) are updated deliberately to the new keys.
+- **Implementation notes:**
+  - `DisplaySettingsContext.tsx` keeps one key constant per preference and the existing `readStored`/`writeStored`. Each preference is read once, in its `useState` initializer. `showTierGuides`/`setShowTierGuides` are added to the context, off by default and saved like the grid, without any control or rendering (UI-09).
+  - Preferences are saved when they change, never on mount (corrected at the review checkpoint: before, the theme, grid and tier-guide effects also wrote on mount, and the theme was written again on every OS colour-scheme change). A small local hook, `useSaveOnChange`, saves a value only when it differs from the one held in a ref (the initial value, then the last saved), so React Strict Mode's repeated mount effects save nothing. The theme saved is the one chosen, not the resolved one, so an OS colour-scheme change under the system theme saves nothing; choosing the system theme still removes `mayastack:theme`. The writes stay in effects rather than in the setters, which are also called with updater functions (`toggleTheme`), which Strict Mode calls twice.
+  - `parseRgbaColor` and `serializeRgbaColor` (`src/utils/colors.ts`) read and write the colour JSON. react-colorful's `RgbaColorPicker` produces integer channels and an alpha rounded to 2 decimals, which the validation accepts unchanged.
+  - The colour setters update the state at once and put the colour, serialized, in a pending map (one entry per key, the latest value), restarting one 300 ms timer. The save reads the map, not React state, so it cannot save a stale colour; it runs when the timer fires, on `pagehide`, on `visibilitychange` to hidden, and in the provider's unmount cleanup. Colours are never written on mount. The unused `useDebounce` hook is unchanged: it debounces a value and clears its timer on unmount, so it would lose the final colour.
+  - `ColorPicker`, the renderer and the export code are unchanged.
+- **Validation (2026-10-31, on the branch, before any commit):**
+  - `npm test`: 23 files, 546 tests passed (after the review correction; 540 before it). New: `src/utils/colors.test.ts`, and colour, debounce, lifecycle, old-key, invalid-value, storage-failure, tier-guide, no-write-on-mount (with and without Strict Mode), one-write-per-change and OS colour-scheme tests in `DisplaySettingsContext.test.tsx`.
+  - `npx tsc -b --noEmit`: no errors. `npm run lint`: 0 errors and the 4 existing warnings. `npm run build`: succeeded. `git diff --check`: clean.
+  - `npm run test:e2e`: 121 passed, in one run. New browser tests: an unprefixed `theme` is ignored from the first paint, a chosen theme is applied by the first-paint script after a reload, valid saved colours are rendered and exported while invalid ones are ignored, and a colour is saved 300 ms after the last change or, with timers paused, by an immediate reload, then restored and exported with its alpha.
+  - Negative control: with the unmount, `pagehide` and `visibilitychange` saves removed, 5 unit tests and the reload browser test failed; the code was then restored.
+  - Negative controls for the review correction: with the unchanged-value check removed (saving on mount), 8 unit tests failed; with the theme saved whenever the resolved theme changes, the OS colour-scheme test failed. The code was restored each time. All of the checks above were rerun after the correction, with the results given.
+- **Next action:** review checkpoint, before UI-09.
 
 ### UI-09: Screen-only tier guides
 
-- **Status:** not started.
-- **Scope and acceptance:** G §5.2 and the tier-guide parts of §8, Stage 5, using the UI-08 persistence mechanism.
-- **Next action:** define the detailed scope when the task is selected.
+- **Status:** not started. Scope approved on 2026-10-31; follows UI-08 on the shared branch `feat/ui-08-09-preferences-tier-guides`, after UI-08's review checkpoint.
+- **Scope and acceptance:** G §5.2 and the tier-guide parts of §8, Stage 5, using the UI-08 persistence mechanism, as approved on 2026-10-31 (below).
+- **Approved scope (2026-10-31),** after the UI-08/UI-09 preflight:
+  - **Appearance:** subtle horizontal lines between the tiers, in the current glyph colour at low opacity, so the guides relate to the user's palette. No alternating bands and no labels. The guides must not obstruct the glyphs.
+  - **Control:** off by default. An independent toggle labelled "Show Tier Guides" (without a colon), in the viewer's controls, beside but outside the "Zoom controls" group. It is saved as `mayastack:showTierGuides` through the UI-08 mechanism. The Show Grid control stays in its current settings card.
+  - **Alignment:** the guides stay aligned with the tiers while zooming (25% to 400%) and scrolling. In Date mode, they are calculated independently for each numeral group, whose tier counts may differ.
+  - **Implementation:** an HTML overlay inside the viewer's zoom wrapper, outside the exported SVG. The numeral data, conversion, glyph rendering, export dimensions and exported SVG/PNG output are unchanged.
+  - **Interaction and accessibility:** the guides do not intercept pointer interaction and do not affect keyboard use or screen readers.
+  - **Grid:** the exportable grid stays independent and unchanged.
+  - Not included: annotations, and anything that couples the guides to them (UI-10).
+- **Next action:** start after UI-08 is approved at its review checkpoint.
 
 ### UI-10: Screen-only annotations
 
 - **Status:** not started.
 - **Scope and acceptance:** G §5.3 and the annotation parts of §8, Stage 5. Approved for evaluation; implemented only if the evaluation supports it.
-- **Next action:** evaluate a restrained annotation design against the renderer when the task is selected.
+- **Combined phase (2026-10-31):** part of phase 8, "Viewer refinement and annotations", with UI-13, on one shared branch (section A). UI-13's viewer and zoom refinement comes first, so the annotations are not reworked for new positioning, scaling, interactions, responsive behaviour and accessibility. The phase follows UI-09.
+- **Next action:** define the combined phase's detailed scope, with UI-13, when the phase is reached; then evaluate a restrained annotation design against the refined viewer.
 
 ### UI-11: Export controls in the redesigned workspace
 
@@ -388,7 +421,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 - **Status:** not started.
 - **Scope and acceptance:** G §8, Stage 8. Ctrl + scroll zooming is an option to evaluate, not a requirement.
-- **Next action:** define the detailed scope after UI-04 and UI-09.
+- **Combined phase (2026-10-31):** part of phase 8, "Viewer refinement and annotations", with UI-10, on one shared branch (section A), and implemented before UI-10. The phase follows UI-09 and comes before UI-11 and UI-12.
+- **Next action:** define the combined phase's detailed scope, with UI-10, after UI-09.
 
 ### UI-14: Final responsive, accessibility, regression and visual validation
 
@@ -407,7 +441,7 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Material colour presets | proposed | Listed as not approved (G §10) |
 | Copy SVG code | proposed | Listed as not approved (G §10). Copies the SVG markup as text, so it could reuse `copyText` (`src/utils/clipboard.ts`); see the renderer copy and export options below |
 | Separate Date tab | proposed | Listed as not approved (G §10) |
-| Tier-count chip | proposed | Listed as not approved (G §10) |
+| Tier-count chip | approved | Approved and implemented by UI-07's tier badge on the base-20 card ("12 tiers · 20⁰–20¹¹"), merged in PR #22. The historical G §10 proposal remains unchanged |
 | Glyph legend (dot = 1, bar = 5, shell = 0) | proposed | Seen in design references; to be reviewed separately |
 | Educational information cards | proposed | A possible format for UI-12; the explanations themselves are approved |
 | Heading order (`h1` followed by `h3`) | approved | Part of UI-04: the section headings become `h2` |
@@ -431,11 +465,11 @@ None of these are committed scope. Each needs a separate decision before impleme
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, and UI-05 and UI-06 (PR #21), which complete phase 3.
-- **In progress:** UI-07, on the branch `feat/ui-07-base20-breakdown`, at its review checkpoint.
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, UI-05 and UI-06 (PR #21), which complete phase 3, and UI-07 (PR #22), which completes phase 4.
+- **In progress:** UI-08, on the branch `feat/ui-08-09-preferences-tier-guides`, which it shares with UI-09, at its review checkpoint (implemented and validated, not yet committed). Both scopes were approved on 2026-10-31; UI-09 has not started.
 - **Blockers:** none.
-- **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11.
-- **Next task: UI-07,** in progress. See its entry in section C.
+- **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11. UI-13 and UI-10 form one combined phase on one shared branch, after UI-09 and before UI-11 and UI-12 (section C, "Order of work").
+- **Next task: UI-08,** at its review checkpoint, then UI-09 on the same branch after UI-08 is approved. See their entries in section C.
 
 ### Plan-change log
 
@@ -463,6 +497,9 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-31 | Reduced the maximum to 128 significant digits (UI-07 in section C), superseding the 500 of G §4 and §9, which stay as first written; the README and tests are updated. Refined UI-07 a third time: compact subtotals with a power of ten and an exact-value tooltip, a tooltip without inner scrolling, and space reserved under the content for the floating Export trigger from 640 px. | Approved in the UI-07 review: 128 digits keep a googol and 2^256, with a readable breakdown and PNG exports well within their limits |
 | 2026-10-31 | Refined UI-07 a fourth time (UI-07 in section C). Breakdown subtotals now break only after a thousands separator, replacing the "wrap anywhere" fallback of 2026-10-29. The compact notation (multiples of 3), the column widths and the tooltips' Tab stops were reviewed and kept, with the reasons recorded. | Requested in the final UI-07 polish pass; at 128 digits, breaking after separators has no measurable cost |
 | 2026-10-31 | Fixed keyboard focus hidden under the breakdown's sticky header when tabbing backwards (UI-07 in section C), and marked the section D proposal "Faster analytical breakdown at the 500-digit limit" as superseded. | Found in the final UI-07 review; the 128-digit maximum and memoized rows already address the proposal |
+| 2026-10-31 | Recorded UI-07 as completed and merged in PR #22 (commit `7e83681`, merge `be8a42a`), which completes phase 4, and marked the section D item "Tier-count chip" as approved, implemented by UI-07's tier badge. | Verified against the merged `main` and the pull request's merge commit |
+| 2026-10-31 | Approved UI-08's and UI-09's scopes (their entries in section C) and started UI-08 on the shared branch `feat/ui-08-09-preferences-tier-guides`. All display preferences use separate keys with the `mayastack:` prefix, including the theme and grid keys, which were unprefixed; the old keys are not migrated and are ignored, superseding for them the "preserve existing settings" requirements of G §4.7 and §8 Stage 6, which stay as first written. `index.html`'s first-paint theme script moves to `mayastack:theme` in UI-08. Colours are saved as validated JSON RGBA, debounced at about 300 ms and flushed on unmount and page hide. Tier guides use the glyph colour at low opacity, are off by default, and have their own "Show Tier Guides" toggle in the viewer's controls. | Approved after the UI-08/UI-09 preflight: one consistent, namespaced scheme on the `apogouv.github.io` origin, which other projects share; backward compatibility with the unprefixed keys is explicitly not required |
+| 2026-10-31 | Combined UI-10 (annotations) and UI-13 (viewer interaction polish) into one phase, 8 "Viewer refinement and annotations", on one shared branch (section A), with UI-13 implemented first. UI-10 now also depends on UI-13. The order of work becomes UI-08, UI-09, UI-13 with UI-10, then UI-11 and UI-12; their IDs, descriptions and dependencies are otherwise unchanged. The combined phase's detailed scope is defined when it is reached. | UI-13 includes substantial viewer and zoom refinement; annotations built before it would risk rework in positioning, scaling, interactions, responsive behaviour and accessibility |
 
 ## F. Completion record
 

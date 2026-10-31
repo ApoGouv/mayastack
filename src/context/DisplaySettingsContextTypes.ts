@@ -20,4 +20,8 @@ export interface DisplaySettingsContextType {
   // Grid visibility setting
   showGrid: boolean;
   setShowGrid: (show: boolean) => void;
+
+  // Screen-only tier guide visibility setting (off by default)
+  showTierGuides: boolean;
+  setShowTierGuides: (show: boolean) => void;
 }

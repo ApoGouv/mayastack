@@ -6,7 +6,7 @@ type Theme = 'light' | 'dark';
 /** Opens the app in a theme and enters a number, so the whole workspace is shown */
 async function openWorkspace(page: Page, theme: Theme, width: number) {
   await page.setViewportSize({ width, height: 900 });
-  await page.addInitScript((saved) => localStorage.setItem('theme', saved), theme);
+  await page.addInitScript((saved) => localStorage.setItem('mayastack:theme', saved), theme);
   await page.goto('./');
   await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
   await page.getByLabel('Decimal integer').fill('8000400019');
@@ -259,7 +259,7 @@ test.describe('number input: initial 0, actions, count, quick steps and arrow ke
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
     await page.setViewportSize({ width, height });
-    await page.addInitScript((saved) => localStorage.setItem('theme', saved), theme);
+    await page.addInitScript((saved) => localStorage.setItem('mayastack:theme', saved), theme);
     await page.goto('./');
     await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
     return errors;
@@ -719,7 +719,7 @@ test.describe('base-20 expansion: formula, Copy Formula and analytical breakdown
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
     await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript((saved) => localStorage.setItem('theme', saved), theme);
+    await page.addInitScript((saved) => localStorage.setItem('mayastack:theme', saved), theme);
     await page.goto('./');
     await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
     await page.getByLabel('Decimal integer').fill(text);

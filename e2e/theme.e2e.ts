@@ -32,11 +32,14 @@ const blockStorage = () =>
     },
   });
 
-/** Opens the app with a saved theme (or none) and the given system colour scheme */
-async function open(page: Page, saved: string | null, system: Theme, { withApp = true } = {}) {
+/**
+ * Opens the app with a saved theme (or none) and the given system colour scheme. The theme is
+ * saved under the app's key, or under another, such as the unprefixed 'theme' used before.
+ */
+async function open(page: Page, saved: string | null, system: Theme, { withApp = true, key = 'mayastack:theme' } = {}) {
   await page.emulateMedia({ colorScheme: system });
   if (saved !== null) {
-    await page.addInitScript((theme) => localStorage.setItem('theme', theme), saved);
+    await page.addInitScript(({ key, theme }) => localStorage.setItem(key, theme), { key, theme: saved });
   }
   // Without the app's scripts React never mounts: what remains is the first paint
   if (!withApp) await page.route(/\/assets\/.*\.js$/, (route) => route.abort());
@@ -89,6 +92,33 @@ test.describe('initial theme', () => {
       expect(firstPaint.bodyBackground).toBe(started.bodyBackground);
     });
   }
+
+  test('ignores a theme saved under the unprefixed key used before, from the first paint', async ({ page }) => {
+    await open(page, 'dark', 'light', { withApp: false, key: 'theme' });
+    await expect(page.locator('#root')).toBeEmpty();
+    expect(await themeState(page)).toMatchObject({ theme: 'light', usingSystem: true, colorScheme: 'light' });
+
+    await page.unrouteAll();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: /Convert to Mayan Numerals/ })).toBeVisible();
+    expect(await themeState(page)).toMatchObject({ theme: 'light', usingSystem: true, colorScheme: 'light' });
+    await expect(page.getByRole('button', { name: /^Theme selector/ })).toHaveAttribute('aria-label', 'Theme selector (current: system)');
+    // Left as it was: neither read, moved nor removed
+    expect(await page.evaluate(() => [localStorage.getItem('theme'), localStorage.getItem('mayastack:theme')])).toEqual(['dark', null]);
+  });
+
+  test('saves a chosen theme under its key and starts from it, before the first paint, after a reload', async ({ page }) => {
+    await open(page, null, 'light');
+    await page.getByRole('button', { name: /^Theme selector/ }).click();
+    await page.getByRole('menuitem', { name: 'Dark' }).click();
+    expect(await page.evaluate(() => localStorage.getItem('mayastack:theme'))).toBe('dark');
+
+    // Without the app's scripts, only index.html's first-paint script can apply it
+    await page.route(/\/assets\/.*\.js$/, (route) => route.abort());
+    await page.reload();
+    await expect(page.locator('#root')).toBeEmpty();
+    expect(await themeState(page)).toMatchObject({ theme: 'dark', usingSystem: false, colorScheme: 'dark' });
+  });
 
   for (const system of ['light', 'dark'] as const) {
     test(`uses the ${system} system theme from the first paint when storage is blocked`, async ({ page }) => {
