@@ -25,8 +25,10 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Main content */}
-      <main className="container mx-auto px-4 py-3 mb-4 flex-grow">
+      {/* Main content. From sm, the floating Export trigger covers the bottom 104px of the screen
+          (bottom-16, 40px tall): the extra bottom padding lets the last content scroll at least
+          120px up, clear of it with a gap. Below sm, the last card's margin does the same */}
+      <main className="container mx-auto px-4 py-3 sm:pb-13 mb-4 flex-grow">
         <HomeView />
       </main>
 

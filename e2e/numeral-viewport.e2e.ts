@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
 const FIFTY_DIGITS = '12345678901234567890123456789012345678901234567890';
-const MAX_DIGITS = '9'.repeat(500);
+const MAX_DIGITS = '9'.repeat(128);
 
 /** Enters a number and waits for its numeral viewer */
 async function showNumber(page: Page, digits: string) {
@@ -51,10 +51,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe('bounded numeral viewport', () => {
-  test('keeps the viewer and the numeral result bounded for 1 to 500 digits', async ({ page }) => {
+  test('keeps the viewer and the numeral result bounded for 1 to 128 digits', async ({ page }) => {
     const result = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
     const heights: Record<string, { viewer: number; result: number }> = {};
-    for (const digits of ['7', FIFTY_DIGITS, '9'.repeat(400), MAX_DIGITS]) {
+    for (const digits of ['7', FIFTY_DIGITS, '9'.repeat(100), MAX_DIGITS]) {
       const viewer = await showNumber(page, digits);
       heights[digits.length] = { viewer: (await viewer.boundingBox())!.height, result: (await result.boundingBox())!.height };
       expect(heights[digits.length].viewer).toBeLessThanOrEqual(480);
@@ -62,27 +62,32 @@ test.describe('bounded numeral viewport', () => {
     // A single digit keeps its natural height; long numbers stop at the cap
     expect(heights[1].viewer).toBeLessThan(200);
     expect(heights[50].viewer).toBe(480);
-    expect(heights[500].viewer).toBe(480);
-    // The result no longer grows with the number (the 500-digit SVG alone is about 31,000 px tall)
-    expect(heights[400].result).toBe(heights[50].result);
-    expect(heights[500].result).toBe(heights[50].result);
-    expect(heights[500].result).toBeLessThan(800);
+    expect(heights[128].viewer).toBe(480);
+    // The result no longer grows with the number (the 128-digit SVG alone is 7,920 px tall)
+    expect(heights[100].result).toBe(heights[50].result);
+    expect(heights[128].result).toBe(heights[50].result);
+    expect(heights[128].result).toBeLessThan(800);
   });
 
   test('starts at the top and scrolls to the middle and the bottom', async ({ page }) => {
     const viewer = await showNumber(page, MAX_DIGITS);
     const start = await visibleStacks(page);
-    expect(start.total).toBe(385);
+    expect(start.total).toBe(99);
     expect(start.first).toBe(0);
 
     await viewer.focus();
-    for (let i = 0; i < 20; i++) await page.keyboard.press('PageDown');
+    // Keyboard scrolling is animated: each key is pressed once the previous scroll has finished
+    for (let i = 0; i < 5; i++) {
+      const top = await viewer.evaluate((el) => el.scrollTop);
+      await page.keyboard.press('PageDown');
+      await expect.poll(() => viewer.evaluate((el) => el.scrollTop)).toBeGreaterThan(top);
+    }
     const middle = await visibleStacks(page);
     expect(middle.first).toBeGreaterThan(start.last);
-    expect(middle.last).toBeLessThan(384);
+    expect(middle.last).toBeLessThan(98);
 
     await page.keyboard.press('End');
-    await expect.poll(async () => (await visibleStacks(page)).last).toBe(384);
+    await expect.poll(async () => (await visibleStacks(page)).last).toBe(98);
 
     await page.keyboard.press('Home');
     await expect.poll(async () => (await visibleStacks(page)).first).toBe(0);
@@ -187,7 +192,7 @@ test.describe('export with the viewport', () => {
         await expect(control).toBeInViewport({ ratio: 1 });
       }
       const [download] = await Promise.all([page.waitForEvent('download'), dialogExport.click()]);
-      expect(download.suggestedFilename()).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
+      expect(download.suggestedFilename()).toBe('mayan-numeral-number-9999999999...9999999999-128-digits.svg');
       expect(await page.evaluate(() => window.scrollY)).toBe(pageEnd);
       await expect(resultCard).not.toBeInViewport();
       await exportButton.click(); // close the menu
@@ -209,11 +214,11 @@ test.describe('export with the viewport', () => {
     await viewer.evaluate((el) => el.scrollTo(100, 12000));
     const after = await exportFile(page, 'svg');
 
-    expect(after.name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
+    expect(after.name).toBe('mayan-numeral-number-9999999999...9999999999-128-digits.svg');
     expect(after.data.equals(before.data)).toBe(true);
     const svg = after.data.toString('utf-8');
-    expect(svg).toContain('width="350" height="30800" viewBox="0 0 350 30800"');
-    expect(svg.match(/data-digit-index=/g)).toHaveLength(385);
+    expect(svg).toContain('width="350" height="7920" viewBox="0 0 350 7920"');
+    expect(svg.match(/data-digit-index=/g)).toHaveLength(99);
   });
 
   test('exports a complete, identical PNG at the original size before and after zooming', async ({ page }) => {
@@ -244,11 +249,12 @@ test.describe('PNG export size limits', () => {
     await openExportMenu(page, 'png');
 
     const sizes = page.getByLabel('Size Preset');
-    await expect(sizes.getByRole('option', { name: /^Original Size \(350×30800px\)$/ })).toBeEnabled();
+    await expect(sizes.getByRole('option', { name: /^Original Size \(350×7920px\)$/ })).toBeEnabled();
     await expect(sizes.getByRole('option', { name: /^Custom Size/ })).toBeEnabled();
-    for (const name of [/^Small .* – PNG too large$/, /^Medium .* – PNG too large$/, /^Large .* – PNG too large$/]) {
-      await expect(sizes.getByRole('option', { name })).toBeDisabled();
-    }
+    // Within the limits at 128 digits: Small and Medium; only Large is too tall
+    await expect(sizes.getByRole('option', { name: /^Small \(600×13577px\)$/ })).toBeEnabled();
+    await expect(sizes.getByRole('option', { name: /^Medium \(1200×27154px\)$/ })).toBeEnabled();
+    await expect(sizes.getByRole('option', { name: /^Large \(2400×54309px\) – PNG too large$/ })).toBeDisabled();
   });
 
   test('explains an unsupported PNG size and still exports it as SVG', async ({ page }) => {
@@ -259,7 +265,7 @@ test.describe('PNG export size limits', () => {
     // Switching to PNG keeps the chosen size, explains why it is unavailable and blocks the export
     await page.getByLabel('Export Format').selectOption('png');
     await expect(page.getByRole('alert')).toHaveText(
-      'PNG isn’t available at this size. PNG export is limited to 32,767 px in width and height, the most some browsers can draw; this one would be 2,400 × 211,200 px. Choose a smaller size, or export as SVG.'
+      'PNG isn’t available at this size. PNG export is limited to 32,767 px in width and height, the most some browsers can draw; this one would be 2,400 × 54,309 px. Choose a smaller size, or export as SVG.'
     );
     await expect(page.getByRole('button', { name: /^Export PNG image/ })).toBeDisabled();
 
@@ -272,8 +278,8 @@ test.describe('PNG export size limits', () => {
       })(),
     ]);
     const svg = (await readFile(await download.path())).toString('utf-8');
-    expect(svg).toContain('width="2400" height="211200" viewBox="0 0 350 30800"');
-    expect(svg.match(/data-digit-index=/g)).toHaveLength(385);
+    expect(svg).toContain('width="2400" height="54309" viewBox="0 0 350 7920"');
+    expect(svg.match(/data-digit-index=/g)).toHaveLength(99);
   });
 
   test('offers the real sizes immediately after a number is entered, with no transient 0 × 0', async ({ page }) => {
@@ -291,34 +297,37 @@ test.describe('PNG export size limits', () => {
     await showNumber(page, MAX_DIGITS);
     const png = await exportFile(page, 'png');
 
-    expect(png.name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.png');
-    expect(pngSize(png.data)).toEqual({ width: 350, height: 30800 });
+    expect(png.name).toBe('mayan-numeral-number-9999999999...9999999999-128-digits.png');
+    expect(pngSize(png.data)).toEqual({ width: 350, height: 7920 });
   });
 });
 
 test.describe('base-20 representation', () => {
-  const representation = (page: Page) => page.getByRole('region', { name: 'Number in base 20, expanded form' });
+  // Changed deliberately in UI-07: Number mode's formula is its own region, named after the
+  // "Positional Sum Formula" label, with "+" between the terms and spoken exponents
+  const representation = (page: Page) => page.getByRole('region', { name: 'Positional Sum Formula' });
   const resultTop = async (page: Page) =>
     (await page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').boundingBox())!.y;
 
   test('stops growing with the number, so the page stays the same height', async ({ page }) => {
-    await showNumber(page, '9'.repeat(250));
-    const at250 = { box: (await representation(page).boundingBox())!.height, result: await resultTop(page) };
+    await showNumber(page, '9'.repeat(100));
+    const at100 = { box: (await representation(page).boundingBox())!.height, result: await resultTop(page) };
     await showNumber(page, MAX_DIGITS);
-    const at500 = { box: (await representation(page).boundingBox())!.height, result: await resultTop(page) };
+    const atMax = { box: (await representation(page).boundingBox())!.height, result: await resultTop(page) };
 
-    // Capped: twice the digits, same height (the uncapped text was about 2,450 px at 500 digits)
-    expect(at500.box).toBe(at250.box);
-    expect(at500.result).toBe(at250.result);
-    expect(at500.box).toBeLessThan(400);
+    // Capped: more digits, same height
+    expect(atMax.box).toBe(at100.box);
+    expect(atMax.result).toBe(at100.result);
+    expect(atMax.box).toBeLessThan(400);
   });
 
   test('keeps the complete, exact representation of the largest number', async ({ page }) => {
     await showNumber(page, MAX_DIGITS);
     const html = await representation(page).innerHTML();
-    const terms = [...html.matchAll(/(\d+) × 20<sup>(\d+)<\/sup>/g)];
+    // Each term: the emphasised digit, then "× 20" and its exponent
+    const terms = [...html.matchAll(/>(\d+)<\/span> × 20<sup aria-hidden="true">(\d+)<\/sup>/g)];
 
-    expect(terms).toHaveLength(385);
+    expect(terms).toHaveLength(99);
     expect(terms.reduce((sum, [, digit, exponent]) => sum + BigInt(digit) * 20n ** BigInt(exponent), 0n)).toBe(BigInt(MAX_DIGITS));
   });
 
@@ -340,8 +349,10 @@ test.describe('base-20 representation', () => {
 
   test('stays plain text, at its natural height, for small numbers and dates', async ({ page }) => {
     await showNumber(page, '123');
-    await expect(page.getByText('6 × 201 • 3 × 200')).toBeVisible();
-    await expect(page.getByRole('region', { name: /in base 20, expanded form/ })).toHaveCount(0);
+    const base20 = page.getByRole('heading', { name: 'Base-20 Representation', exact: true }).locator('..');
+    // As screen readers get it: exponents in words, not "6 × 201"
+    await expect.poll(() => base20.ariaSnapshot()).toContain('- text: 6 × 20 to the power of 1 + 3 × 20 to the power of 0\n');
+    await expect(representation(page)).toHaveCount(0);
 
     await page.getByRole('radio', { name: 'Date' }).check();
     await page.getByLabel('Date input').click();
@@ -517,10 +528,10 @@ test.describe('export filenames', () => {
 
     await showNumber(page, MAX_DIGITS);
     const svg = await exportFile(page, 'svg');
-    expect(svg.name).toBe('mayan-numeral-number-9999999999...9999999999-500-digits.svg');
+    expect(svg.name).toBe('mayan-numeral-number-9999999999...9999999999-128-digits.svg');
     expect(svg.name.length).toBeLessThanOrEqual(59);
     // Only the name is shortened: the file holds the complete numeral
-    expect(svg.data.toString('utf-8').match(/data-digit-index=/g)).toHaveLength(385);
+    expect(svg.data.toString('utf-8').match(/data-digit-index=/g)).toHaveLength(99);
   });
 
   test('names date exports after the day, month and year', async ({ page }) => {

@@ -57,20 +57,21 @@ describe('GlyphStackGroup data-digit attributes', () => {
 });
 
 describe('GlyphStackGroup output size', () => {
-  // 500 decimal digits, the number input limit, are 385 base-20 digits. The markup of a
+  // 128 decimal digits, the number input limit, are 99 base-20 digits. The markup of a
   // digit stack must not grow with its place value: written-out place values made the
-  // SVG of such a number grow quadratically, to about twice this budget.
+  // SVG of a number grow quadratically (to about twice this budget at the earlier
+  // 500-digit limit).
   const BYTES_PER_DIGIT_STACK = 650;
 
   it('keeps the markup of the largest digit within a fixed budget at any position', () => {
     // 19 is drawn with the most shapes: three bars and four dots
-    const digits = Array<number>(385).fill(19);
+    const digits = Array<number>(99).fill(19);
     expect(renderMarkup(digits).length).toBeLessThan(digits.length * BYTES_PER_DIGIT_STACK);
   });
 
-  it('keeps the markup of the largest 500-digit number within the budget', () => {
-    const digits = toBase20(10n ** 500n - 1n);
-    expect(digits).toHaveLength(385);
+  it('keeps the markup of the largest 128-digit number within the budget', () => {
+    const digits = toBase20(10n ** 128n - 1n);
+    expect(digits).toHaveLength(99);
     expect(renderMarkup(digits).length).toBeLessThan(digits.length * BYTES_PER_DIGIT_STACK);
   });
 });

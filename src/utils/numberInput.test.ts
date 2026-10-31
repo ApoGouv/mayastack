@@ -40,11 +40,21 @@ describe('validateNumberInput', () => {
       value: 9007199254740993n,
     });
 
-    const fourHundredNines = '9'.repeat(400);
-    expect(validateNumberInput(fourHundredNines)).toEqual({
+    const hundredNines = '9'.repeat(100);
+    expect(validateNumberInput(hundredNines)).toEqual({
       status: 'valid',
-      value: BigInt(fourHundredNines),
+      value: BigInt(hundredNines),
     });
+  });
+
+  it('accepts a googol (10^100, 101 digits) and 2^256 (78 digits), exactly', () => {
+    const googol = '1' + '0'.repeat(100);
+    const twoTo256 = '115792089237316195423570985008687907853269984665640564039457584007913129639936';
+
+    expect(validateNumberInput(googol)).toEqual({ status: 'valid', value: 10n ** 100n });
+    expect(validateNumberInput(twoTo256)).toEqual({ status: 'valid', value: 2n ** 256n });
+    expect(countSignificantDigits(10n ** 100n)).toBe(101);
+    expect(countSignificantDigits(2n ** 256n)).toBe(78);
   });
 
   it.each(['12.5', '12.', '.5', '0.0'])('rejects the decimal value "%s"', (text) => {
@@ -79,8 +89,8 @@ describe('validateNumberInput', () => {
 describe('validateNumberInput size limits', () => {
   const maxDigits = '9'.repeat(MAX_SIGNIFICANT_DIGITS);
 
-  it('uses a 500-digit limit and a 1000-character input limit', () => {
-    expect(MAX_SIGNIFICANT_DIGITS).toBe(500);
+  it('uses a 128-digit limit and a 1000-character input limit', () => {
+    expect(MAX_SIGNIFICANT_DIGITS).toBe(128);
     expect(MAX_INPUT_LENGTH).toBe(1000);
   });
 
@@ -143,11 +153,11 @@ describe('countSignificantDigits', () => {
     expect(validation.status === 'valid' && countSignificantDigits(validation.value)).toBe(1);
   });
 
-  it('counts exactly beyond Number.MAX_SAFE_INTEGER and at the 500-digit limit', () => {
+  it('counts exactly beyond Number.MAX_SAFE_INTEGER and at the 128-digit limit', () => {
     expect(countSignificantDigits(9007199254740993n)).toBe(16);
-    expect(countSignificantDigits(10n ** 499n)).toBe(500);
-    expect(countSignificantDigits(MAX_NUMBER_VALUE)).toBe(500);
-    expect(countSignificantDigits(10n ** 500n)).toBe(501);
+    expect(countSignificantDigits(10n ** 127n)).toBe(128);
+    expect(countSignificantDigits(MAX_NUMBER_VALUE)).toBe(128);
+    expect(countSignificantDigits(10n ** 128n)).toBe(129);
   });
 });
 
@@ -197,10 +207,10 @@ describe('stepNumberValue', () => {
   it('stays exact beyond Number.MAX_SAFE_INTEGER', () => {
     expect(stepNumberValue(9007199254740992n, 1)).toBe(9007199254740993n);
     expect(stepNumberValue(9007199254740993n, -1)).toBe(9007199254740992n);
-    expect(stepNumberValue(10n ** 400n, -1)).toBe(BigInt('9'.repeat(400)));
+    expect(stepNumberValue(10n ** 100n, -1)).toBe(BigInt('9'.repeat(100)));
   });
 
-  it('keeps the largest value instead of going beyond 500 digits', () => {
+  it('keeps the largest value instead of going beyond 128 digits', () => {
     expect(MAX_NUMBER_VALUE).toBe(BigInt('9'.repeat(MAX_SIGNIFICANT_DIGITS)));
     expect(stepNumberValue(MAX_NUMBER_VALUE, 1)).toBe(MAX_NUMBER_VALUE);
     expect(stepNumberValue(MAX_NUMBER_VALUE, -1)).toBe(MAX_NUMBER_VALUE - 1n);
@@ -223,7 +233,7 @@ describe('addToNumberValue', () => {
 
   it('stays exact beyond Number.MAX_SAFE_INTEGER', () => {
     expect(addToNumberValue(9007199254740992n, 1n)).toBe(9007199254740993n);
-    expect(addToNumberValue(BigInt('9'.repeat(400)), 5n)).toBe(BigInt('1' + '0'.repeat(399) + '4'));
+    expect(addToNumberValue(BigInt('9'.repeat(100)), 5n)).toBe(BigInt('1' + '0'.repeat(99) + '4'));
   });
 
   it.each([1n, 5n, 20n, 400n])('lands exactly on the largest value with %s', (step) => {

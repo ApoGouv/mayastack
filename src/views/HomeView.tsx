@@ -5,6 +5,8 @@ import { getNumberExportFilename } from '@utils/exportUtils';
 import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
+import Base20Expansion, { TierBadge } from '@components/Base20Expansion';
+import { Layers } from '@components/icons/Layers';
 import RenderModeSelector from '@/components/inputs/RenderModeSelector';
 import type { RenderMode } from '@/components/inputs/RenderModeSelector';
 import DisplaySettings from '@components/DisplaySettings';
@@ -38,6 +40,9 @@ export default function HomeView() {
   const [numberInput, setNumberInput] = useState('0');
   const [dateInputRaw, setDateInputRaw] = useState('');
   const [dateParts, setDateParts] = useState<DateParts | null>(null);
+  // Whether the analytical breakdown is open: the user's latest choice, kept here so that it
+  // survives Clear, invalid input and a switch to Date mode, which remove the breakdown itself
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   // Derived values: the exact bigint value, or null while the input is empty or invalid
   // (NumberInput shows the validation message from the same validateNumberInput)
@@ -159,35 +164,38 @@ export default function HomeView() {
         </div>
 
         {/* Left, under the input (below lg, under the viewer): Base-20 Display */}
-        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-5 lg:col-start-1 lg:row-start-2">
-          <h2 className="font-heading text-lg font-semibold mb-2">
+        {/* The heading and, in Number mode, the tier badge share the first line (the badge wraps
+            under the heading where there is no room); the content takes a full line below them */}
+        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:col-span-5 lg:col-start-1 lg:row-start-2">
+          <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
+            <Layers className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
             Base-20 Representation
           </h2>
+          {hasValidNumberInput && mayanData && <TierBadge tiers={mayanData.digitGroups[0].digits.length} />}
 
-          {hasValidinput && mayanData ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
-              {mayanData.digitGroups.map((group) => {
-                let extraClass = '';
-
-                if (mode === 'date') {
-                  if (group.label === 'Year') extraClass = 'sm:col-span-2';
-                  else extraClass = 'sm:col-span-1';
-                } else if (mode === 'number') {
-                  extraClass = 'sm:col-span-2';
-                }
-
-                return (
+          {hasValidNumberInput && mayanData ? (
+            // Number mode: the formula, Copy Formula and the analytical breakdown, across the card
+            <Base20Expansion
+              digits={mayanData.digitGroups[0].digits}
+              breakdownOpen={breakdownOpen}
+              onBreakdownOpenChange={setBreakdownOpen}
+            />
+          ) : hasValidDateInput && mayanData ? (
+            // Date mode: the day, month and year, each in its own expanded form
+            <div className="basis-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-sm mx-auto">
+                {mayanData.digitGroups.map((group) => (
                   <Base20Display
                     key={group.label}
                     label={group.label}
                     digits={group.digits}
-                    className={extraClass}
+                    className={group.label === 'Year' ? 'sm:col-span-2' : 'sm:col-span-1'}
                   />
-                );
-              })}
+                ))}
+              </div>
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed border-line p-4 text-center text-fg-muted">
+            <p className="basis-full rounded-lg border border-dashed border-line p-4 text-center text-fg-muted">
               {emptyMessages.base20}
             </p>
           )}

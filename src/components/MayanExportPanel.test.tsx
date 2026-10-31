@@ -75,7 +75,7 @@ describe('MayanExportPanel', () => {
           {(ref) => (
             <NumeralViewport label="Mayan numeral">
               <MayanRenderer
-                digitGroups={[toBase20(10n ** 500n - 1n)]}
+                digitGroups={[toBase20(10n ** 128n - 1n)]}
                 heightPerGlyphStack={80}
                 widthPerGroup={350}
                 exportRef={ref}

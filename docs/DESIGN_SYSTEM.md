@@ -43,7 +43,7 @@ Each token is available as a Tailwind colour (`bg-surface`, `text-fg`, `border-l
 | `jade` | Success, and active or on states |
 | `danger` | Errors |
 | `focus` | The keyboard focus outline |
-| `inverse`, `on-inverse` | Tooltips |
+| `inverse`, `on-inverse` | Tooltips (react-tooltip, as in the base-20 breakdown's multipliers and compact subtotals) |
 | `toggle-thumb` | The toggle switch thumb |
 
 ## 4. Colour roles and rules
@@ -97,7 +97,7 @@ Two library limitations remain. The colour picker's sliders keep react-colorful'
 ## 7. Shape, elevation and spacing
 
 - **Radius:** buttons and form fields `rounded` (4 px, since UI-06), cards and popovers `rounded-lg`, pills and round buttons `rounded-full`. A segmented control's track is `rounded-md`, so its corners stay concentric with the `rounded` segments 2 px inside it. There is no zero-radius rule.
-- **Shadows:** `shadow-sm` on cards in the light theme only, `shadow-lg` on popovers and floating menus.
+- **Shadows:** `shadow-sm` on cards in the light theme only, `shadow-lg` on popovers and floating menus, and `shadow-inner` on inset panels within a card, with a `canvas` fill and a `line` border (the base-20 card's Positional Sum Formula panel, since UI-07).
 - **Spacing:** Tailwind's default spacing scale. There are no custom spacing tokens.
 
 ## 8. Motion
@@ -109,6 +109,10 @@ Toast notifications are covered by the same rule: their entrance animation is se
 ## 9. Native controls, widgets and approved decisions
 
 `color-scheme` is `light` on `:root` and `dark` on `:root.dark`. The theme class is set before the first paint (`index.html`), so native scrollbars, selects and spinners follow the active theme from the first paint.
+
+Capped scrolling boxes inside a card (since UI-07, the base-20 card's formula and analytical breakdown) add the `scrollbar-themed` utility: a `line-strong` thumb, at least 3:1 against the surfaces it sits on (section 5), on a transparent track. Browsers without `scrollbar-color` keep their native scrollbar. Touch devices with overlay scrollbars still show the scrollbar only while scrolling.
+
+The floating Export trigger covers a band at the bottom of the viewport. `:root` has a `scroll-padding-bottom` of that band's height (4.5rem, from `sm` 7rem), so a control that receives keyboard focus, or is scrolled into view, is placed above the trigger instead of under it (WCAG 2.2, 2.4.11 Focus Not Obscured). It does not change the layout. From `sm`, `main` also has 3.25rem of extra bottom padding (`sm:pb-13`), so the end of the page scrolls at least 120px up, clear of the trigger's 104px band with a gap; below `sm`, the last card's `mb-20` does the same. Content can still pass under the trigger while the page scrolls.
 
 Applied to the existing components (UI-03):
 
