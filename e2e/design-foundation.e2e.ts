@@ -376,7 +376,9 @@ test.describe('design system on the components', () => {
       // Muted labels on their cards
       for (const text of [
         'Input Type', 'Decimal integer', '10 digits', 'Steps',
-        'SVG Display Settings', 'Background color:', 'Show Grid:',
+        'Stela Material & Glyph Settings', 'Exported appearance', 'Background color:', 'Show Grid:',
+        'Viewer guides', 'Shown on screen only, not included in exports.',
+        'Show Place Tier Guides:', 'Show Dividing Hairlines:',
       ]) {
         const label = await colours(page.getByText(text, { exact: true }).first());
         check(`label "${text}"`, label.color, label.bg, 4.5);

@@ -15,7 +15,8 @@ const THEME_KEY = 'mayastack:theme';
 const SHOW_GRID_KEY = 'mayastack:showGrid';
 const BACKGROUND_COLOR_KEY = 'mayastack:backgroundColor';
 const GLYPH_COLOR_KEY = 'mayastack:glyphColor';
-const SHOW_TIER_GUIDES_KEY = 'mayastack:showTierGuides';
+const SHOW_PLACE_TIER_GUIDES_KEY = 'mayastack:showPlaceTierGuides';
+const SHOW_TIER_HAIRLINES_KEY = 'mayastack:showTierHairlines';
 
 const DEFAULT_BACKGROUND: RgbaColor = { r: 255, g: 255, b: 255, a: 1 };
 const DEFAULT_GLYPH: RgbaColor = { r: 0, g: 0, b: 0, a: 1 };
@@ -165,7 +166,8 @@ describe('DisplaySettingsProvider with working storage', () => {
 
     expect(settings().theme).toBe('system');
     expect(settings().showGrid).toBe(false);
-    expect(settings().showTierGuides).toBe(false);
+    expect(settings().showPlaceTierGuides).toBe(false);
+    expect(settings().showTierHairlines).toBe(false);
     unmount();
     expect(writes.all()).toEqual([]);
     expect(localStorage.length).toBe(0);
@@ -174,7 +176,8 @@ describe('DisplaySettingsProvider with working storage', () => {
   it.each([false, true])('does not save the saved settings again on mount (Strict Mode: %s)', (strict) => {
     localStorage.setItem(THEME_KEY, 'dark');
     localStorage.setItem(SHOW_GRID_KEY, 'true');
-    localStorage.setItem(SHOW_TIER_GUIDES_KEY, 'true');
+    localStorage.setItem(SHOW_PLACE_TIER_GUIDES_KEY, 'true');
+    localStorage.setItem(SHOW_TIER_HAIRLINES_KEY, 'true');
     localStorage.setItem(BACKGROUND_COLOR_KEY, '{"r":10,"g":20,"b":30,"a":0.4}');
     localStorage.setItem(GLYPH_COLOR_KEY, '{"r":200,"g":100,"b":0,"a":0}');
     const writes = watchWrites();
@@ -182,7 +185,8 @@ describe('DisplaySettingsProvider with working storage', () => {
 
     expect(settings().theme).toBe('dark');
     expect(settings().showGrid).toBe(true);
-    expect(settings().showTierGuides).toBe(true);
+    expect(settings().showPlaceTierGuides).toBe(true);
+    expect(settings().showTierHairlines).toBe(true);
     unmount();
     expect(writes.all()).toEqual([]);
   });
@@ -232,14 +236,18 @@ describe('DisplaySettingsProvider with working storage', () => {
     act(() => settings().setTheme('dark'));
     act(() => settings().toggleTheme());
     act(() => settings().setShowGrid(true));
-    act(() => settings().setShowTierGuides(true));
-    act(() => settings().setShowTierGuides(false));
+    act(() => settings().setShowPlaceTierGuides(true));
+    act(() => settings().setShowTierHairlines(true));
+    act(() => settings().setShowPlaceTierGuides(false));
+    act(() => settings().setShowTierHairlines(false));
     expect(writes.all()).toEqual([
       [THEME_KEY, 'dark'],
       [THEME_KEY, null],
       [SHOW_GRID_KEY, 'true'],
-      [SHOW_TIER_GUIDES_KEY, 'true'],
-      [SHOW_TIER_GUIDES_KEY, 'false'],
+      [SHOW_PLACE_TIER_GUIDES_KEY, 'true'],
+      [SHOW_TIER_HAIRLINES_KEY, 'true'],
+      [SHOW_PLACE_TIER_GUIDES_KEY, 'false'],
+      [SHOW_TIER_HAIRLINES_KEY, 'false'],
     ]);
   });
 
@@ -427,10 +435,31 @@ describe('DisplaySettingsProvider colours', () => {
   });
 });
 
-describe('DisplaySettingsProvider tier guide visibility', () => {
-  it('is off by default, and offered to components without any control of its own', () => {
+// The two screen-only guides: Place Tier Guides (shaded bands) and Dividing Hairlines
+const TIER_GUIDE_SETTINGS = [
+  {
+    name: 'place tier guides',
+    key: SHOW_PLACE_TIER_GUIDES_KEY,
+    label: 'Show Place Tier Guides:',
+    get: (s: DisplaySettingsContextType) => s.showPlaceTierGuides,
+    set: (s: DisplaySettingsContextType) => s.setShowPlaceTierGuides,
+  },
+  {
+    name: 'dividing hairlines',
+    key: SHOW_TIER_HAIRLINES_KEY,
+    label: 'Show Dividing Hairlines:',
+    get: (s: DisplaySettingsContextType) => s.showTierHairlines,
+    set: (s: DisplaySettingsContextType) => s.setShowTierHairlines,
+  },
+] as const;
+
+describe.each(TIER_GUIDE_SETTINGS)('DisplaySettingsProvider $name visibility', ({ key, label, get, set }) => {
+  const other = TIER_GUIDE_SETTINGS.find((setting) => setting.key !== key)!;
+
+  // Changed deliberately in UI-09: each setting has its control, in the settings panel
+  it('is off by default, as is its control in the app', () => {
     const { settings } = renderProbe();
-    expect(settings().showTierGuides).toBe(false);
+    expect(get(settings())).toBe(false);
 
     cleanup();
     render(
@@ -438,29 +467,69 @@ describe('DisplaySettingsProvider tier guide visibility', () => {
         <App />
       </DisplaySettingsProvider>
     );
-    expect(screen.queryByRole('switch', { name: /tier guides/i })).toBeNull();
+    expect(screen.getByRole('switch', { name: label }).getAttribute('aria-checked')).toBe('false');
   });
 
-  it('starts from the saved value, and ignores invalid ones', () => {
-    localStorage.setItem(SHOW_TIER_GUIDES_KEY, 'true');
-    expect(renderProbe().settings().showTierGuides).toBe(true);
+  it('starts from the saved value, and ignores invalid or missing ones', () => {
+    localStorage.setItem(key, 'true');
+    expect(get(renderProbe().settings())).toBe(true);
     cleanup();
 
-    localStorage.setItem(SHOW_TIER_GUIDES_KEY, 'on');
-    expect(renderProbe().settings().showTierGuides).toBe(false);
+    for (const value of ['on', 'TRUE', '1', '']) {
+      localStorage.setItem(key, value);
+      expect(get(renderProbe().settings())).toBe(false);
+      cleanup();
+    }
+
+    localStorage.removeItem(key);
+    expect(get(renderProbe().settings())).toBe(false);
   });
 
-  it('saves changes under its own key, independently of the grid', () => {
+  it('saves changes under its own key, independently of the other guide and the grid', () => {
     const { settings } = renderProbe();
 
-    act(() => settings().setShowTierGuides(true));
-    expect(settings().showTierGuides).toBe(true);
+    act(() => set(settings())(true));
+    expect(get(settings())).toBe(true);
+    expect(other.get(settings())).toBe(false);
     expect(settings().showGrid).toBe(false);
-    expect(stored(SHOW_TIER_GUIDES_KEY)).toBe('true');
+    expect(stored(key)).toBe('true');
+    expect(stored(other.key)).toBeNull();
     expect(stored(SHOW_GRID_KEY)).toBeNull();
 
-    act(() => settings().setShowTierGuides(false));
-    expect(stored(SHOW_TIER_GUIDES_KEY)).toBe('false');
+    act(() => set(settings())(false));
+    expect(stored(key)).toBe('false');
+    expect(stored(other.key)).toBeNull();
+  });
+
+  it('restores independently of the other guide', () => {
+    localStorage.setItem(key, 'true');
+    localStorage.setItem(other.key, 'false');
+    const { settings } = renderProbe();
+    expect(get(settings())).toBe(true);
+    expect(other.get(settings())).toBe(false);
+  });
+});
+
+describe('DisplaySettingsProvider tier guides together', () => {
+  it('can show both guides at once, and restores both', () => {
+    const { settings } = renderProbe();
+    act(() => settings().setShowPlaceTierGuides(true));
+    act(() => settings().setShowTierHairlines(true));
+    expect(settings().showPlaceTierGuides).toBe(true);
+    expect(settings().showTierHairlines).toBe(true);
+    cleanup();
+
+    const restored = renderProbe().settings();
+    expect(restored.showPlaceTierGuides).toBe(true);
+    expect(restored.showTierHairlines).toBe(true);
+    expect(restored.showGrid).toBe(false);
+  });
+
+  it('ignores the key used before the guides were split (never released)', () => {
+    localStorage.setItem('mayastack:showTierGuides', 'true');
+    const { settings } = renderProbe();
+    expect(settings().showPlaceTierGuides).toBe(false);
+    expect(settings().showTierHairlines).toBe(false);
   });
 });
 
@@ -474,14 +543,16 @@ describe('DisplaySettingsProvider without usable storage', () => {
     localStorage.setItem(THEME_KEY, 'dark');
     localStorage.setItem(SHOW_GRID_KEY, 'true');
     localStorage.setItem(BACKGROUND_COLOR_KEY, '{"r":1,"g":2,"b":3,"a":1}');
-    localStorage.setItem(SHOW_TIER_GUIDES_KEY, 'true');
+    localStorage.setItem(SHOW_PLACE_TIER_GUIDES_KEY, 'true');
+    localStorage.setItem(SHOW_TIER_HAIRLINES_KEY, 'true');
     failStorage('getItem');
     expectDefaultsThatStillChange(renderSettings());
     cleanup();
 
     const { settings } = renderProbe();
     expect(settings().backgroundColor).toEqual(DEFAULT_BACKGROUND);
-    expect(settings().showTierGuides).toBe(false);
+    expect(settings().showPlaceTierGuides).toBe(false);
+    expect(settings().showTierHairlines).toBe(false);
   });
 
   it('keeps colour and tier guide changes for the visit when the storage itself is blocked', () => {
@@ -490,9 +561,11 @@ describe('DisplaySettingsProvider without usable storage', () => {
     const { settings, unmount } = renderProbe();
 
     act(() => settings().setGlyphColor({ r: 1, g: 2, b: 3, a: 0.5 }));
-    act(() => settings().setShowTierGuides(true));
+    act(() => settings().setShowPlaceTierGuides(true));
+    act(() => settings().setShowTierHairlines(true));
     expect(settings().glyphColor).toEqual({ r: 1, g: 2, b: 3, a: 0.5 });
-    expect(settings().showTierGuides).toBe(true);
+    expect(settings().showPlaceTierGuides).toBe(true);
+    expect(settings().showTierHairlines).toBe(true);
     // The delayed save, a page-lifecycle save and the save on unmount all fail quietly
     act(() => vi.advanceTimersByTime(300));
     act(() => settings().setGlyphColor({ r: 4, g: 5, b: 6, a: 1 }));

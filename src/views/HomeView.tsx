@@ -14,6 +14,10 @@ import NumberInput from '@components/inputs/NumberInput';
 import NumeralViewport from '@components/NumeralViewport';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
+import { PlaceTierGuides, TierHairlines } from '@components/TierGuides';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import type { NumeralLayout } from '@utils/tierGuides';
+import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 
 type DigitGroup = { label: string; digits: number[] };
 
@@ -30,6 +34,12 @@ type MayanRenderData = {
 /** Longer numbers are described by their length rather than read out in full */
 const MAX_DIGITS_IN_LABEL = 30;
 
+/** The numeral's layout in each mode, shared by the renderer and the tier guides over it */
+const NUMERAL_LAYOUTS: Record<RenderMode, NumeralLayout> = {
+  number: { heightPerGlyphStack: 80, widthPerGroup: 350, spacing: 25 },
+  date: { heightPerGlyphStack: 80, widthPerGroup: 100, spacing: 25 },
+};
+
 /**
  * HomeView is the main input view of the app.
  *  Users can convert either a number or a date to Mayan numeral glyphs.
@@ -43,6 +53,7 @@ export default function HomeView() {
   // Whether the analytical breakdown is open: the user's latest choice, kept here so that it
   // survives Clear, invalid input and a switch to Date mode, which remove the breakdown itself
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const { showPlaceTierGuides, showTierHairlines, backgroundColor, resolvedTheme } = useDisplaySettings();
 
   // Derived values: the exact bigint value, or null while the input is empty or invalid
   // (NumberInput shows the validation message from the same validateNumberInput)
@@ -86,6 +97,14 @@ export default function HomeView() {
 
     return null;
   }, [mode, parsedNumber, dateParts]);
+
+  const numeralLayout = NUMERAL_LAYOUTS[mode];
+  // The tier guides' colours follow the numeral's background as the viewer shows it, never the glyphs
+  const guideColors = useMemo(
+    () => getGuideColors(backgroundColor, VIEWER_BACKDROP[resolvedTheme]),
+    [backgroundColor, resolvedTheme]
+  );
+  const digitGroups = useMemo(() => mayanData?.digitGroups.map((g) => g.digits) ?? [], [mayanData]);
 
   // What the viewer and the base-20 card say while there is no result to show
   const emptyMessages: { viewer: string; base20: string } =
@@ -144,12 +163,28 @@ export default function HomeView() {
             /* MayanRenderer and ExportPanel */
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) =>
-                <NumeralViewport label={mayanData.label} resetKey={mayanData.key}>
+                <NumeralViewport
+                  label={mayanData.label}
+                  resetKey={mayanData.key}
+                  underlay={
+                    showPlaceTierGuides && (
+                      <PlaceTierGuides
+                        digitGroups={digitGroups}
+                        layout={numeralLayout}
+                        background={backgroundColor}
+                        colors={guideColors}
+                      />
+                    )
+                  }
+                  overlay={
+                    showTierHairlines && (
+                      <TierHairlines digitGroups={digitGroups} layout={numeralLayout} color={guideColors.hairline} />
+                    )
+                  }
+                >
                   <MayanRenderer
-                    digitGroups={mayanData?.digitGroups.map(g => g.digits) ?? []}
-                    heightPerGlyphStack={80}
-                    widthPerGroup={mode === 'number' ? 350 : 100}
-                    spacing={25}
+                    digitGroups={digitGroups}
+                    {...numeralLayout}
                     scale={1}
                     exportRef={ref}
                   />
