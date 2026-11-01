@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { RgbaColor } from '@/types/colors';
 import { rgbaToCss } from '@utils/colors';
 import type { GuideColors } from '@utils/guideColors';
@@ -21,6 +21,12 @@ interface PlaceTierGuidesProps extends GuideProps {
   background: RgbaColor;
   /** The guides' colours for that background (getGuideColors) */
   colors: Pick<GuideColors, 'card' | 'cardHover' | 'cardHoverShadow'>;
+  /**
+   * The viewer that scrolls the numeral (NumeralViewport's scroller): while the pointer stays
+   * still, its scrolling moves another card under the pointer. Without it, the hover follows the
+   * pointer's own moves only.
+   */
+  scrollerRef: RefObject<HTMLElement | null>;
 }
 
 const bandKey = (groupIndex: number, exponent: number) => `${groupIndex}-${exponent}`;
@@ -38,18 +44,19 @@ const bandKey = (groupIndex: number, exponent: number) => `${groupIndex}-${expon
  *
  * The layer is hidden from assistive technology and never takes the pointer: the hovered card
  * is found from the pointer's position over the zoom wrapper, by geometry, and kept up to date
- * while the viewer scrolls under a still pointer. Touch shows no hover.
+ * while the viewer (`scrollerRef`) scrolls under a still pointer. Touch shows no hover.
  */
-export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, layout, background, colors }) => {
+export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, layout, background, colors, scrollerRef }) => {
   const bands = useMemo(() => getPlaceTierBands(digitGroups, layout), [digitGroups, layout]);
   const layerRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
   useEffect(() => {
-    // The zoom wrapper, which the layer fills, and the viewer that scrolls it
+    // The zoom wrapper, which the layer fills and whose box the pointer is measured against, and
+    // the viewer that scrolls it, given explicitly: it is not the wrapper's parent
     const wrapper = layerRef.current?.parentElement;
     if (!wrapper) return;
-    const scroller = wrapper.parentElement;
+    const scroller = scrollerRef.current;
     let pointer: { x: number; y: number } | null = null;
 
     const update = () => {
@@ -78,7 +85,7 @@ export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, l
       scroller?.removeEventListener('scroll', update);
       setHovered(null);
     };
-  }, [bands]);
+  }, [bands, scrollerRef]);
 
   const card = rgbaToCss(colors.card);
   const cardHover = rgbaToCss(colors.cardHover);

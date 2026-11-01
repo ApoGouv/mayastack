@@ -73,7 +73,7 @@ describe('MayanExportPanel', () => {
       <DisplaySettingsProvider>
         <MayanExportPanel filename="mayan-numeral-number-max">
           {(ref) => (
-            <NumeralViewport label="Mayan numeral">
+            <NumeralViewport numeralWidth={350} label="Mayan numeral">
               <MayanRenderer
                 digitGroups={[toBase20(10n ** 128n - 1n)]}
                 heightPerGlyphStack={80}

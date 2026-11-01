@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { createRef } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RgbaColor } from '@/types/colors';
@@ -16,14 +17,33 @@ const DATE_GROUPS = [[1, 5], [10], [5, 1, 6]];
 
 const percent = (value: string) => parseFloat(value);
 
-/** Renders the cards in a zoom wrapper inside a scrolling viewer, as NumeralViewport does */
-function renderCards(digitGroups = DATE_GROUPS, background = WHITE) {
+/**
+ * Renders the cards in a zoom wrapper, inside a stage box, inside a scrolling viewer, as
+ * NumeralViewport does, and gives them the viewer as their scroller. With `scroller: false` they
+ * are given no scroller; with `stage: false` the wrapper's parent is the viewer itself.
+ */
+function renderCards({
+  digitGroups = DATE_GROUPS,
+  background = WHITE,
+  scroller = true,
+  stage = true,
+}: { digitGroups?: number[][]; background?: RgbaColor; scroller?: boolean; stage?: boolean } = {}) {
+  const scrollerRef = createRef<HTMLDivElement>();
+  const wrapperContent = (
+    <div data-testid="wrapper">
+      <PlaceTierGuides
+        digitGroups={digitGroups}
+        layout={LAYOUT}
+        background={background}
+        colors={COLORS}
+        scrollerRef={scroller ? scrollerRef : { current: null }}
+      />
+      <svg className="mep-svg" />
+    </div>
+  );
   const { container } = render(
-    <div data-testid="viewer">
-      <div data-testid="wrapper">
-        <PlaceTierGuides digitGroups={digitGroups} layout={LAYOUT} background={background} colors={COLORS} />
-        <svg className="mep-svg" />
-      </div>
+    <div data-testid="viewer" ref={scrollerRef}>
+      {stage ? <div data-testid="stage">{wrapperContent}</div> : wrapperContent}
     </div>
   );
   const layer = container.querySelector<HTMLElement>('[data-place-tier-guides]')!;
@@ -38,15 +58,16 @@ function renderCards(digitGroups = DATE_GROUPS, background = WHITE) {
     act(() => {
       wrapper.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, pointerType, bubbles: true }));
     });
-  const scrollBy = (dy: number) =>
+  // Scrolls the viewer, or another element given, by moving the wrapper's box and firing `scroll` there
+  const scrollBy = (dy: number, target: HTMLElement = viewer) =>
     act(() => {
       offset -= dy;
-      viewer.dispatchEvent(new Event('scroll'));
+      target.dispatchEvent(new Event('scroll'));
     });
   const leave = () => act(() => {
     wrapper.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
   });
-  return { container, layer, cards, hovered, point, scrollBy, leave };
+  return { container, layer, cards, hovered, point, scrollBy, leave, wrapper, viewer };
 }
 
 function renderHairlines(digitGroups: number[][], color: RgbaColor = COLORS.hairline) {
@@ -122,13 +143,36 @@ describe('PlaceTierGuides', () => {
   });
 
   it('follows the content as the viewer scrolls under a still pointer', () => {
-    const { hovered, point, scrollBy } = renderCards();
+    const { hovered, point, scrollBy, wrapper, viewer } = renderCards();
+    // The viewer it follows is the scroller it is given, not the wrapper's parent (the stage box)
+    expect(wrapper.parentElement).not.toBe(viewer);
     point(300, 120); // the year's middle tier
     expect(hovered()).toEqual([['2', '1']]);
     scrollBy(80); // the content moves up one tier: the pointer is over the tier below
     expect(hovered()).toEqual([['2', '0']]);
     scrollBy(-80);
     expect(hovered()).toEqual([['2', '1']]);
+  });
+
+  it('follows only the scroller it is given, never the wrapper’s parent', () => {
+    const { hovered, point, scrollBy, wrapper } = renderCards();
+    point(300, 120);
+    expect(hovered()).toEqual([['2', '1']]);
+    scrollBy(80, wrapper.parentElement!); // a scroll event on the stage box is not the viewer's
+    expect(hovered()).toEqual([['2', '1']]);
+  });
+
+  it('does not fall back to the wrapper’s parent without a scroller, and still follows the pointer', () => {
+    // As before UI-13, the wrapper's parent is the viewer: without the scroller, its scrolling is not followed
+    const { hovered, point, scrollBy, wrapper, viewer } = renderCards({ scroller: false, stage: false });
+    expect(wrapper.parentElement).toBe(viewer);
+    point(300, 120);
+    expect(hovered()).toEqual([['2', '1']]);
+    expect(() => scrollBy(80)).not.toThrow();
+    expect(hovered()).toEqual([['2', '1']]);
+    // The pointer's own moves are still followed
+    point(300, 120);
+    expect(hovered()).toEqual([['2', '0']]);
   });
 
   it('stops following the pointer once removed', () => {

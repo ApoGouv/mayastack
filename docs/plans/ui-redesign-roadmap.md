@@ -80,6 +80,7 @@ Detailed requirements are in section G; the design system itself is documented i
 - **Product decisions:** Number mode starts at `0`; Zero sets it to `0` and Clear empties the field (revised in UI-06; G §4.1 had Clear reset to `0`); Random generates 1–10 significant digits (revised in UI-06; G §4.2 had 1–500); the input accepts up to 128 significant digits (reduced in UI-07 from the 500 of G §4; enough for a googol, 101 digits, and 2^256, 78 digits); quick steps +1, +5, +20 and +400, with decrement controls, the 8,000 preset and a custom increment deferred (revised in UI-06, see section D); Copy number; a significant-digit count; a compact breakdown with on-demand exact contributions and Copy Formula; the existing shell zero glyph is kept; display preferences, including colours, are remembered (G §4).
 - **Number input:** follows the input card of the third design-reference concept (approved 2026-10-28, UI-06): an "Input Type" title with the Number/Date modes as a segmented control beside it, a full-width field with a visible "Decimal integer" label and the count beside it, Random, Copy and Clear inside the field, and a row of quick steps with Zero at its end. Its mockup wording and styling framework are not taken over, and the date picker is unchanged.
 - **Viewer and export:** the exportable grid stays an independent setting; tier guides and annotations are screen-only and never exported; export output does not depend on zoom, scroll or theme; Export stays reachable when the result is off-screen (G §5–§6).
+- **Viewer (UI-13, approved 2026-11-01):** follows the third design-reference concept's viewer within the existing 5/7 grid: a full-width stage in the `canvas` token, a centred slab (the numeral's SVG, with a screen-only edge and shadow) and a header with a compact zoom toolbar. 100% zoom is 1 CSS pixel per SVG unit at every viewport width; the eight zoom steps from 25% to 400% stay. Wheel, Ctrl + wheel, browser zoom and touch scrolling stay native. The renderer, glyph geometry and exported artwork are unchanged.
 - **Domain:** the date mode is a component-wise numerical representation of a Gregorian date, not a Mayan calendar conversion. A Long Count mode is deferred (G §2, §10.1).
 
 ## C. Phases and tasks
@@ -94,17 +95,34 @@ Detailed requirements are in section G; the design system itself is documented i
 | UI-06 | Random, quick steps, Clear and Zero, and Copy number | 3 Input controls | completed | UI-05 | 3 |
 | UI-07 | Base-20 breakdown and Copy Formula | 4 Breakdown | completed | UI-04 | 4 |
 | UI-08 | Shared persistence for display preferences | 5 Preferences and viewer aids | completed | UI-03 | 6 (persistence) |
-| UI-09 | Screen-only tier guides | 5 Preferences and viewer aids | in progress | UI-04, UI-08 | 5 |
+| UI-09 | Screen-only tier guides | 5 Preferences and viewer aids | completed | UI-04, UI-08 | 5 |
 | UI-10 | Screen-only annotations (evaluate, then implement if suitable) | 8 Viewer refinement and annotations | not started | UI-09, UI-13 | 5 |
 | UI-11 | Export controls in the redesigned workspace | 6 Export | not started | UI-04 | 6 (export) |
 | UI-12 | Educational explanations | 7 Education | not started | UI-04 | 7 |
-| UI-13 | Viewer interaction polish | 8 Viewer refinement and annotations | not started | UI-04, UI-09 | 8 |
+| UI-13 | Viewer interaction polish | 8 Viewer refinement and annotations | in progress | UI-04, UI-09 | 8 |
 | UI-14 | Final responsive, accessibility, regression and visual validation | 9 Final validation | not started | UI-01–UI-13, UI-15 | 9 |
 | UI-15 | Material presets and settings-panel refinement | 10 Material presets | not started | UI-08, UI-09, UI-10, UI-13 | none (new) |
 
 By default, each task has its own branch and pull request. The approved exceptions, currently UI-05 with UI-06, UI-08 with UI-09 (separated after UI-08's merge), and UI-13 with UI-10, are listed in section A, "Branches and pull requests".
 
-**Order of work (revised 2026-10-31):** UI-08, then UI-09, on their shared branch; then the combined phase 8, UI-13 followed by UI-10, on its shared branch; then UI-11 and UI-12; then UI-14. Phase numbers identify the original roadmap phases and are not execution-order numbers. The combined phase 8 is intentionally scheduled before phases 6 and 7; existing phase numbers and task IDs remain unchanged. Only the order of work and UI-10's dependency on UI-13 changed (plan-change log). UI-15, approved on 2026-11-01, comes after the combined phase 8 (UI-13 and UI-10); its place relative to UI-11 and UI-12 is not yet decided (plan-change log).
+**Order of work (revised 2026-10-31):** UI-08, then UI-09, on their shared branch; then the combined phase 8, UI-13 followed by UI-10, on its shared branch; then UI-11 and UI-12; then UI-14. Phase numbers identify the original roadmap phases and are not execution-order numbers. The combined phase 8 is intentionally scheduled before phases 6 and 7; existing phase numbers and task IDs remain unchanged. Only the order of work and UI-10's dependency on UI-13 changed (plan-change log). UI-15, approved on 2026-11-01, comes after the combined phase 8 (UI-13 and UI-10); its place relative to UI-11 and UI-12 is not yet decided (plan-change log); the proposed sequence below places it after UI-11.
+
+**Proposed sequence (2026-11-01):** the approved working direction after the UI-13 viewer investigation, not a record of completed work; each slice stays subject to review and adjustment (plan-change log):
+
+1. Close and manually approve UI-13 slices 1–4.
+2. UI-13 slice 4.1, resize anchoring.
+3. The separate UI-07 breakdown layout bugfix, if confirmed (UI-13's entry, "Prerequisite").
+4. UI-13 slice 5a, the viewer header and toolbar.
+5. UI-13 slice 5b, the tier-direction indicator.
+6. UI-13 slice 5c, the compact glyph key.
+7. UI-13 slice 5d, hybrid stage sizing from `lg`.
+8. UI-13 slice 5e, the conditional sticky viewer from `lg`.
+9. UI-10, power annotations.
+10. UI-11, including the Export trigger's overlap.
+11. UI-15, material presets and settings refinement.
+12. UI-14, final validation.
+
+UI-12 is not placed in this sequence; its place, and UI-15's relative to it, stay to be decided. UI-13's optional slice 6, the zoom animation, is not placed either.
 
 References to "Stage N" in section G correspond to the tasks in the "Old stage" column. Unless a task says otherwise, its validation is: `npm test`, `npm run lint`, `npm run build`, `npm run test:e2e`, `git diff --check`, and a visual review at 375, 768 and 1280 px in the light and dark themes. Export-related tasks also follow G §6 and §9.
 
@@ -387,7 +405,8 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
 
 ### UI-09: Screen-only tier guides
 
-- **Status:** in progress, on its own branch `feat/ui-09-tier-guides` (UI-08 was merged alone in PR #23; plan-change log), at its review checkpoint. The implementation is complete and validated: first implemented and validated on 2026-10-31, then refined on 2026-10-31 after design concept 4 (revised scope, below), and given a visual refinement the same day (below); a pre-merge audit on 2026-11-01 added test coverage only (below). Pending: the final manual review of the diff, then the commit and the pull request. Not yet committed.
+- **Status:** completed. Implemented on its own branch `feat/ui-09-tier-guides` (UI-08 was merged alone in PR #23; plan-change log): first implemented and validated on 2026-10-31, then refined on 2026-10-31 after design concept 4 (revised scope, below), and given a visual refinement the same day (below); a pre-merge audit on 2026-11-01 added test coverage only (below). Approved at its final review and merged in PR #24 on 2026-11-01, which completes phase 5.
+- **Evidence:** PR #24 (commit `d1dedfa`, the pull request's head; merge commit `8daca18`, whose parents are `506e8a8`, the previous `main`, and `d1dedfa`).
 - **Scope and acceptance:** G §5.2 and the tier-guide parts of §8, Stage 5, using the UI-08 persistence mechanism, as approved on 2026-10-31 and revised the same day (below).
 - **Approved scope (2026-10-31),** after the UI-08/UI-09 preflight, as first approved. Superseded where the revised scope below says so:
   - **Appearance:** subtle horizontal lines between the tiers, in the current glyph colour at low opacity, so the guides relate to the user's palette. No alternating bands and no labels. The guides must not obstruct the glyphs.
@@ -438,44 +457,172 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - Negative control: with the bands drawn in black instead of the glyph colour, both glyph-pixel tests failed; the code was restored byte for byte.
   - Visual review (screenshots, light and dark, Number and Date mode, 25%, 100% and 400%, the panel at 375 and 768 px): the bands read as faint cards with the hairlines in the gaps between them; the space above shorter Date groups stays unshaded. The 4-unit gap is about 3–4 px at 100% and under 1 px at 25%, where the bands nearly merge.
   - Before the revision (first scope): 569 unit tests (568 passed in the full run, the unrelated `scripts/git/sync-main.test.mjs` timeout passing alone) and 132 browser tests passed, with negative controls for `relative` and `pointer-events-none`.
-- **Next action:** the final manual review of the diff, including the guides' contrast targets, inks and side inset, then the commit and the pull request. After the merge, record the pull request and mark UI-09 completed.
+- **Next action:** none.
 
 ### UI-10: Screen-only annotations
 
 - **Status:** not started.
 - **Scope and acceptance:** G §5.3 and the annotation parts of §8, Stage 5. Approved for evaluation; implemented only if the evaluation supports it.
 - **Combined phase (2026-10-31):** part of phase 8, "Viewer refinement and annotations", with UI-13, on one shared branch (section A). UI-13's viewer and zoom refinement comes first, so the annotations are not reworked for new positioning, scaling, interactions, responsive behaviour and accessibility. The phase follows UI-09.
-- **Next action:** define the combined phase's detailed scope, with UI-13, when the phase is reached; then evaluate a restrained annotation design against the refined viewer.
+- **After UI-13 (2026-11-01):** UI-13's detailed scope is approved (its entry). The annotations build on its viewer: the zoom and the scroller it exposes, and a fixed scale of 1 CSS pixel per SVG unit at 100%, so a tier's position follows from the zoom alone. At 1280 px the centred slab leaves about 150 px of stage at each side at 100%, and none at 375 px. Candidates to evaluate, not approved: the third concept's margin `20ⁿ` labels and its per-tier digit values, with a setting to show or hide them. Its Long Count period names as tier labels (e.g. "Hablatun", "K'in") are rejected: they would make unsupported calendar claims (G §2, §10.1).
+- **Update (2026-11-01, plan-change log):** the basic tier-direction indicator (the orientation chip) moves to UI-13 as slice 5b. The annotations are initially desktop-oriented, since phone widths leave no room beside the slab; their responsive behaviour is revisited against the refined viewer, not decided. From the UI-13 investigation (prototype measurements): at 100% the stage leaves about 77 px beside the slab on each side at 1024 px, 152 px at 1280 and 1440 px and 161 px at 1600 px, and a gutter needs about 40–48 px. Gutters outside the zoom wrapper, of equal width on both sides, would keep the slab centred and leave the SVG and its export unchanged; showing or hiding them changes the stage's content rather than the scroller's size, so it needs its own re-anchoring.
+- **Approved decision (2026-11-01):** the per-tier value beside each tier is the tier's base-20 digit (0–19), not its full decimal contribution.
+- **Next action:** evaluate a restrained annotation design against the refined viewer, after UI-13's review checkpoints.
 
 ### UI-11: Export controls in the redesigned workspace
 
 - **Status:** not started.
 - **Scope and acceptance:** G §6 and the export parts of §8, Stage 6.
-- **Next action:** define the detailed scope after UI-04.
+- **Known limitation to resolve (from UI-13, 2026-11-01):** the floating Export trigger covers the bottom-right corner of UI-13's viewer stage (from `sm`, its band 64–104 px from the bottom of the screen; below `sm`, 16–56 px). UI-11 must resolve this overlap, not move it onto other content. This includes the case measured in UI-13's slice 4 review: in Date mode at 200%, with the stage scrolled fully to the bottom-right, at 1280 × 720 and 1280 × 800, the trigger partly covers the year's units glyph (UI-13's entry). UI-13's planned sticky viewer (slice 5e) must be validated against this trigger and against UI-11's eventual solution.
+- **Next action:** define the detailed scope when the task is reached, after UI-10 (section C, "Proposed sequence"). It must include resolving the known Export-trigger overlap above, including the Date-mode 200% case, and account for UI-13's planned sticky viewer (slice 5e).
 
 ### UI-12: Educational explanations
 
 - **Status:** not started.
 - **Scope and acceptance:** G §4.9 and §8, Stage 7, including whether the date mode needs a short explanatory note.
+- **Glyph key and glyph legend (2026-11-01, plan-change log):** the compact visual glyph key under the viewer stage (Shell = 0, Dot = 1, Bar = 5), drawn with the actual glyph components, is part of UI-13 as slice 5c, not of this task. UI-12 remains responsible for the broader educational glyph-legend feature, separate from that key, which stays the section D proposal "Glyph legend", a possible format for this task; its Maya names for the glyphs would need sources.
 - **Next action:** define the topics and sources when the task is selected.
 
 ### UI-13: Viewer interaction polish
 
-- **Status:** not started.
-- **Scope and acceptance:** G §8, Stage 8. Ctrl + scroll zooming is an option to evaluate, not a requirement.
+- **Status:** in progress, on the branch `feat/ui-13-viewer-refinement`, which UI-10 shares (section A). The detailed scope was approved on 2026-11-01, after read-only investigations of the viewer and of design concepts 3 and 4 (plan-change log). Slices 1 to 4 are implemented in the working tree and awaiting manual approval and commit; slice 3 was reviewed and approved, and slice 4's review items are closed (below). Slices 4.1 and 5a–5e are planned (below), not implemented.
+- **Progress (2026-11-01):**
+  - **Slice 2, structure:** the stage box (`data-numeral-stage`), the explicit scroller reference for the place tier guides (`scrollerRef`), the marked backdrop (`data-numeral-backdrop`), and the viewer's width cap moved from `MayanExportPanel` into `NumeralViewport`. No visual change.
+  - **Slice 3, scale, centring and anchoring:** `NumeralViewport` takes the numeral's logical width (`numeralWidth`, from `getNumeralSize`) and sizes the zoom wrapper at that many CSS px times the zoom level, centred with automatic margins. A new numeral and Reset go to the top, centred horizontally, before paint. Zooming keeps the point at the viewer's centre, measured in the numeral's own coordinates against the zoom wrapper's box. The stage box is unchanged: its dimensions, padding and clip stay in slice 4.
+  - **Validation (slice 3):** `npm test` (617 tests), `npm run lint` (no errors; 4 existing warnings in `useElementOnScreen.ts`), `npm run build` and `npm run test:e2e` (155 tests) passed. New browser tests: 350 CSS px at 100% at 320–1440 px in Number and Date modes; exact width and height at all eight levels with no page-level horizontal overflow at 320 and 1280 px; centring when narrower; the centre in view at the start when wider; the top for a new numeral and after Reset; the anchor while wider and narrower than the viewer; and no drift over five zoom cycles. Scroll positions are whole pixels in Chromium, so the anchor holds within 1 CSS px per zoom step.
+  - **Slice 4, stage and slab:** the viewer's 384 px cap and canvas surround are removed; the stage (the scroller) spans the viewer card's content, at the provisional heights (the `numeral-stage-height` utility in `src/index.css`, with its `vh` fallback under `@supports not (height: 1svh)`, since the minifier drops a plain duplicate declaration), as an inset panel: `canvas`, a `line` border, `shadow-inner`, `rounded-md` and `scrollbar-themed`. The stage box is a flex box at least the scroller's size, as large as the slab and its 16 px padding (`w-max min-w-full min-h-full p-4`), with `overflow: clip`. The slab (the zoom wrapper) is centred both ways with automatic margins, which become 0 where it does not fit, so a long or wide numeral starts at the padding and stays wholly reachable; it is never shrunk (`shrink-0`), and has a `ring-1 ring-line` edge and `shadow-sm`, recorded in `docs/DESIGN_SYSTEM.md`. `NumeralViewport`'s `maxHeight` prop is removed. The anchoring helpers are unchanged: they measure the slab's own box, so the padding and centring margins do not shift the anchor. The renderer, exports and tier guides are unchanged.
+  - **Measured (slice 4, implementation):** the stage heights match the expected values at all six screen sizes (448, 520, 620, 400.2, 480 and 340.8 px), and the stage is 686 px wide at 1280 and 1440 px, 311 px at 375 px and 256 px at 320 px. From `lg`, the stage's top is at 254 px, not the prototype's 246 px, so the offset by the original recipe would be about 18rem; with 17.5rem the viewer card still ends within the screen at 1280 × 720 (718 px), 1280 × 800 (790 px) and 1440 × 900 (890 px), 2–10 px from its bottom instead of about 18 px. The offset is kept for slice 5, which moves the stage again and measures it once more.
+  - **Validation (slice 4):** `npx vitest run src` (23 files, 561 tests), `npm run lint` (no errors; the same 4 warnings), `npm run build` and `npm run test:e2e` (160 tests) passed. `npm test` also runs the Git workflow scripts' tests, outside this slice; 9 of them timed out under load in one run and were not run again. New and updated browser tests: the stage height at the six screen sizes, unchanged at 25%, 100% and 400%, with no page-level horizontal overflow and, from `lg`, the card within the screen; a short numeral centred both ways in Number and Date modes, also at 400% while wider than the stage; the 99-tier numeral scrolled from its first tier to its last, with 16 px of padding at each end; the zoom anchor with the padding, each step within 1 px of the centre point and at least 3 px from where a share of the scrollable area would put it, horizontally (320 px, 200–400%) and vertically (1280 px, 25–100%); and the Export trigger clear of the zoom controls and, at 100% and 400%, of the glyphs (below). Page Down passed 12 repeated runs in parallel with the stage's opaque `canvas`, which slice 2 had avoided after intermittent failures.
+  - **Export trigger (slice 4):** below `sm`, at 375 × 667, 375 × 812 and 320 × 568, with the viewer's controls scrolled to the top of the screen, the controls and the whole stage are above the trigger. From `lg`, at 1280 × 720 and 1280 × 800, it covers the stage's bottom-right corner (as recorded for UI-11), but no zoom control and no glyph in the tested configurations: Number and Date modes, at 100% and at 400% scrolled to the bottom-right corner. Other zoom levels are not tested. The slice 4 review measured one exception: at both screen sizes, in Date mode at 200% with the stage scrolled fully to the bottom-right, the trigger partly covers the year's units glyph (15 × 17 px at 1280 × 720, 15 × 28 px at 1280 × 800). The stage cannot scroll it clear, but scrolling the page uncovers it, so the glyph stays reachable. This overlap is unresolved and remains assigned to UI-11.
+  - **Resize (slice 4, measured, not changed):** a resize keeps the scroll position, not the point at the centre: the view stays wholly scrollable, with no page-level overflow, and returns exactly when the size does. The centre point shifts by half the change in the stage's size: at 400%, from 1280 to 375 px, by 188 CSS px (47 SVG units); a numeral shown centred at 1280 px shows its left part at 375 px (138.5 instead of 175 units) and at 320 px (111). Keeping the centre point on resize, e.g. with a `ResizeObserver` on the scroller, is proposed for review, not implemented.
+  - **Slice 4 review closure:** the last identified wording issue is corrected: the browser test's comment about the Export trigger said it covers "never the controls or a glyph"; it now says that it does not overlap the zoom controls or glyphs in the tested desktop configurations (100% and 400%). No assertion changed. The Export trigger's overlap, including the Date-mode 200% case above, is not resolved and stays assigned to UI-11.
+  - **Remaining:** slice 4.1 and slices 5a–5e, as planned below, and optionally slice 6. Keeping the centre point on resize is planned as slice 4.1.
+- **Scope and acceptance:** G §8, Stage 8, as approved on 2026-11-01 (below). Ctrl + scroll zooming was evaluated and is not implemented: Ctrl + wheel stays the browser's.
 - **Combined phase (2026-10-31):** part of phase 8, "Viewer refinement and annotations", with UI-10, on one shared branch (section A), and implemented before UI-10. The phase follows UI-09 and comes before UI-11 and UI-12.
-- **Next action:** define the combined phase's detailed scope, with UI-10, after UI-09.
+- **Supersedes:** UI-04's "the viewer keeps its 480 px maximum height and the meaning of 100% zoom" (plan-change log).
+- **Maximum numeral:** 128 digits, 99 tiers (UI-07): an SVG of 350 × 7,920 units in Number mode. Date mode's three groups are also 350 units wide.
+- **Approved decisions (2026-11-01):**
+  - **Direction:** the third design-reference concept's viewer: a full-width stage, a centred slab, a viewer header with a compact zoom toolbar, and a bounded viewer height. The existing 5/7 workspace grid and card order stay (UI-04).
+  - **Unchanged artwork:** the numeral renderer, glyph geometry, group width (350 units), BigInt conversion and exported SVG and PNG artwork are unchanged. Glyphs keep their place at the bottom of each tier.
+  - **Scale:** 100% zoom is 1 CSS pixel per SVG unit at every viewport width, so a Number-mode numeral is 350 px wide at 100%. The numeral is never shrunk to fit: where the stage is narrower, the viewer scrolls sideways, without page-level horizontal overflow.
+  - **Zoom steps:** the existing eight, from 25% to 400%, unchanged.
+  - **Position:** a new numeral and Reset go to the top, centred horizontally. Zooming keeps the point at the viewer's centre in place, measured in the numeral's own coordinates, so it also holds while the numeral is narrower than the stage.
+  - **Stage:** the semantic `canvas` token, the backdrop the tier guides' colours already assume (`VIEWER_BACKDROP`), kept as their single source. The slab is centred horizontally, and vertically while it is shorter than the stage, and has a subtle screen-only edge and shadow for each theme, never in the SVG.
+  - **Toolbar:** in the viewer header, beside the `h2`, wrapping under it only where there is no room: Zoom out, the percentage, Zoom in, then Reset. The percentage stays a separate, non-interactive readout in the existing polite live region; Reset stays a separate button. Accessible names ("Zoom out", "Zoom in", "Reset"), `aria-disabled` at the limits, the tab order and the + − 0 shortcuts while the viewer has focus are unchanged. Buttons are compact, at least 24 × 24 px (WCAG 2.2, 2.5.8).
+  - **Interactions:** wheel, Ctrl + wheel, browser zoom, touch scrolling and scroll chaining to the page stay native. No pinch zoom and no fullscreen.
+  - **Settings:** the settings-panel redesign and material presets stay in UI-15. UI-13 does not remove, move or change any settings control.
+  - **Animation (optional final slice):** zoom changes commit the final width and anchored scroll position at once, then animate a transform from the previous visual scale to none, for 140 ms with ease-out ("Option B"). Skipped entirely, with no transform, when reduced motion is preferred. It may be dropped at its review checkpoint without affecting the other slices.
+- **Viewer structure (approved for implementation):** the scroller (the focusable "Numeral viewer" group, fixed height, `canvas`) contains a stage box (`overflow: clip`, at least as large as the scroller, as wide as its content, with padding), which contains the zoom wrapper (`relative`, centred with automatic margins), which contains, in order, the underlay, the SVG and the overlay, as today. The stage box contains the whole numeral, so `overflow: clip` clips only what a transform draws outside it, never the numeral's layout; it is not a scroll container, so scrolling stays with the scroller. The viewer's width cap moves out of `MayanExportPanel`, which keeps the export work.
+- **UI-09 contracts:**
+  - **Hover:** `PlaceTierGuides` currently treats `wrapper.parentElement` as the scroller. With the stage box in between, it must receive the scroller explicitly, with a test that fails without it.
+  - **Underlay:** the underlay, SVG and overlay stay siblings in the zoom wrapper, in that order, so the screen-only rule in `src/index.css` keeps working.
+  - **Backdrop:** the browser test that reads the backdrop colour from `.mep-svg-wrapper` reads it from the stage's marked element instead.
+  - **Unchanged:** the guides' geometry, colours, hover and screen-only status.
+- **Stage height (approved as the provisional starting point):**
+  - Below `lg`: `clamp(18rem, 60svh, 30rem)`, with a `vh` fallback where `svh` is unsupported.
+  - From `lg`: `clamp(28rem, calc(100svh - 17.5rem), 45rem)`.
+  - The height does not change with zoom. The 17.5rem offset was measured without the new viewer header: the stage's top at 246 px, plus the card's 16 px bottom padding, plus about 18 px of space. It must be measured again once the header and toolbar exist, and the values adjusted if needed. These values are a starting point, not an exemption from the viewport checks below.
+  - Planned (2026-11-01): from `lg`, slice 5d replaces this fixed height with a hybrid model sized from the numeral's unzoomed height; below `lg`, these values stay initially (planned slices, below).
+  - Expected values with the provisional formula: 1280 × 720, 448 px (the minimum; the card ends at about 710 px); 1280 × 800, 520 px; 1440 × 900, 620 px; 375 × 667, 400 px; 375 × 812, 480 px (the maximum); 320 × 568, 341 px.
+- **Acceptance:** G §8, Stage 8, and:
+  - At 1280 × 720, 1280 × 800, 1440 × 900, 375 × 667, 375 × 812 and 320 × 568, in both themes: the stage height stays the same at every zoom level; a short numeral is centred; the complete 99-tier numeral scrolls vertically from its top tier to its bottom tier without clipping; there is no page-level horizontal overflow; and the viewer card fits the screen where the provisional values say it does.
+  - At 100%, the SVG is 350 CSS px wide at every viewport width, and the zoom steps scale it exactly.
+  - Zooming keeps the viewer's centre point in place, including while the numeral is narrower than the stage. A new numeral and Reset show the top, centred horizontally.
+  - The tier guides stay aligned at 25%, 100% and 400% and while scrolling, and their hover stays accurate.
+  - The SVG and PNG exports are identical before and after zooming and scrolling, at every stage size.
+  - Export stays reachable with the result off-screen (G §6). Essential viewer content and controls stay reachable, particularly on mobile, despite the Export trigger's overlap (known limitations, below).
+  - The toolbar's controls are keyboard-accessible, with the shared focus ring, and wrap without overflow at 320 px.
+  - If the animation slice is implemented: no transform when reduced motion is preferred; the scroll extent stays the same throughout the animation; the anchor holds when an animation is interrupted by another zoom; hover stays accurate.
+- **Implementation slices,** each its own commit with a review checkpoint after it (section A):
+  1. **Roadmap:** this approved scope.
+  2. **Structure, without visual change:** the stage box, the explicit scroller reference for the tier guides and the marked backdrop.
+  3. **Scale, centring and anchoring:** 1 CSS pixel per SVG unit at 100%, the starting position and the zoom anchor.
+  4. **Stage and slab:** the full-width stage at the provisional heights, the centred slab and its edge and shadow (recorded in `docs/DESIGN_SYSTEM.md`).
+  5. **Viewer header and toolbar,** then the stage height's offset measured again. Revised on 2026-11-01 into slice 4.1 and slices 5a–5e (below).
+  6. **Optional: the zoom animation.**
+- **Planned slices (2026-11-01):** the approved working direction after a read-only investigation of the header, a tier indicator, a glyph key, the stage height, a sticky viewer and resize anchoring (plan-change log). Not implemented; each slice is its own commit with a review checkpoint, and stays subject to review and adjustment. Order: section C, "Proposed sequence".
+  - **Slice 4.1, resize anchoring,** before any further viewer layout change, so that the later slices' size changes keep the viewed point by construction:
+    - When the scroller's content-box size changes, the intended viewed point is kept, horizontally and vertically.
+    - A new numeral and Reset return to the intended start position (the top, centred horizontally); a zoom keeps its intended target point; user scrolling updates the intended anchor.
+    - Programmatic scrolling must not be mistaken for user scrolling. Browser scroll clamping, fractional scroll positions (e.g. at 125% or 150% display scaling), rapid repeated resizing and classic scrollbars appearing or disappearing are handled. The anchor stays the intended point, never the clamped position.
+    - Stale corrections must not override later user scrolling (e.g. scroll events caused by clamping during a resize), and there are no observer loops or unnecessary corrections.
+    - No visual change, and no change to the SVG rendering or exports. Independently reviewable and tested.
+  - **Slice 5a, viewer header and toolbar:**
+    - The viewer heading becomes "Mayan Numeral Stack", with an existing Material-style icon, preferably a `view_agenda`-style icon, never the base-20 card's `Layers`.
+    - The zoom state stays private to `NumeralViewport`. A header slot lets HomeView supply the heading while `NumeralViewport` renders the toolbar beside it.
+    - Toolbar order: Zoom out, the percentage, Zoom in, a separator, Reset. Zoom behaviour, accessible names, keyboard shortcuts, disabled states and the live region are unchanged.
+    - Wraps responsively down to 320 px without horizontal overflow (investigation estimate: one row from 1280 px; wrapping at 1024 px and on phones).
+    - The stage offset is measured again once the header exists.
+  - **Slice 5b, tier-direction indicator** (moved from UI-10):
+    - Derived from the existing numeral data (the tallest group's tier count), reusing `toSuperscript`, without duplicating tier arithmetic. Groups are bottom-aligned, so the rows have the same powers in both modes.
+    - Several tiers show the physical orientation, e.g. `Top: 20² ↓ Bottom: 20⁰`; a single tier a compact form, e.g. `1 tier · 20⁰`. Suitable screen-reader text, as for the tier badge.
+    - The base-20 card's tier badge keeps its ascending range (e.g. `20⁰–20²`): the mathematical range and the viewer's physical orientation serve different purposes.
+  - **Slice 5c, compact glyph key** (moved from UI-12, which keeps the broader glyph legend):
+    - Shell = 0, Dot = 1, Bar = 5, beneath the viewer stage, with accessible text labels; compact and responsive.
+    - Draws the actual `ShellGlyph`, `DotGlyph` and `BarGlyph` components, keeping their shapes and proportions, outside `exportRef`, so the exported SVG and PNG artwork and geometry are unchanged.
+  - **Slice 5d, stage height refinement:**
+    - From `lg`, initially, a hybrid model: `clamp(256px, numeralHeightAt100Percent + 34px, maximumStageHeight)`, from the numeral's unzoomed (100%) height, so the stage height never changes with zoom. The exact CSS and maximum come from the existing architecture and fresh measurements.
+    - The stage stays separate from the slab; the SVG's intrinsic size and glyph geometry are unchanged. Short numerals leave less empty space; long numerals stay vertically scrollable.
+    - Below `lg`, the existing fixed heights stay initially, so the page does not move while a number is entered.
+    - The maximum is calculated again after the header and glyph key, accounting for the viewport, card header, toolbar, stage padding and glyph key. Overlay and classic scrollbars are both validated (the investigation's headless Chromium had overlay scrollbars only). `scrollbar-gutter: stable both-edges` is not introduced without demonstrated need.
+  - **Slice 5e, conditional sticky viewer on desktop:**
+    - The viewer card itself, initially `lg:sticky lg:top-4`, and only where the viewport is tall enough for the whole card; that minimum height comes from the final card's measurements.
+    - It stops at its grid area, never overlapping the footer or later content; the stage keeps its own scrolling; no further page-level scroll container, horizontal overflow or layout jump. Below `lg` the viewer stays non-sticky.
+    - Validated against the floating Export trigger and UI-11's eventual changes.
+    - Depends on the UI-07 prerequisite below.
+  - **Prerequisite, separate from UI-13 (UI-07 breakdown layout):** with the 99-tier breakdown open, the page's height grows far past the footer (about 5,300 px instead of about 1,450 px at 1280 × 800 in the investigation). The likely cause is the absolutely positioned `sr-only` spans of `PowerOf20` in the breakdown's rows, which escape its scrolling box. To do separately, as its own bugfix: confirm the cause against the implementation, find a minimal correction that keeps the spoken text, keep it out of UI-13's commits and leave the rest of UI-07 unchanged. If it is confirmed to affect the containing layout, it is fixed and validated before slice 5e.
+  - **Investigation evidence (2026-11-01, prototype measurements, not validation):** the production build served from a temporary directory, with the stage's height and the card's position changed in the running page only.
+    - Hybrid model (256 px minimum): the stage was 256 px for 1 and 2 tiers, 274 px for 3 tiers and Date mode, and 434 px for 5 tiers, at every zoom level; 12 and 99 tiers reached the maximum. A stage following the zoomed numeral instead changed by up to 426 px between 25% and 400% (2 tiers at 1440 × 900), and was not adopted.
+    - Sticky card (`top: 16px`) with the 99-tier breakdown open: stuck from a 200 px page scroll and stopped exactly at the bottom of the left column, never over the footer, without horizontal overflow. Once stuck, the card ended 30–38 px above the Export trigger at 1280 × 720, 1280 × 800 and 1440 × 900; at the top of the page the overlap remains (UI-11).
+- **Out of scope:**
+  - **UI-15:** the settings-panel redesign and material presets.
+  - **UI-10:** power annotations and their setting (the orientation chip moved to slice 5b).
+  - **UI-11:** moving the export controls and resolving the Export trigger's overlap.
+  - **UI-12:** the broader educational glyph legend (the compact key moved to slice 5c).
+  - **Not planned:** renderer and glyph geometry changes, fullscreen and pinch zoom.
+- **Known limitations:**
+  - **Export trigger:** the floating Export trigger covers the stage's bottom-right corner. From `sm` its band is 64–104 px from the bottom of the screen, which at 100% is mostly empty stage beside the centred slab; below `sm` it is 16–56 px from the bottom. Recorded for UI-11, which must resolve the overlap (its entry).
+  - **Narrow phones:** at 320 px the stage is about 256 px wide, so at 100% the centred view of a 350-unit numeral leaves about 47 px of each edge out of view; in Date mode, part of the day group, until the user scrolls or zooms out. This follows from the approved scale.
+- **Prototype evidence (2026-11-01).** These are prototype measurements, not validation of the implementation. Method: the production build, served from a temporary directory outside the repository, with the 99-tier numeral (128 nines) and both tier guides on. The approved scale and structure were simulated by changing the running page's DOM only. Limitations: headless Chromium with software rendering; CPU throttling (4× and 6×) at 375 px as a proxy for a phone; graphics memory not measured; single runs, with several milliseconds of run-to-run variation.
+  - **Zoom levels, at 1280 × 800:**
+
+    | Zoom | Numeral (CSS px) | Layout after a zoom change | Scroll frames: median / 95th percentile |
+    |---|---|---|---|
+    | 25% | 88 × 1,980 | 3.7 ms | 16.8 / 18.6 ms |
+    | 100% | 350 × 7,920 | 3.8 ms | 16.7 / 18.4 ms |
+    | 250% | 875 × 19,800 | 3.0 ms | 16.7 / 19.4 ms |
+    | 300% | 1,050 × 23,760 | 3.5 ms | 16.7 / 18.2 ms |
+    | 400% | 1,400 × 31,680 | 3.1 ms | 16.7 / 19.5 ms |
+
+    At 375 px with 6× throttling, scroll frames were 19–26 ms (median) and 41–48 ms (95th percentile) at every level, with no trend by zoom: 100% was as slow as 400%. The number of DOM nodes stayed the same at every level (2,333 with both guides, 2,134 without), and the JavaScript heap between 5 and 10 MB. 300 pointer moves over the guides took 19–32 ms at 1280 px. Nothing measured gave a reason to lower the 400% maximum.
+  - **Zoom animation, 140 ms:**
+    - **Width transition (Option A, rejected):** without correcting the scroll position on every frame, the centre point drifted 990–3,964 px. With the correction, frames were about 18 ms at 1280 px, but at 375 px with 4× throttling only 4–5 frames of 55–67 ms each, because the whole SVG is laid out again on every frame.
+    - **Transform (Option B, approved as optional):** frame median 17 ms, also at 4× throttling, after a first frame that an instant zoom also has. The centre point moved at most 0.6 px, and 0.3–0.4 px when a second zoom interrupted the first.
+    - **Scroll extent:** without a clip, a zoom-out animation enlarged the scroll extent from 7,920 px to 9,900–11,880 px. With the stage box's `overflow: clip`, every frame of 150→100%, 100→400% and 400→25% had exactly the final extent (7,952, 31,712 and 2,012 px, including 32 px of padding).
+    - **Reach and grouping:** the top and bottom tiers stayed fully reachable, and the underlay, SVG and overlay stayed grouped.
+    - **Hover:** the hovered card contained the pointer during the animation and after scrolling under it.
+    - **Interruption:** an animation interrupted after 60 ms kept the same anchor to five decimal places.
+    - **Reduced motion:** no transform was applied.
+  - **Stage height:** at 1280 and 1440 px the stage was 686 px wide; at 375 px, 311 px wide, with 71 px of sideways scrolling inside the viewer at 100%; at 320 px, 256 px wide, with 126 px. There was no page-level horizontal overflow. The height was identical at 25%, 100% and 400%, a 1-tier numeral was centred both ways, and the 99-tier numeral scrolled from its first tier to its last.
+- **Compatibility:**
+  - **UI-09:** the contracts above.
+  - **UI-10:** builds on the zoom and scroller UI-13 exposes, and on the space beside the centred slab (its entry).
+  - **UI-11:** resolves the Export trigger's overlap, including the Date-mode 200% case (its entry).
+  - **UI-12:** the broader glyph legend stays with UI-12 and section D; the compact key is slice 5c (its entry).
+  - **UI-15:** the stage follows the theme and the slab follows the material, so the theme stays independent of the material. The slab's edge keeps light materials, such as Limestone `#FAF8F5` on the light `canvas` `#f6f1e7`, distinguishable from the stage. UI-15's approved decisions are unchanged.
+- **Validation:** the standard checks (section C), the acceptance checks above, and screenshots at the six viewport sizes in both themes, in Number and Date mode, at 25%, 100% and 400%, with the guides on and off.
+- **Next action:** manual approval and commit of slices 1–4; then slice 4.1.
 
 ### UI-14: Final responsive, accessibility, regression and visual validation
 
 - **Status:** not started.
-- **Scope and acceptance:** G §8, Stage 9, and G §9.
+- **Scope and acceptance:** G §8, Stage 9, and G §9. Their 500-digit references apply to the current maximum of 128 digits, 99 tiers (UI-07).
 - **Next action:** run when all other tasks are completed or explicitly deferred.
 
 ### UI-15: Material presets and settings-panel refinement
 
 - **Status:** not started. Scope approved on 2026-11-01, after a read-only investigation of the settings panel, the colour pickers and design concepts 3 and 4 (plan-change log); the section D item "Material colour presets" is now this task.
-- **Order of work:** after the combined phase 8 (UI-13, then UI-10), on which it depends, and before UI-14's final validation. Its place relative to UI-11 and UI-12 is not yet decided. Kept separate from UI-09, whose guide rendering it does not change.
+- **Order of work:** after the combined phase 8 (UI-13, then UI-10), on which it depends, and before UI-14's final validation. Its place relative to UI-11 and UI-12 is not yet decided; the proposed sequence of 2026-11-01 (section C) places it after UI-11, and its place relative to UI-12 stays open. Kept separate from UI-09, whose guide rendering it does not change.
 - **Approved scope:**
   - **Material presets:** coordinated pairs; choosing one sets both the background and the glyph colour. The selected preset is visibly indicated. The catalogue, all opaque (alpha 1), with WCAG 2.x contrast between background and glyphs:
 
@@ -496,6 +643,7 @@ References to "Stage N" in section G correspond to the tasks in the "Old stage" 
   - **Unchanged:** the application's light and dark theme stays independent of the material: changing the theme never replaces the chosen colours. The tier guides keep deriving their colours from the background. No new dependency.
   - **Not included:** "Surprise me", a random choice of material, deferred (section D).
 - **To define in the detailed scope:** the adaptive grid colour's algorithm and contrast targets (its inclusion is approved); the panel's exact markup and styling within the approved direction; and whether a hex input accompanies the readable value, an implementation detail to evaluate.
+- **Visual reference (2026-11-01):** the third design-reference concept's settings card (its heading with a tune icon, swatch groups side by side under small labels, and compact rows with the label on the left and the switch on the right) is a visual reference for this redesign. It is a reference only: not an approved specification of exact markup, and not a reason to remove or simplify existing controls, such as the colour pickers, Show Grid and the two viewer guides, which the concept does not show. The approved decisions above and the five presets are unchanged.
 - **Next action:** define the detailed scope and acceptance criteria when the task is reached.
 
 ## D. Optional and deferred ideas
@@ -511,7 +659,7 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Copy SVG code | proposed | Listed as not approved (G §10). Copies the SVG markup as text, so it could reuse `copyText` (`src/utils/clipboard.ts`); see the renderer copy and export options below |
 | Separate Date tab | proposed | Listed as not approved (G §10) |
 | Tier-count chip | approved | Approved and implemented by UI-07's tier badge on the base-20 card ("12 tiers · 20⁰–20¹¹"), merged in PR #22. The historical G §10 proposal remains unchanged |
-| Glyph legend (dot = 1, bar = 5, shell = 0) | proposed | Seen in design references; to be reviewed separately |
+| Glyph legend (dot = 1, bar = 5, shell = 0) | proposed | Seen in design references; to be reviewed separately. Update (2026-11-01): a compact key under the viewer stage is planned as UI-13's slice 5c; the broader educational legend stays with UI-12 and this proposal |
 | Educational information cards | proposed | A possible format for UI-12; the explanations themselves are approved |
 | Heading order (`h1` followed by `h3`) | approved | Part of UI-04: the section headings become `h2` |
 | Emoji in visible labels and accessible names (such as `📦 Export`) | deferred | Reviewed with UI-04 and deferred |
@@ -530,15 +678,18 @@ None of these are committed scope. Each needs a separate decision before impleme
 | Date-mode base-20 presentation | proposed | Date mode keeps the "•" separator, the notation tooltip and exponents that screen readers read as plain digits ("15 × 200"), which UI-07 changed in Number mode only. To be revisited separately. Added 2026-10-29 |
 | Faster analytical breakdown at the 500-digit limit | superseded | Opening it takes about 0.5 s at 500 digits, mostly the browser's layout of 385 rows (UI-07). `content-visibility` on the rows or virtualization could reduce it, and would need their own review. Added 2026-10-29. With the breakdown open, each step of the number also takes about 0.1 s at 500 digits, mostly rendering every row again (measured 2026-10-30); a memoized row component, so that only changed rows render, is the smallest proposed fix and needs approval. Update (2026-10-30): memoized rows and multipliers shown as "20ⁿ" were implemented in UI-07's second refinements; opening now takes about 0.25–0.35 s at 500 digits, and a step about 60 ms. Update (2026-10-31): the maximum is now 128 digits (99 rows), where opening takes about 0.1–0.16 s; nothing further is proposed. Closed (2026-10-31): superseded by the 128-digit maximum and the memoized rows of UI-07; the measurements above are kept as history |
 | Lower maximum of significant digits | approved | 500 digits (385 tiers) was the maximum (`MAX_SIGNIFICANT_DIGITS` in `src/utils/numberInput.ts`); 50, 100 and 128 were measured (UI-07). Added 2026-10-30. Update (2026-10-31): 128 approved and implemented in UI-07's third refinements, with the README and tests; section G stays as first written |
-| Export trigger over content while scrolling | proposed | The floating trigger can cover any content scrolled into its band, e.g. the breakdown disclosure's chevron at 768 px. UI-07 keeps keyboard focus clear of it with `scroll-padding-bottom`; a layout that never overlaps belongs to UI-11. Added 2026-10-30. Update (2026-10-31): UI-07 also reserves space below the content from 640 px, so the end of the page scrolls clear of the trigger; content still passes under it mid-scroll |
+| Fullscreen viewer | deferred | Seen in design-reference concepts 3 and 4. Left out of UI-13 (2026-11-01): the full-width, taller stage gives the numeral room without it |
+| Pinch zoom in the viewer | deferred | Left out of UI-13 (2026-11-01): touch scrolling and browser zoom stay native |
+| Glyphs centred vertically in their tiers | proposed | Glyphs sit at the bottom of each 80-unit tier (about 41–75 units), so the top half of a tier is empty; the third concept centres them. A renderer change that would change the exported artwork, so it was left out of UI-13 (2026-11-01) and needs its own decision |
+| Export trigger over content while scrolling | proposed | The floating trigger can cover any content scrolled into its band, e.g. the breakdown disclosure's chevron at 768 px. UI-07 keeps keyboard focus clear of it with `scroll-padding-bottom`; a layout that never overlaps belongs to UI-11. Added 2026-10-30. Update (2026-10-31): UI-07 also reserves space below the content from 640 px, so the end of the page scrolls clear of the trigger; content still passes under it mid-scroll. Update (2026-11-01): it also covers the bottom-right corner of UI-13's viewer stage, a known limitation that UI-11 must resolve (UI-11 in section C) |
 
 ## E. Current progress and next task
 
-- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, UI-05 and UI-06 (PR #21), which complete phase 3, UI-07 (PR #22), which completes phase 4, and UI-08 (PR #23).
-- **In progress:** UI-09, on its own branch `feat/ui-09-tier-guides`, at its review checkpoint: implementation complete (revised after design concept 4, visually refined, validated, and audited before merge on 2026-11-01); the final manual review, commit and pull request are pending.
+- **Completed:** UI-01 (phase 0), UI-02 and UI-03 (PR #19), which completes phase 1, UI-04 (PR #20), which completes phase 2, UI-05 and UI-06 (PR #21), which complete phase 3, UI-07 (PR #22), which completes phase 4, and UI-08 (PR #23) and UI-09 (PR #24), which complete phase 5.
+- **In progress:** UI-13, on the branch `feat/ui-13-viewer-refinement`, which UI-10 shares: scope approved on 2026-11-01; slices 1 to 4 are implemented in the working tree and awaiting manual approval and commit; slice 4's review items are closed. Slices 4.1 and 5a–5e are planned, not implemented.
 - **Blockers:** none.
-- **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11. UI-13 and UI-10 form one combined phase on one shared branch, after UI-09 and before UI-11 and UI-12 (section C, "Order of work"). UI-15, material presets and settings-panel refinement, is approved and comes after that phase; its place relative to UI-11 and UI-12 is not yet decided.
-- **Next task: UI-09,** its final manual review, commit and pull request. See its entry in section C.
+- **Decided:** the Export trigger stays floating in UI-04; the presentation of the export controls is reviewed in UI-11. UI-13 and UI-10 form one combined phase on one shared branch, after UI-09 and before UI-11 and UI-12 (section C, "Order of work"). UI-15, material presets and settings-panel refinement, is approved and comes after that phase; the proposed sequence (section C, 2026-11-01) places it after UI-11, and its place relative to UI-12 is not yet decided.
+- **Next task: UI-13,** after the manual approval and commit of slices 1–4: slice 4.1, resize anchoring. Then the separate UI-07 breakdown layout bugfix, if confirmed, and slices 5a–5e (section C, "Proposed sequence", and UI-13's entry).
 
 ### Plan-change log
 
@@ -574,6 +725,9 @@ None of these are committed scope. Each needs a separate decision before impleme
 | 2026-10-31 | Visual refinement of UI-09 (UI-09 in section C), keeping the revised scope otherwise. Both guides take their colours from the viewer background, never the glyph colour: gold-toned Dividing Hairlines at 3:1 (WCAG 2.1 SC 1.4.11) against the background and a resting card, and subtle Place Tier Guide cards at 1.25:1 (1.5:1 hovered), deliberately below 3:1 as supplementary shading. Cards and hairlines share a 3% side inset. The cards move behind the SVG on screen (an underlay, with a screen-only rule making the SVG's background transparent), so that the background-derived colour never tints the glyphs; the export is unchanged. The cards gain a hover treatment by geometry, with a shadow and a 150 ms transition, without taking the pointer. | Requested in the UI-09 review after concept 4; the underlay was chosen by the user over cards above the SVG, which would tint the glyphs against the revised scope's requirement, and over glyph-coloured cards |
 | 2026-11-01 | Added UI-15, material presets and settings-panel refinement (UI-15 in section C), approved and not started: coordinated presets, preset swatches in both colour pickers, custom colours with active-preset detection, a Limestone default (`#FAF8F5`/`#14171D`) for users without saved colours, an adaptive grid colour, and the panel's hierarchy and colour-picker refinements. The new default and the grid colour change the exported appearance, as explicitly approved. It comes after UI-13 and UI-10; its place relative to UI-11 and UI-12 is not yet decided. The section D item "Material colour presets" is approved as UI-15, "Surprise me" is added to section D as deferred, and UI-14 now also depends on UI-15. Section G, including §10, stays as first written. | Approved by the user after a read-only investigation of the settings panel, the colour pickers and design concepts 3 and 4 |
 | 2026-11-01 | Recorded UI-15's settled decisions (UI-15 in section C): the five-preset catalogue with exact colours (Limestone, the default, Dark Stela, Obsidian Basalt, Classic Paper and Weathered Limestone); the active preset found by exact RGBA pair matching, with no saved preset name and the existing colour keys as the only saved source; the panel heading "Stela Material & Glyph Settings" with a tune-style icon, keeping UI-09's two groups; and the colour-picker refinements. The grid colour's algorithm, the panel's exact markup and a possible hex input stay to be defined in the detailed scope. UI-15 now also depends on UI-10 and UI-13, matching its order of work. | Decided by the user during UI-15's planning |
+| 2026-11-01 | Recorded UI-09 as completed and merged in PR #24 (commit `d1dedfa`, merge `8daca18`), which completes phase 5. UI-13 is the next task. | Verified against the merged `main` and the merge commit's parents |
+| 2026-11-01 | Approved UI-13's detailed scope (UI-13 in section C) and started it on the branch `feat/ui-13-viewer-refinement`: the third concept's viewer direction within the 5/7 grid; 100% zoom as 1 CSS pixel per SVG unit at every width, superseding UI-04's "480 px maximum height and meaning of 100% zoom"; the eight zoom steps and 400% maximum kept; a new numeral and Reset centred horizontally at the top; a separate percentage readout and Reset; the `canvas` stage; a provisional responsive stage height, to be measured again once the viewer header exists; an optional transform-based zoom animation as the final slice. Settings-panel changes stay in UI-15, with the third concept's settings card recorded there as a visual reference only. The Export trigger's overlap with the stage is recorded for UI-11. Fullscreen and pinch zoom are deferred, and glyphs centred in their tiers is a proposal (section D). Section G's preface notes the current 128-digit maximum. | Approved by the user after read-only investigations of the viewer, design concepts 3 and 4, zoom performance, two zoom animations and the stage height, with prototype measurements recorded in UI-13's entry |
+| 2026-11-01 | Closed UI-13's slice 4 review items (the browser test's Export-trigger comment no longer says "never") and planned the rest of UI-13 (its entry): slice 4.1, resize anchoring, before any further layout change; slice 5 revised into 5a, the header and toolbar ("Mayan Numeral Stack", a header slot, the zoom state kept in `NumeralViewport`); 5b, the tier-direction indicator, moved from UI-10; 5c, a compact glyph key, moved from UI-12, which keeps the broader legend; 5d, a hybrid stage height from `lg`, never changing with zoom, with the fixed heights kept below `lg`; and 5e, a conditional sticky viewer from `lg`. The base-20 tier badge keeps its ascending range. A separate UI-07 breakdown layout bugfix (excess page height, likely from `PowerOf20`'s `sr-only` spans) is recorded as a prerequisite of 5e, if confirmed. Section C gains a proposed sequence, which places UI-15 after UI-11; UI-12's place, and UI-15's relative to it, stay undecided. The Export trigger's overlap, including the Date-mode 200% case, stays with UI-11. | Approved by the user as the working direction after a read-only investigation of the viewer header, indicator, glyph key, stage height, sticky positioning and resize anchoring, with prototype measurements recorded in UI-13's entry; each slice stays subject to review |
 
 ## F. Completion record
 
@@ -582,6 +736,8 @@ Not completed. When the whole redesign is finished, record here: the completion 
 ## G. Reference: approved requirements
 
 The sections below are the approved requirements, retained unchanged from the original roadmap. Section C maps their "Stage N" references to task IDs; where section C or the plan-change log records a later approved decision, that decision applies.
+
+The current maximum numeral size is 128 digits (99 tiers), established in UI-07; earlier 500-digit references are historical.
 
 ## 2. Project Context
 

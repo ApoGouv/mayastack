@@ -52,21 +52,20 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('bounded numeral viewport', () => {
   test('keeps the viewer and the numeral result bounded for 1 to 128 digits', async ({ page }) => {
+    // Changed deliberately in UI-13: the stage has the screen's height (448 px at 1280 × 720,
+    // the default), whatever the numeral's, instead of a 480 px maximum and a short numeral's own
     const result = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
     const heights: Record<string, { viewer: number; result: number }> = {};
     for (const digits of ['7', FIFTY_DIGITS, '9'.repeat(100), MAX_DIGITS]) {
       const viewer = await showNumber(page, digits);
       heights[digits.length] = { viewer: (await viewer.boundingBox())!.height, result: (await result.boundingBox())!.height };
-      expect(heights[digits.length].viewer).toBeLessThanOrEqual(480);
+      expect(heights[digits.length].viewer, `${digits.length} digits`).toBe(448);
     }
-    // A single digit keeps its natural height; long numbers stop at the cap
-    expect(heights[1].viewer).toBeLessThan(200);
-    expect(heights[50].viewer).toBe(480);
-    expect(heights[128].viewer).toBe(480);
     // The result no longer grows with the number (the 128-digit SVG alone is 7,920 px tall)
+    expect(heights[1].result).toBe(heights[50].result);
     expect(heights[100].result).toBe(heights[50].result);
     expect(heights[128].result).toBe(heights[50].result);
-    expect(heights[128].result).toBeLessThan(800);
+    expect(heights[128].result).toBeLessThan(720);
   });
 
   test('starts at the top and scrolls to the middle and the bottom', async ({ page }) => {
@@ -145,6 +144,39 @@ test.describe('bounded numeral viewport', () => {
     await expect(zoomLevel(page)).toHaveText('150%');
   });
 
+  test('keeps the stage’s structure: the scroller, a padded, clipping stage box, then the slab', async ({ page }) => {
+    // Changed deliberately in UI-13: the stage spans the viewer card's content (card less its
+    // 16 px padding at each side) instead of 384 px, and its height is the screen's
+    for (const [width, height] of [[375, 900], [768, 900], [1280, 900]] as const) {
+      await page.setViewportSize({ width, height });
+      const viewer = await showNumber(page, FIFTY_DIGITS);
+      const card = (await page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').boundingBox())!;
+      const box = (await viewer.boundingBox())!;
+      expect(box.width, `${width}px`).toBe(card.width - 32);
+      expect(box.height, `${width}px`).toBe(width >= 1024 ? 620 : 480);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px`).toBeLessThanOrEqual(width);
+      const structure = await viewer.evaluate((scroller) => {
+        const stage = scroller.firstElementChild as HTMLElement;
+        const style = getComputedStyle(stage);
+        const s = stage.getBoundingClientRect();
+        return {
+          children: scroller.children.length,
+          stage: stage.hasAttribute('data-numeral-stage'),
+          overflow: style.overflow,
+          padding: style.padding,
+          // The stage box spans the whole scrollable area, and at least the scroller
+          covers: s.width === scroller.scrollWidth && s.height === scroller.scrollHeight
+            && s.width >= scroller.clientWidth && s.height >= scroller.clientHeight,
+          wrapper: stage.firstElementChild!.getAttribute('role'),
+          scrollers: [...scroller.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)).length,
+        };
+      });
+      expect(structure, `${width}px`).toEqual({
+        children: 1, stage: true, overflow: 'clip', padding: '16px', covers: true, wrapper: 'img', scrollers: 0,
+      });
+    }
+  });
+
   test('works on a phone-sized screen without widening the page', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     const viewer = await showNumber(page, MAX_DIGITS);
@@ -159,6 +191,414 @@ test.describe('bounded numeral viewport', () => {
     await expect(page.getByRole('img', { name: /^Mayan numerals for day 15, month \d+ and year \d+$/ })).toBeVisible();
     expect((await page.getByRole('group', { name: 'Numeral viewer' }).boundingBox())!.height).toBeLessThanOrEqual(480);
   });
+});
+
+test.describe('numeral scale and position', () => {
+  const LEVELS = ['25%', '50%', '75%', '100%', '150%', '200%', '300%', '400%'];
+
+  /** Steps the zoom with its buttons to the given level, e.g. "50%" */
+  async function zoomTo(page: Page, level: string) {
+    for (;;) {
+      const current = (await zoomLevel(page).textContent())!.split(' ')[0];
+      const steps = LEVELS.indexOf(level) - LEVELS.indexOf(current);
+      if (steps === 0) return;
+      await page.getByRole('button', { name: steps > 0 ? 'Zoom in' : 'Zoom out' }).click();
+      await expect(zoomLevel(page)).not.toHaveText(new RegExp(`^${current}`));
+    }
+  }
+
+  /**
+   * The numeral as laid out in the viewer, measured from the boxes on screen: its SVG's size in CSS
+   * px and logical size in SVG units, its left edge in the scrollable area, the scroll position,
+   * the point at the viewer's centre in SVG units, and any page-level horizontal overflow
+   */
+  const measure = (page: Page) =>
+    page.evaluate(() => {
+      const viewer = document.querySelector<HTMLElement>('[role="group"][aria-label="Numeral viewer"]')!;
+      const svg = viewer.querySelector('svg')!;
+      // The scroller's padding box, inside its border: the scrollable area's origin, at scroll 0
+      const box = viewer.getBoundingClientRect();
+      const v = { left: box.left + viewer.clientLeft, top: box.top + viewer.clientTop };
+      const n = svg.getBoundingClientRect();
+      const units = svg.viewBox.baseVal;
+      const pxPerUnit = n.width / units.width;
+      return {
+        width: n.width,
+        height: n.height,
+        units: { width: units.width, height: units.height },
+        left: n.left - v.left + viewer.scrollLeft,
+        top: n.top - v.top + viewer.scrollTop,
+        scrollLeft: viewer.scrollLeft,
+        scrollTop: viewer.scrollTop,
+        scrollWidth: viewer.scrollWidth,
+        scrollHeight: viewer.scrollHeight,
+        clientWidth: viewer.clientWidth,
+        clientHeight: viewer.clientHeight,
+        sideways: viewer.scrollWidth - viewer.clientWidth,
+        pxPerUnit,
+        centre: {
+          x: (v.left + viewer.clientWidth / 2 - n.left) / pxPerUnit,
+          y: (v.top + viewer.clientHeight / 2 - n.top) / pxPerUnit,
+        },
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+
+  /** Expects a measured centre point to be within `px` CSS pixels of a point, at its zoom level */
+  const expectCentre = (m: Awaited<ReturnType<typeof measure>>, point: { x: number; y: number }, px: number, what: string) => {
+    expect(Math.abs(m.centre.x - point.x) * m.pxPerUnit, `${what}: x`).toBeLessThanOrEqual(px);
+    expect(Math.abs(m.centre.y - point.y) * m.pxPerUnit, `${what}: y`).toBeLessThanOrEqual(px);
+  };
+
+  /** Chooses the 15th of the calendar's month in Date mode and waits for its numeral */
+  async function showDate(page: Page) {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 15/ })).toBeVisible();
+  }
+
+  test('shows the numeral 350 CSS px wide at 100% at every viewport width, in Number and Date modes', async ({ page }) => {
+    for (const width of [320, 375, 768, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const digits of ['7', FIFTY_DIGITS]) {
+        await showNumber(page, digits);
+        const m = await measure(page);
+        expect(m.units.width, `${width}px`).toBe(350);
+        expect(m.width, `${width}px, ${digits.length} digits`).toBe(350);
+        expect(m.height, `${width}px, ${digits.length} digits`).toBe(m.units.height);
+      }
+    }
+    for (const width of [375, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('./');
+      await showDate(page);
+      const m = await measure(page);
+      expect(m.units.width, `date, ${width}px`).toBe(350);
+      expect(m.width, `date, ${width}px`).toBe(350);
+    }
+  });
+
+  test('scales the numeral exactly at every zoom level, without page-level horizontal overflow', async ({ page }) => {
+    for (const width of [320, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await showNumber(page, FIFTY_DIGITS);
+      for (const level of LEVELS) {
+        await zoomTo(page, level);
+        const zoom = parseFloat(level) / 100;
+        const m = await measure(page);
+        expect(m.width, `${width}px at ${level}`).toBe(350 * zoom);
+        expect(m.height, `${width}px at ${level}`).toBe(m.units.height * zoom);
+        expect(m.pageOverflow, `${width}px at ${level}`).toBe(0);
+      }
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+  });
+
+  test('centres a numeral narrower than the viewer, which then has no sideways scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const [digits, level] of [['7', '100%'], [FIFTY_DIGITS, '100%'], [FIFTY_DIGITS, '50%'], [FIFTY_DIGITS, '25%']] as const) {
+      await showNumber(page, digits);
+      await zoomTo(page, level);
+      const m = await measure(page);
+      expect(m.width, `${digits.length} digits at ${level}`).toBeLessThan(m.clientWidth);
+      expect(m.left, `${digits.length} digits at ${level}`).toBeCloseTo((m.clientWidth - m.width) / 2, 3);
+      expect(m.sideways, `${digits.length} digits at ${level}`).toBe(0);
+      expect(m.centre.x, `${digits.length} digits at ${level}`).toBeCloseTo(175, 3);
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+    // Also on a phone, once zoomed out below the viewer's width
+    await page.setViewportSize({ width: 375, height: 667 });
+    await zoomTo(page, '50%');
+    const m = await measure(page);
+    expect(m.left).toBeCloseTo((m.clientWidth - 175) / 2, 3);
+    expect(m.sideways).toBe(0);
+  });
+
+  test('starts a new numeral wider than the viewer at its top, with its horizontal centre in view', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    const viewer = await showNumber(page, FIFTY_DIGITS);
+    const start = await measure(page);
+    expect(start.width).toBeGreaterThan(start.clientWidth);
+    expect(start.scrollTop).toBe(0);
+    // Scroll positions are whole pixels: the centre is within half a pixel
+    expect(Math.abs(start.scrollLeft - start.sideways / 2)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(start.centre.x - 175)).toBeLessThanOrEqual(0.5);
+
+    // A new numeral, from anywhere in the previous one, and at another zoom level
+    for (const [digits, level] of [[MAX_DIGITS, '100%'], [FIFTY_DIGITS, '200%']] as const) {
+      await zoomTo(page, level);
+      await viewer.evaluate((el) => el.scrollTo(0, 1500));
+      await showNumber(page, digits);
+      await expect.poll(() => viewer.evaluate((el) => el.scrollTop), `${digits.length} digits at ${level}`).toBe(0);
+      const m = await measure(page);
+      expect(Math.abs(m.centre.x - 175) * m.pxPerUnit, `${digits.length} digits at ${level}`).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  test('resets to 100% at the top, centred horizontally', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    const viewer = await showNumber(page, FIFTY_DIGITS);
+    // From another zoom level, and from 100%
+    for (const level of ['200%', '100%']) {
+      await zoomTo(page, level);
+      await viewer.evaluate((el) => el.scrollTo(0, 1500));
+      await page.getByRole('button', { name: 'Reset' }).click();
+      await expect(zoomLevel(page)).toHaveText('100%');
+      const m = await measure(page);
+      expect(m.scrollTop, `from ${level}`).toBe(0);
+      expect(Math.abs(m.centre.x - 175), `from ${level}`).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  test('keeps the point at the viewer’s centre in place while zooming a numeral wider than the viewer', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    const viewer = await showNumber(page, FIFTY_DIGITS);
+    await viewer.evaluate((el) => el.scrollTo(10, 900));
+    let previous = await measure(page);
+    for (const level of ['150%', '200%', '300%', '400%', '300%', '200%', '150%', '100%']) {
+      await zoomTo(page, level);
+      const m = await measure(page);
+      expect(m.width, level).toBeGreaterThan(m.clientWidth);
+      // Within the whole-pixel rounding of the scroll position, at the new zoom level
+      expectCentre(m, previous.centre, 1, level);
+      previous = m;
+    }
+  });
+
+  test('keeps the point at the viewer’s centre in place while zooming a numeral narrower than the viewer', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const viewer = await showNumber(page, FIFTY_DIGITS);
+    await zoomTo(page, '50%');
+    await viewer.evaluate((el) => el.scrollTo(0, 500));
+    const start = await measure(page);
+    expect(start.width).toBeLessThan(start.clientWidth);
+    expect(start.centre.x).toBeCloseTo(175, 3);
+    let previous = start;
+    // Narrower, then narrower again, then one step at a time to wider than the viewer and back
+    for (const level of ['25%', '50%', '75%', '100%', '150%', '200%', '150%', '100%', '75%', '50%']) {
+      await zoomTo(page, level);
+      const m = await measure(page);
+      expectCentre(m, previous.centre, 1, level);
+      // Still the numeral's horizontal centre: off by at most the whole-pixel rounding of the
+      // scroll positions on the way (e.g. 86.5 px at 150%), never by a share of the viewer's width
+      expect(Math.abs(m.centre.x - 175), level).toBeLessThanOrEqual(1);
+      previous = m;
+    }
+  });
+
+  /** The approved screen sizes and the stage's expected height at each (UI-13, provisional) */
+  const SCREENS = [
+    { width: 1280, height: 720, stage: 448 }, // the lg minimum, 28rem
+    { width: 1280, height: 800, stage: 520 },
+    { width: 1440, height: 900, stage: 620 },
+    { width: 375, height: 667, stage: 400.2 }, // 60svh
+    { width: 375, height: 812, stage: 480 }, // the maximum below lg, 30rem
+    { width: 320, height: 568, stage: 340.8 },
+  ] as const;
+
+  test('gives the stage the approved height at every approved screen size, the same at every zoom level', async ({ page }) => {
+    // Six screen sizes, three zoom levels each, every zoom step waited for
+    test.slow();
+    const card = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
+    for (const screen of SCREENS) {
+      const what = `${screen.width} × ${screen.height}`;
+      await page.setViewportSize(screen);
+      const viewer = await showNumber(page, FIFTY_DIGITS);
+      for (const level of ['25%', '100%', '400%']) {
+        await zoomTo(page, level);
+        const box = (await viewer.boundingBox())!;
+        expect(box.height, `${what} at ${level}`).toBeCloseTo(screen.stage, 0);
+        expect((await measure(page)).pageOverflow, `${what} at ${level}`).toBe(0);
+      }
+      // The stage spans the card's content; from lg, where the card sits beside the others, it fits the screen
+      const c = (await card.boundingBox())!;
+      expect((await viewer.boundingBox())!.width, what).toBe(c.width - 32);
+      if (screen.width >= 1024) expect(c.y + c.height, what).toBeLessThanOrEqual(screen.height);
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+  });
+
+  test('centres a short numeral both ways in the stage, in Number and Date modes, also while it is wider', async ({ page }) => {
+    /** The slab's margins in the scrollable area, and whether the stage scrolls each way */
+    const margins = async () => {
+      const m = await measure(page);
+      return {
+        ...m,
+        top: m.top, bottom: m.scrollHeight - m.top - m.height,
+        left: m.left, right: m.scrollWidth - m.left - m.width,
+      };
+    };
+    for (const screen of SCREENS) {
+      // A new numeral at each size: a resize alone keeps the scroll position (see the roadmap)
+      await page.setViewportSize(screen);
+      await page.goto('./');
+      await showNumber(page, '7');
+      const m = await margins();
+      const what = `${screen.width} × ${screen.height}`;
+      // Vertically: centred, with no vertical scrolling
+      expect(m.scrollHeight, what).toBe(m.clientHeight);
+      expect(Math.abs(m.top - m.bottom), what).toBeLessThanOrEqual(1);
+      // Horizontally: centred where it fits; on a phone, wider than the stage, it starts at its centre
+      if (m.width + 32 <= m.clientWidth) expect(Math.abs(m.left - m.right), what).toBeLessThanOrEqual(1);
+      else expect(Math.abs(m.centre.x - 175), what).toBeLessThanOrEqual(0.5);
+    }
+
+    // At 400%, 1,400 px wide and 320 px tall: scrolling sideways, still centred vertically
+    for (const screen of [SCREENS[0], SCREENS[4]]) {
+      await page.setViewportSize(screen);
+      await zoomTo(page, '400%');
+      const m = await margins();
+      expect(m.sideways).toBeGreaterThan(0);
+      expect(m.scrollHeight).toBe(m.clientHeight);
+      expect(Math.abs(m.top - m.bottom)).toBeLessThanOrEqual(1);
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+
+    // Date mode's three groups, at most 3 tiers (240 units) tall
+    for (const screen of [SCREENS[1], SCREENS[5]]) {
+      await page.setViewportSize(screen);
+      await page.goto('./');
+      await showDate(page);
+      const m = await margins();
+      expect(m.scrollHeight).toBe(m.clientHeight);
+      expect(Math.abs(m.top - m.bottom)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test('scrolls a long numeral from its top tier to its bottom tier, with nothing clipped', async ({ page }) => {
+    /** Whether the digit stack of an index is drawn whole inside the stage, within its border */
+    const wholeInView = (index: number) =>
+      page.evaluate((i) => {
+        const viewer = document.querySelector<HTMLElement>('[role="group"][aria-label="Numeral viewer"]')!;
+        const v = viewer.getBoundingClientRect();
+        const g = viewer.querySelector(`g[data-digit-index="${i}"]`)!.getBoundingClientRect();
+        return g.height > 0 && g.top >= v.top + viewer.clientTop && g.bottom <= v.top + viewer.clientTop + viewer.clientHeight;
+      }, index);
+    for (const screen of SCREENS) {
+      await page.setViewportSize(screen);
+      const viewer = await showNumber(page, MAX_DIGITS);
+      for (const level of screen.width === 1280 && screen.height === 720 ? ['100%', '400%'] : ['100%']) {
+        await zoomTo(page, level);
+        const what = `${screen.width} × ${screen.height} at ${level}`;
+        await viewer.evaluate((el) => el.scrollTo(el.scrollLeft, 0));
+        const top = await measure(page);
+        // The top tier, the highest place value, after the stage's 16 px padding
+        expect(top.top, what).toBe(16);
+        expect(await wholeInView(0), what).toBe(true);
+        await viewer.evaluate((el) => el.scrollTo(el.scrollLeft, el.scrollHeight));
+        const bottom = await measure(page);
+        // The bottom tier, the units, with the stage's padding below it: the scrollable area is the slab and its padding
+        expect(bottom.scrollHeight - bottom.top - bottom.height, what).toBe(16);
+        expect(bottom.scrollHeight, what).toBe(bottom.height + 32);
+        expect(await wholeInView(98), what).toBe(true);
+      }
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+  });
+
+  test('keeps the anchor in the numeral’s own coordinates with the stage’s padding, where a share of the scrollable area would not', async ({ page }) => {
+    /**
+     * Zooms one step from the start of an axis, where the padding counts the most, and expects
+     * the centre point to stay within 1 px, while the position a share of the scrollable area
+     * (the anchor before UI-13) would give is at least 3 px away, beyond the rounding
+     */
+    async function step(level: string, axis: 'x' | 'y') {
+      await page.getByRole('group', { name: 'Numeral viewer' }).evaluate(
+        (el, a) => (a === 'x' ? el.scrollTo(0, el.scrollTop) : el.scrollTo(el.scrollLeft, 0)), axis);
+      const before = await measure(page);
+      await zoomTo(page, level);
+      const after = await measure(page);
+      expectCentre(after, before.centre, 1, `${axis} at ${level}`);
+      const [offset, client, size, newClient, newSize, actual] = axis === 'x'
+        ? [before.scrollLeft, before.clientWidth, before.scrollWidth, after.clientWidth, after.scrollWidth, after.scrollLeft]
+        : [before.scrollTop, before.clientHeight, before.scrollHeight, after.clientHeight, after.scrollHeight, after.scrollTop];
+      const share = (offset + client / 2) / size;
+      const byShare = Math.min(Math.max(share * newSize - newClient / 2, 0), newSize - newClient);
+      expect(Math.abs(actual - byShare), `${axis} at ${level}: a share would give ${byShare}`).toBeGreaterThanOrEqual(3);
+    }
+
+    // Horizontally: on a narrow phone, where the numeral is wider than the stage
+    await page.setViewportSize({ width: 320, height: 568 });
+    const viewer = await showNumber(page, FIFTY_DIGITS);
+    await zoomTo(page, '200%');
+    await viewer.evaluate((el) => el.scrollTo(0, 600));
+    for (const level of ['300%', '400%']) await step(level, 'x');
+
+    // Vertically: the largest numeral, from 25%, where the padding is largest against its height
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await showNumber(page, MAX_DIGITS);
+    await zoomTo(page, '25%');
+    for (const level of ['50%', '75%', '100%']) await step(level, 'y');
+  });
+
+  test('keeps the zoom controls and stage above the floating Export trigger on phones, and the zoom controls and glyphs clear of it on desktop at 100% and 400%', async ({ page }) => {
+    // Seven screen and mode combinations, two zoom levels each on desktop
+    test.slow();
+    const exportButton = page.getByRole('button', { name: '📦 Export' });
+    const intersects = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+      a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    const zoomButtons = () => Promise.all(['Zoom out', 'Zoom in', 'Reset'].map(async (name) =>
+      (await page.getByRole('button', { name, exact: true }).boundingBox())!));
+
+    // On phones the trigger floats over the page: with the viewer's controls scrolled to the top
+    // of the screen, the controls and the whole stage are above it
+    for (const screen of [SCREENS[3], SCREENS[4], SCREENS[5]]) {
+      await page.setViewportSize(screen);
+      const viewer = await showNumber(page, MAX_DIGITS);
+      await page.getByRole('group', { name: 'Zoom controls' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      const trigger = (await exportButton.boundingBox())!;
+      const stage = (await viewer.boundingBox())!;
+      expect(stage.y + stage.height, `${screen.width} × ${screen.height}`).toBeLessThanOrEqual(trigger.y);
+      for (const button of await zoomButtons()) expect(intersects(button, trigger)).toBe(false);
+    }
+
+    // From lg it covers the stage's bottom-right corner (a known limitation, for UI-11). The
+    // trigger does not overlap the zoom controls or glyphs in the tested desktop configurations
+    // (100% and 400%, scrolled to the bottom-right corner); other zoom levels are not covered
+    for (const screen of [SCREENS[0], SCREENS[1]]) {
+      await page.setViewportSize(screen);
+      for (const mode of ['number', 'date'] as const) {
+        await page.goto('./');
+        const viewer = mode === 'number' ? await showNumber(page, MAX_DIGITS) : (await showDate(page), page.getByRole('group', { name: 'Numeral viewer' }));
+        for (const level of ['100%', '400%']) {
+          await zoomTo(page, level);
+          await viewer.evaluate((el) => el.scrollTo(el.scrollWidth, el.scrollHeight));
+          const trigger = (await exportButton.boundingBox())!;
+          const glyphs = await viewer.locator('g[data-digit-index]').evaluateAll((gs) =>
+            gs.map((g) => g.getBoundingClientRect()).filter((r) => r.height > 0).map(({ x, y, width, height }) => ({ x, y, width, height })));
+          const what = `${screen.width} × ${screen.height}, ${mode} at ${level}`;
+          expect(glyphs.filter((g) => intersects(g, trigger)), what).toEqual([]);
+          for (const button of await zoomButtons()) expect(intersects(button, trigger), what).toBe(false);
+        }
+      }
+    }
+  });
+
+  // Wider than the viewer at 100% to 400% on a phone; through every level for the vertical anchor
+  for (const [width, digits, cycle] of [
+    [375, FIFTY_DIGITS, ['400%', '100%']],
+    [1280, MAX_DIGITS, ['25%', '400%', '100%']],
+  ] as const) {
+    test(`returns to the same position after switching between zoom levels repeatedly, without drift, at ${width}px`, async ({ page }) => {
+      // Five cycles of up to 14 zoom steps each, every step waited for
+      test.slow();
+      await page.setViewportSize({ width, height: 900 });
+      const viewer = await showNumber(page, digits);
+      await page.getByRole('button', { name: 'Reset' }).click();
+      await viewer.evaluate((el) => el.scrollTo(20, 2000));
+      const start = await measure(page);
+      const ends: { scrollLeft: number; scrollTop: number }[] = [];
+      for (let i = 0; i < 5; i++) {
+        for (const level of cycle) await zoomTo(page, level);
+        const m = await measure(page);
+        // Within the rounding of the smallest level visited, never further with each cycle
+        expectCentre(m, start.centre, width === 375 ? 1 : 4, `${width}px, cycle ${i + 1}`);
+        ends.push({ scrollLeft: m.scrollLeft, scrollTop: m.scrollTop });
+      }
+      expect(ends.slice(1), `${width}px`).toEqual(Array(4).fill(ends[0]));
+    });
+  }
 });
 
 test.describe('export with the viewport', () => {
@@ -870,7 +1310,15 @@ test.describe('screen-only tier guides', () => {
       await page.evaluate((theme) => localStorage.setItem('mayastack:theme', theme), theme);
       await page.reload();
       await showNumber(page, FIVE_TIERS);
-      const canvas = await page.locator('.mep-svg-wrapper').evaluate((el) => getComputedStyle(el).backgroundColor);
+      // The backdrop is marked once, on the viewer's scroller, whose colour is the one shown through it
+      const backdrop = page.locator('[data-numeral-backdrop]');
+      await expect(backdrop).toHaveCount(1);
+      expect(await backdrop.evaluate((el) => el.matches('[role="group"][aria-label="Numeral viewer"]'))).toBe(true);
+      const canvas = await backdrop.evaluate((el) => {
+        let bg = 'rgba(0, 0, 0, 0)';
+        for (let e: Element | null = el; e && bg === 'rgba(0, 0, 0, 0)'; e = e.parentElement) bg = getComputedStyle(e).backgroundColor;
+        return bg;
+      });
       const { r, g, b } = BACKDROP[theme];
       expect(canvas, theme).toBe(`rgb(${r}, ${g}, ${b})`);
     }

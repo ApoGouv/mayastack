@@ -180,6 +180,27 @@
   scrollbar-color: var(--color-line-strong) transparent;
 }
 
+/* The numeral viewer's stage height (UI-13, provisional): bounded by the screen's height, the
+   same at every zoom level. svh keeps it steady as mobile browser bars show and hide; vh is the
+   fallback where svh is unsupported, in @supports, since the minifier drops a plain duplicate
+   declaration. From lg, the viewer card sits beside the other cards, so the stage takes the
+   screen's height less what is above and below it (17.5rem). */
+@utility numeral-stage-height {
+  height: clamp(18rem, 60svh, 30rem);
+
+  @media (width >= 64rem) {
+    height: clamp(28rem, calc(100svh - 17.5rem), 45rem);
+  }
+
+  @supports not (height: 1svh) {
+    height: clamp(18rem, 60vh, 30rem);
+
+    @media (width >= 64rem) {
+      height: clamp(28rem, calc(100vh - 17.5rem), 45rem);
+    }
+  }
+}
+
 .mep-svg {
   background: transparent;
   width: 100%;

@@ -161,7 +161,10 @@ describe('HomeView numeral viewport', () => {
     });
     const viewer = screen.getByRole('group', { name: 'Numeral viewer' });
     expect(viewer.contains(image)).toBe(true);
-    expect(viewer.style.maxHeight).toBe('480px');
+    // Changed deliberately in UI-13: bounded by the stage's height for the screen, not 480 px
+    expect(viewer.className.split(' ')).toContain('numeral-stage-height');
+    // The numeral's width, 1 CSS px per SVG unit at 100%
+    expect(image.style.width).toBe('350px');
   });
 
   // Changed deliberately in UI-05 (roadmap G §4.1): the initial 0 is a result, so Export is offered at once
@@ -831,6 +834,27 @@ describe('HomeView tier guides', () => {
 
     fireEvent.click(bandsSwitch());
     expect(cardLayer()).toBeNull();
+  });
+
+  it('gives the place tier guides the viewer, so the hovered card follows its scrolling', () => {
+    const { enter } = renderHomeView();
+    enter('8000'); // 1 × 20³: 4 tiers, 350 × 320 units
+    fireEvent.click(bandsSwitch());
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    // The zoom wrapper sits in the stage box, not directly in the viewer
+    expect(image.parentElement!.hasAttribute('data-numeral-stage')).toBe(true);
+    expect(image.parentElement!.parentElement).toBe(viewer());
+
+    // happy-dom lays nothing out: the wrapper is 350 × 320 px at (0, top)
+    let top = 0;
+    image.getBoundingClientRect = () => ({ left: 0, top, width: 350, height: 320, right: 350, bottom: top + 320, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    const hovered = () => bands().filter((band) => band.dataset.hovered !== undefined).map((band) => band.dataset.exponent);
+    fireEvent.pointerMove(image, { clientX: 175, clientY: 40, pointerType: 'mouse' });
+    expect(hovered()).toEqual(['3']);
+    // The viewer scrolls one tier under the still pointer
+    top = -80;
+    fireEvent.scroll(viewer());
+    expect(hovered()).toEqual(['2']);
   });
 
   it('keeps both guides and the exportable grid independent of one another', () => {
