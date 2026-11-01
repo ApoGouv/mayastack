@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { toBase20 } from '@utils/base20';
 import { validateNumberInput } from '@utils/numberInput';
 import { getNumberExportFilename } from '@utils/exportUtils';
@@ -16,7 +16,7 @@ import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
 import { PlaceTierGuides, TierHairlines } from '@components/TierGuides';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import type { NumeralLayout } from '@utils/tierGuides';
+import { getNumeralSize, type NumeralLayout } from '@utils/tierGuides';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 
 type DigitGroup = { label: string; digits: number[] };
@@ -53,6 +53,8 @@ export default function HomeView() {
   // Whether the analytical breakdown is open: the user's latest choice, kept here so that it
   // survives Clear, invalid input and a switch to Date mode, which remove the breakdown itself
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  // The numeral viewer's scroller, which the place tier guides follow while it scrolls
+  const viewerScrollerRef = useRef<HTMLDivElement>(null);
   const { showPlaceTierGuides, showTierHairlines, backgroundColor, resolvedTheme } = useDisplaySettings();
 
   // Derived values: the exact bigint value, or null while the input is empty or invalid
@@ -105,6 +107,8 @@ export default function HomeView() {
     [backgroundColor, resolvedTheme]
   );
   const digitGroups = useMemo(() => mayanData?.digitGroups.map((g) => g.digits) ?? [], [mayanData]);
+  // The numeral's width in SVG units, shown at 1 CSS px per unit at 100% zoom
+  const numeralWidth = getNumeralSize(digitGroups, numeralLayout).width;
 
   // What the viewer and the base-20 card say while there is no result to show
   const emptyMessages: { viewer: string; base20: string } =
@@ -164,8 +168,10 @@ export default function HomeView() {
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) =>
                 <NumeralViewport
+                  numeralWidth={numeralWidth}
                   label={mayanData.label}
                   resetKey={mayanData.key}
+                  scrollerRef={viewerScrollerRef}
                   underlay={
                     showPlaceTierGuides && (
                       <PlaceTierGuides
@@ -173,6 +179,7 @@ export default function HomeView() {
                         layout={numeralLayout}
                         background={backgroundColor}
                         colors={guideColors}
+                        scrollerRef={viewerScrollerRef}
                       />
                     )
                   }
