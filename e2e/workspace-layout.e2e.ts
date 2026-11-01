@@ -1185,6 +1185,98 @@ test.describe('base-20 expansion: formula, Copy Formula and analytical breakdown
     });
   }
 
+  /** Where the document ends, the screen's height and where the footer ends, in page coordinates */
+  const pageEnd = (page: Page) =>
+    page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+      footerBottom: document.querySelector('footer')!.getBoundingClientRect().bottom + window.scrollY,
+    }));
+
+  /** Expects the page to end at its footer (or at the screen's bottom, if shorter), within 1px */
+  async function expectPageEndsAtFooter(page: Page, what: string) {
+    const end = await pageEnd(page);
+    expect(end.scrollHeight, what).toBeLessThanOrEqual(Math.max(end.footerBottom, end.clientHeight) + 1);
+  }
+
+  /** A scrolling box's visually hidden text, and how much of it has the box as its containing block */
+  const hiddenText = (scroller: Locator) =>
+    scroller.evaluate((el) => {
+      const spans = [...el.querySelectorAll<HTMLElement>('.sr-only')];
+      return { spans: spans.length, contained: spans.filter((span) => span.offsetParent === el).length };
+    });
+
+  /** Expects a scrolling box to hold at least `min` visually hidden spans, all contained by it */
+  async function expectHiddenTextContained(scroller: Locator, min: number) {
+    const { spans, contained } = await hiddenText(scroller);
+    expect(spans).toBeGreaterThanOrEqual(min);
+    expect(contained).toBe(spans);
+  }
+
+  // The visually hidden text in the rows and terms (sr-only, so absolutely positioned) once took a
+  // containing block outside its scrolling box, and with 99 tiers stretched the page about
+  // 3,500–4,900px past the footer, as far as the rows reach unscrolled
+  for (const [width, height] of [[1280, 800], [768, 1024], [375, 667]] as const) {
+    test(`ends the page at the footer with the 99-tier breakdown open, closed and shown again at ${width} × ${height}`, async ({ page }) => {
+      const errors = await showNumber(page, 'light', width, '9'.repeat(128));
+      await page.setViewportSize({ width, height });
+      const input = page.getByLabel('Decimal integer');
+      const region = breakdown(page);
+
+      // Closed: the formula scrolls, and its 99 powers of 20 are spoken from within its box
+      const formula = page.getByRole('region', { name: 'Positional Sum Formula' });
+      await expect(formula).toBeVisible();
+      await expectHiddenTextContained(formula, 99);
+      await expectPageEndsAtFooter(page, 'closed');
+      const closed = (await pageEnd(page)).scrollHeight;
+
+      // Opened by the user, with the fade-in (whose kept transform makes its wrapper a containing block)
+      await toggle(page).click();
+      await expect(region.locator('tbody tr')).toHaveCount(99);
+      await expectPageEndsAtFooter(page, 'opened');
+      await expectHiddenTextContained(region, 99);
+      expect((await pageEnd(page)).scrollHeight).toBeGreaterThan(closed);
+
+      // Scrolled to the very end of the page, the footer is there, in view (but for a fraction of a
+      // pixel at some widths), at the bottom
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect(page.locator('footer')).toBeInViewport({ ratio: 0.99 });
+      const footer = await box(page.locator('footer'));
+      expect(Math.abs(footer.y + footer.height - height)).toBeLessThanOrEqual(1);
+
+      // Closed again: back to the closed height
+      await toggle(page).click();
+      await expect(region).toHaveCount(0);
+      expect(Math.abs((await pageEnd(page)).scrollHeight - closed)).toBeLessThanOrEqual(1);
+
+      // Shown again already open, without the fade-in: left open through invalid input
+      await toggle(page).click();
+      await expect(region).toBeVisible();
+      await input.fill('12.5');
+      await expect(region).toHaveCount(0);
+      await input.fill('9'.repeat(128));
+      await expect(region.locator('tbody tr')).toHaveCount(99);
+      expect(await region.locator('..').getAttribute('class')).toBeNull();
+      await expectHiddenTextContained(region, 99);
+      await expectHiddenTextContained(formula, 99);
+      await expectPageEndsAtFooter(page, 'shown again');
+      expect(await pageOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test('ends the page at the footer with the breakdown open for a small and a 20-digit number', async ({ page }) => {
+    await showNumber(page, 'light', 1280, '7');
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await toggle(page).click();
+    for (const [digits, tiers] of [['7', 1], ['9'.repeat(20), 16]] as const) {
+      await page.getByLabel('Decimal integer').fill(digits);
+      await expect(breakdown(page).locator('tbody tr')).toHaveCount(tiers);
+      await expectHiddenTextContained(breakdown(page), tiers);
+      await expectPageEndsAtFooter(page, `${digits.length} digits`);
+    }
+  });
+
   test('leaves Date mode without the badge, Copy Formula or breakdown', async ({ page }) => {
     await showNumber(page, 'light', 1280, '1202');
     await page.getByRole('radio', { name: 'Date' }).check();
