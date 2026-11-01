@@ -609,3 +609,695 @@ test.describe('export filenames', () => {
     expect((await exportFile(page, 'png')).name).toBe(`mayan-numeral-date-15-${month}-${year}.png`);
   });
 });
+
+test.describe('screen-only tier guides', () => {
+  // 19 × 20⁴ + 0 × 20³ + 19 × 20² + 1 × 20 + 0: 5 tiers, with the tallest digit (19) and the shell (0)
+  const FIVE_TIERS = '3047620';
+
+  const settingsPanel = (page: Page) => page.getByRole('group', { name: 'Stela Material & Glyph Settings' });
+  const bandsSwitch = (page: Page) => page.getByRole('switch', { name: 'Show Place Tier Guides:' });
+  const hairlinesSwitch = (page: Page) => page.getByRole('switch', { name: 'Show Dividing Hairlines:' });
+  const viewerGroup = (page: Page) => page.getByRole('group', { name: 'Numeral viewer' });
+  const hairlines = (page: Page) => viewerGroup(page).locator('[data-tier-hairline]');
+  const bands = (page: Page) => viewerGroup(page).locator('[data-place-tier-band]');
+
+  /** Opens the app with saved settings, as a returning visitor would */
+  async function openWith(page: Page, saved: Record<string, string>) {
+    await page.addInitScript((saved) => {
+      for (const [key, value] of Object.entries(saved)) localStorage.setItem(key, value);
+    }, saved);
+    await page.reload();
+  }
+  const BOTH_ON = { 'mayastack:showPlaceTierGuides': 'true', 'mayastack:showTierHairlines': 'true' };
+
+  /**
+   * Checks every hairline in view against the rendered numeral: its centre is where its boundary
+   * falls in the SVG, between the stacks above and below it, and it spans exactly its group.
+   * `stacksPerGroup` is each group's number of digit stacks, in their order in the SVG.
+   * Returns how many hairlines were checked, and what was wrong.
+   */
+  const checkHairlines = (page: Page, stacksPerGroup: number[]) =>
+    page.evaluate((stacksPerGroup) => {
+      const TOLERANCE = 1; // px: HTML and SVG positions may round differently
+      const viewer = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
+      const view = viewer.getBoundingClientRect();
+      const svg = viewer.querySelector('svg.mep-svg')!.getBoundingClientRect();
+      const stacks = [...viewer.querySelectorAll('g[data-digit-index]')].map((g) => g.getBoundingClientRect());
+      const maxTiers = Math.max(...stacksPerGroup);
+      // px per SVG unit: groups 100 units wide, 25 apart (Number mode has one group, 350 wide)
+      const groupWidth = stacksPerGroup.length === 1 ? 350 : 100;
+      const unit = svg.width / (stacksPerGroup.length * groupWidth + (stacksPerGroup.length - 1) * 25);
+      const problems: string[] = [];
+      let checked = 0;
+
+      for (const guide of viewer.querySelectorAll<HTMLElement>('[data-tier-hairline]')) {
+        const box = guide.getBoundingClientRect();
+        const y = box.top + box.height / 2;
+        if (y < view.top || y > view.bottom) continue; // scrolled out of view
+        checked++;
+        const group = Number(guide.dataset.groupIndex);
+        const k = Number(guide.dataset.boundary);
+        const first = stacksPerGroup.slice(0, group).reduce((sum, n) => sum + n, 0);
+        const above = stacks[first + stacksPerGroup[group] - 1 - k];
+        const below = stacks[first + stacksPerGroup[group] - k];
+        const expectedY = svg.top + ((maxTiers - k) / maxTiers) * svg.height;
+        // 3% of the group's width in from each side, as the cards
+        const expectedLeft = svg.left + (group * (groupWidth + 25) + 0.03 * groupWidth) * unit;
+        const expectedWidth = 0.94 * groupWidth * unit;
+
+        const name = `group ${group}, boundary ${k}`;
+        if (Math.abs(y - expectedY) > TOLERANCE) problems.push(`${name}: y ${y}, expected ${expectedY}`);
+        if (y < above.bottom - TOLERANCE) problems.push(`${name}: over the stack above (bottom ${above.bottom}, y ${y})`);
+        if (y > below.top + TOLERANCE) problems.push(`${name}: over the stack below (top ${below.top}, y ${y})`);
+        if (Math.abs(box.left - expectedLeft) > TOLERANCE) problems.push(`${name}: left ${box.left}, expected ${expectedLeft}`);
+        if (Math.abs(box.width - expectedWidth) > TOLERANCE) problems.push(`${name}: width ${box.width}, expected ${expectedWidth}`);
+        for (const stack of [above, below]) {
+          if (stack.left < box.left - TOLERANCE || stack.right > box.right + TOLERANCE) problems.push(`${name}: narrower than its stacks`);
+        }
+        if (box.height > 1.01) problems.push(`${name}: ${box.height} px thick`);
+      }
+      return { checked, problems };
+    }, stacksPerGroup);
+
+  /**
+   * Checks every band in view against the rendered numeral: it covers its tier's 80-unit cell,
+   * less 2 units at its top and bottom, spans exactly its group, and contains its tier's digit
+   * stack. Each group has exactly one band per tier of its own, and none above them.
+   * Returns how many bands were checked, and what was wrong.
+   */
+  const checkBands = (page: Page, stacksPerGroup: number[]) =>
+    page.evaluate((stacksPerGroup) => {
+      const TOLERANCE = 1; // px
+      const viewer = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
+      const view = viewer.getBoundingClientRect();
+      const svg = viewer.querySelector('svg.mep-svg')!.getBoundingClientRect();
+      const stacks = [...viewer.querySelectorAll('g[data-digit-index]')].map((g) => g.getBoundingClientRect());
+      const maxTiers = Math.max(...stacksPerGroup);
+      const groupWidth = stacksPerGroup.length === 1 ? 350 : 100;
+      const unit = svg.width / (stacksPerGroup.length * groupWidth + (stacksPerGroup.length - 1) * 25);
+      const problems: string[] = [];
+      let checked = 0;
+
+      const all = [...viewer.querySelectorAll<HTMLElement>('[data-place-tier-band]')];
+      stacksPerGroup.forEach((tiers, group) => {
+        const exponents = all.filter((b) => Number(b.dataset.groupIndex) === group).map((b) => Number(b.dataset.exponent));
+        if (exponents.join() !== [...Array(tiers).keys()].join()) problems.push(`group ${group}: bands ${exponents}, expected ${tiers}`);
+      });
+
+      for (const band of all) {
+        const box = band.getBoundingClientRect();
+        if (box.bottom < view.top || box.top > view.bottom) continue; // scrolled out of view
+        checked++;
+        const group = Number(band.dataset.groupIndex);
+        const e = Number(band.dataset.exponent);
+        const first = stacksPerGroup.slice(0, group).reduce((sum, n) => sum + n, 0);
+        const stack = stacks[first + stacksPerGroup[group] - 1 - e];
+        const cellTop = svg.top + ((maxTiers - 1 - e) / maxTiers) * svg.height;
+        // 3% of the group's width in from each side, as the hairlines
+        const expectedLeft = svg.left + (group * (groupWidth + 25) + 0.03 * groupWidth) * unit;
+        const expectedWidth = 0.94 * groupWidth * unit;
+
+        const name = `group ${group}, exponent ${e}`;
+        if (Math.abs(box.top - (cellTop + 2 * unit)) > TOLERANCE) problems.push(`${name}: top ${box.top}, expected ${cellTop + 2 * unit}`);
+        if (Math.abs(box.height - 76 * unit) > TOLERANCE) problems.push(`${name}: height ${box.height}, expected ${76 * unit}`);
+        if (Math.abs(box.left - expectedLeft) > TOLERANCE) problems.push(`${name}: left ${box.left}, expected ${expectedLeft}`);
+        if (Math.abs(box.width - expectedWidth) > TOLERANCE) problems.push(`${name}: width ${box.width}, expected ${expectedWidth}`);
+        if (stack.top < box.top - TOLERANCE || stack.bottom > box.bottom + TOLERANCE
+          || stack.left < box.left - TOLERANCE || stack.right > box.right + TOLERANCE) {
+          problems.push(`${name}: does not contain its stack`);
+        }
+      }
+      return { checked, problems };
+    }, stacksPerGroup);
+
+  const enterDate25th = async (page: Page) => {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 25th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 25, month \d+ and year \d+$/ })).toBeVisible();
+  };
+
+  test('are off by default, in the settings panel, and each stays on after a reload on its own', async ({ page }) => {
+    await showNumber(page, FIVE_TIERS);
+    const guidesGroup = settingsPanel(page).getByRole('group', { name: 'Viewer guides' });
+    await expect(guidesGroup.getByRole('switch')).toHaveCount(2);
+    await expect(guidesGroup.getByText('Shown on screen only, not included in exports.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').getByRole('switch')).toHaveCount(0);
+    await expect(bandsSwitch(page)).toHaveAttribute('aria-checked', 'false');
+    await expect(hairlinesSwitch(page)).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('[data-place-tier-guides], [data-tier-hairlines]')).toHaveCount(0);
+
+    await bandsSwitch(page).click();
+    await expect(bands(page)).toHaveCount(5);
+    await expect(hairlines(page)).toHaveCount(0);
+    const saved = () => page.evaluate(() => [localStorage.getItem('mayastack:showPlaceTierGuides'), localStorage.getItem('mayastack:showTierHairlines')]);
+    expect(await saved()).toEqual(['true', null]);
+    // Not the exportable grid, which stays off
+    await expect(page.getByRole('switch', { name: 'Show Grid:' })).toHaveAttribute('aria-checked', 'false');
+
+    await page.reload();
+    await showNumber(page, FIVE_TIERS);
+    await expect(bandsSwitch(page)).toHaveAttribute('aria-checked', 'true');
+    await expect(hairlinesSwitch(page)).toHaveAttribute('aria-checked', 'false');
+    await expect(bands(page)).toHaveCount(5);
+
+    await hairlinesSwitch(page).click();
+    await bandsSwitch(page).click();
+    expect(await saved()).toEqual(['false', 'true']);
+    await page.reload();
+    await showNumber(page, FIVE_TIERS);
+    await expect(bandsSwitch(page)).toHaveAttribute('aria-checked', 'false');
+    await expect(hairlinesSwitch(page)).toHaveAttribute('aria-checked', 'true');
+    await expect(hairlines(page)).toHaveCount(4);
+    await expect(bands(page)).toHaveCount(0);
+  });
+
+  test('stay aligned with the tiers at 25%, 100% and 400% zoom', async ({ page }) => {
+    await openWith(page, BOTH_ON);
+    await showNumber(page, FIVE_TIERS);
+    const zoomOut = page.getByRole('button', { name: 'Zoom out' });
+    const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+
+    for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['400%', zoomIn, 7]] as const) {
+      for (let i = 0; i < presses; i++) await button.click();
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+      const lines = await checkHairlines(page, [5]);
+      const shaded = await checkBands(page, [5]);
+      // At 400% the numeral is taller than the viewer, which shows only some of the guides
+      if (level === '400%') {
+        expect(lines.checked, level).toBeGreaterThan(0);
+        expect(shaded.checked, level).toBeGreaterThan(0);
+      } else {
+        expect(lines.checked, level).toBe(4);
+        expect(shaded.checked, level).toBe(5);
+      }
+      expect(lines.problems, level).toEqual([]);
+      expect(shaded.problems, level).toEqual([]);
+    }
+  });
+
+  test('stay aligned while a large numeral is scrolled', async ({ page }) => {
+    await openWith(page, BOTH_ON);
+    const viewer = await showNumber(page, MAX_DIGITS);
+    await expect(hairlines(page)).toHaveCount(98);
+    await expect(bands(page)).toHaveCount(99);
+    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^400%/);
+
+    for (const fraction of [0, 0.37, 0.5, 1]) {
+      await viewer.evaluate((el, f) => el.scrollTo((el.scrollWidth - el.clientWidth) * f, (el.scrollHeight - el.clientHeight) * f), fraction);
+      for (const result of [await checkHairlines(page, [99]), await checkBands(page, [99])]) {
+        expect(result.checked, `scrolled to ${fraction}`).toBeGreaterThan(0);
+        expect(result.problems, `scrolled to ${fraction}`).toEqual([]);
+      }
+    }
+  });
+
+  test('follow each Date-mode group, whose tier counts differ, and shade nothing above a shorter one', async ({ page }) => {
+    await openWith(page, BOTH_ON);
+    await enterDate25th(page);
+
+    // Day 25: 2 tiers, one hairline; any month: 1 tier, none; a year from 400 to 7,999: 3 tiers, two
+    const groupsOf = (locator: ReturnType<typeof bands>) =>
+      locator.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.groupIndex));
+    expect(await groupsOf(hairlines(page))).toEqual(['0', '2', '2']);
+    expect(await groupsOf(bands(page))).toEqual(['0', '0', '1', '2', '2', '2']);
+    for (const [level, presses] of [['100%', 0], ['25%', 3], ['400%', 7]] as const) {
+      const button = page.getByRole('button', { name: level === '400%' ? 'Zoom in' : 'Zoom out' });
+      for (let i = 0; i < presses; i++) await button.click();
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+      const lines = await checkHairlines(page, [2, 1, 3]);
+      const shaded = await checkBands(page, [2, 1, 3]);
+      // At 400% the numeral is taller than the viewer, which shows only some of the guides
+      if (level === '400%') {
+        expect(lines.checked, level).toBeGreaterThan(0);
+        expect(shaded.checked, level).toBeGreaterThan(0);
+      } else {
+        expect(lines.checked, level).toBe(3);
+        expect(shaded.checked, level).toBe(6);
+      }
+      expect(lines.problems, level).toEqual([]);
+      expect(shaded.problems, level).toEqual([]);
+    }
+  });
+
+  /** A computed CSS colour, `rgb(…)` or `rgba(…)`, as channels and alpha */
+  const parseColour = (css: string) => {
+    const [r, g, b, a = 1] = css.match(/[\d.]+/g)!.map(Number);
+    return { r, g, b, a };
+  };
+  type Rgb = { r: number; g: number; b: number };
+  const over = (top: Rgb & { a: number }, under: Rgb): Rgb => ({
+    r: top.r * top.a + under.r * (1 - top.a),
+    g: top.g * top.a + under.g * (1 - top.a),
+    b: top.b * top.a + under.b * (1 - top.a),
+  });
+  /** WCAG 2.x contrast ratio of two opaque colours */
+  const contrast = (x: Rgb, y: Rgb) => {
+    const lum = ({ r, g, b }: Rgb) =>
+      [r, g, b]
+        .map((v) => v / 255)
+        .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+    const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  // The viewer's canvas behind a translucent numeral background (VIEWER_BACKDROP in src/utils/guideColors.ts)
+  const BACKDROP = { light: { r: 246, g: 241, b: 231 }, dark: { r: 16, g: 19, b: 25 } };
+
+  test('match the viewer backdrop the guide colours assume, in both themes', async ({ page }) => {
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((theme) => localStorage.setItem('mayastack:theme', theme), theme);
+      await page.reload();
+      await showNumber(page, FIVE_TIERS);
+      const canvas = await page.locator('.mep-svg-wrapper').evaluate((el) => getComputedStyle(el).backgroundColor);
+      const { r, g, b } = BACKDROP[theme];
+      expect(canvas, theme).toBe(`rgb(${r}, ${g}, ${b})`);
+    }
+  });
+
+  for (const [name, background, theme] of [
+    ['white', { r: 255, g: 255, b: 255, a: 1 }, 'light'],
+    ['the default background in the dark theme', { r: 255, g: 255, b: 255, a: 1 }, 'dark'],
+    ['mid grey', { r: 119, g: 119, b: 119, a: 1 }, 'light'],
+    ['navy', { r: 20, g: 40, b: 90, a: 1 }, 'light'],
+    ['black', { r: 0, g: 0, b: 0, a: 1 }, 'dark'],
+    ['transparent, over the light canvas', { r: 0, g: 0, b: 0, a: 0 }, 'light'],
+    ['transparent, over the dark canvas', { r: 0, g: 0, b: 0, a: 0 }, 'dark'],
+  ] as const) {
+    test(`adapt their colours to a ${name} background: hairlines at 3:1, subtle cards`, async ({ page }) => {
+      await openWith(page, {
+        ...BOTH_ON,
+        'mayastack:theme': theme,
+        'mayastack:backgroundColor': JSON.stringify(background),
+        'mayastack:glyphColor': '{"r":212,"g":175,"b":55,"a":0.8}',
+      });
+      await showNumber(page, FIVE_TIERS);
+      const colours = (locator: ReturnType<typeof bands>) =>
+        locator.evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+      const lineColours = await colours(hairlines(page));
+      const cardColours = await colours(bands(page));
+      expect(new Set(lineColours).size).toBe(1);
+      expect(new Set(cardColours).size).toBe(1);
+
+      // The background as the viewer shows it, then each guide composited over it
+      const shown = over(background, BACKDROP[theme]);
+      const card = over(parseColour(cardColours[0]), shown);
+      const line = over(parseColour(lineColours[0]), shown);
+      expect(contrast(line, shown)).toBeGreaterThanOrEqual(3);
+      expect(contrast(line, card)).toBeGreaterThanOrEqual(3);
+      expect(contrast(card, shown)).toBeGreaterThanOrEqual(1.24);
+      expect(contrast(card, shown)).toBeLessThan(1.27);
+
+      // The glyph colour plays no part
+      await page.evaluate(() => localStorage.setItem('mayastack:glyphColor', '{"r":0,"g":0,"b":0,"a":1}'));
+      await page.reload();
+      await showNumber(page, FIVE_TIERS);
+      expect(await colours(hairlines(page))).toEqual(lineColours);
+      expect(await colours(bands(page))).toEqual(cardColours);
+    });
+  }
+
+  test('draw the cards behind the SVG and the hairlines over it', async ({ page }) => {
+    await openWith(page, BOTH_ON);
+    await showNumber(page, FIVE_TIERS);
+    const layers = await page.getByRole('img', { name: /^Mayan numeral for 3047620/ }).evaluate((wrapper) =>
+      [...wrapper.children].map((el) =>
+        el.hasAttribute('data-place-tier-guides') ? 'cards' : el.hasAttribute('data-tier-hairlines') ? 'hairlines' : el.tagName.toLowerCase()
+      )
+    );
+    expect(layers).toEqual(['cards', 'svg', 'hairlines']);
+    // On screen only, the SVG's own background is transparent over the cards' layer, which paints it
+    const styles = await viewerGroup(page).evaluate((viewer) => {
+      const svg = viewer.querySelector('svg.mep-svg')!;
+      return {
+        svgPosition: getComputedStyle(svg).position,
+        rectFill: getComputedStyle(svg.querySelector('rect')!).fill,
+        rectAttribute: svg.querySelector('rect')!.getAttribute('fill'),
+        layer: getComputedStyle(viewer.querySelector('[data-place-tier-guides]')!).backgroundColor,
+      };
+    });
+    expect(styles).toEqual({
+      svgPosition: 'relative',
+      rectFill: 'rgba(0, 0, 0, 0)',
+      rectAttribute: 'rgba(255, 255, 255, 1)',
+      layer: 'rgb(255, 255, 255)',
+    });
+
+    // Without the cards, the SVG is as before
+    await bandsSwitch(page).click();
+    const plain = await viewerGroup(page).evaluate((viewer) => {
+      const svg = viewer.querySelector('svg.mep-svg')!;
+      return [getComputedStyle(svg).position, getComputedStyle(svg.querySelector('rect')!).fill];
+    });
+    expect(plain).toEqual(['static', 'rgb(255, 255, 255)']);
+  });
+
+  // The screen-only rule keys on the SVG's first child: with the grid on, that must still be the
+  // background, made transparent, while the grid's rectangle is painted over the cards
+  test('keep the exportable grid painted over the cards, with only the background transparent', async ({ page }) => {
+    const background = { r: 60, g: 60, b: 70 }; // dark, so the grid's light #ddd lines stand out
+    await openWith(page, {
+      ...BOTH_ON,
+      'mayastack:showGrid': 'true',
+      'mayastack:backgroundColor': JSON.stringify({ ...background, a: 1 }),
+    });
+    const viewer = await showNumber(page, FIVE_TIERS);
+    await page.mouse.move(0, 0); // no card hovered
+    await expect(bands(page)).toHaveCount(5);
+    await expect(hairlines(page)).toHaveCount(4);
+
+    const rects = () =>
+      viewerGroup(page).evaluate((viewer) => {
+        const svg = viewer.querySelector('svg.mep-svg')!;
+        const first = svg.firstElementChild!;
+        const grid = svg.querySelector(':scope > rect[fill="url(#grid)"]')!;
+        return {
+          svgPosition: getComputedStyle(svg).position,
+          first: first.localName,
+          firstAttribute: first.getAttribute('fill'),
+          firstFill: getComputedStyle(first).fill,
+          gridIsFirst: grid === first,
+          gridFill: getComputedStyle(grid).fill,
+        };
+      });
+    expect(await rects()).toEqual({
+      svgPosition: 'relative',
+      first: 'rect',
+      firstAttribute: 'rgba(60, 60, 70, 1)',
+      firstFill: 'rgba(0, 0, 0, 0)',
+      gridIsFirst: false,
+      gridFill: expect.stringMatching(/^url\(.*#grid"?\)$/),
+    });
+
+    /**
+     * The colours along a row of the top tier, from a screenshot: 30 units down, between the
+     * grid's horizontal lines (every 20 units) and clear of the glyphs (from about 41 units), and
+     * from 15 to 335 units across, within the card (10.5 to 339.5), crossing its vertical lines
+     */
+    const row = async () => {
+      await viewer.scrollIntoViewIfNeeded();
+      const svg = (await viewer.locator('svg.mep-svg').boundingBox())!;
+      const unit = svg.width / 350;
+      const y = Math.round(svg.y + 30 * unit);
+      const [from, to] = [Math.ceil(svg.x + 15 * unit), Math.floor(svg.x + 335 * unit)];
+      const png = await page.screenshot({ clip: { x: from, y, width: to - from, height: 1 } });
+      return page.evaluate(async (data) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        [canvas.width, canvas.height] = [image.width, image.height];
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, image.width, 1).data;
+        return Array.from({ length: image.width }, (_, x) => ({ r: pixels[4 * x], g: pixels[4 * x + 1], b: pixels[4 * x + 2] }));
+      }, png.toString('base64'));
+    };
+    // The grid's vertical lines crossing the row: runs of pixels lighter than the card or
+    // background around them. At about 1 px per unit, a line is antialiased over one or two
+    // pixels, at about half strength, so each run must add up to a clear lift (at least 40)
+    const lighterBy = (pixel: Rgb, base: Rgb) => Math.min(...(['r', 'g', 'b'] as const).map((c) => pixel[c] - base[c]));
+    const gridLines = (pixels: Rgb[], base: Rgb) => {
+      const runs: number[] = [];
+      let run = 0;
+      for (const lift of [...pixels.map((p) => lighterBy(p, base)), 0]) {
+        if (lift >= 8) run += lift;
+        else if (run > 0) {
+          runs.push(run);
+          run = 0;
+        }
+      }
+      return { lines: runs.filter((sum) => sum >= 40).length, runs: runs.length };
+    };
+    const nearly = (pixels: Rgb[], base: Rgb) =>
+      pixels.filter((p) => (['r', 'g', 'b'] as const).every((c) => Math.abs(p[c] - base[c]) <= 2)).length;
+
+    const carded = over(parseColour(await bands(page).first().evaluate((el) => getComputedStyle(el).backgroundColor)), background);
+    expect(Math.max(...(['r', 'g', 'b'] as const).map((c) => Math.abs(carded[c] - background[c])))).toBeGreaterThanOrEqual(5);
+
+    // The grid's vertical lines (16 cross the row) show over the card, which shows between them
+    const withGrid = await row();
+    expect(gridLines(withGrid, carded)).toEqual({ lines: 16, runs: 16 });
+    expect(nearly(withGrid, carded)).toBeGreaterThan(withGrid.length / 2);
+
+    // Those light pixels are the grid's: without it, the row is the card alone
+    await page.getByRole('switch', { name: 'Show Grid:' }).click();
+    await page.mouse.move(0, 0);
+    const cardOnly = await row();
+    expect(gridLines(cardOnly, carded)).toEqual({ lines: 0, runs: 0 });
+    expect(nearly(cardOnly, carded)).toBe(cardOnly.length);
+
+    // Without the guides, the SVG paints its own background again, under the same grid
+    await page.getByRole('switch', { name: 'Show Grid:' }).click();
+    await bandsSwitch(page).click();
+    await hairlinesSwitch(page).click();
+    await expect(bands(page)).toHaveCount(0);
+    await expect(hairlines(page)).toHaveCount(0);
+    const plain = await rects();
+    expect(plain).toMatchObject({ svgPosition: 'static', first: 'rect', firstFill: 'rgb(60, 60, 70)', gridIsFirst: false });
+    const withoutGuides = await row();
+    expect(gridLines(withoutGuides, background)).toEqual({ lines: 16, runs: 16 });
+    expect(nearly(withoutGuides, background)).toBeGreaterThan(withoutGuides.length / 2);
+  });
+
+  test('never change the exported SVG or PNG', async ({ page }) => {
+    await showNumber(page, FIVE_TIERS);
+    const svgOff = await exportFile(page, 'svg');
+    const pngOff = await exportFile(page, 'png');
+    await page.getByRole('button', { name: '📦 Export' }).click(); // close the menu
+
+    await bandsSwitch(page).click();
+    await hairlinesSwitch(page).click();
+    await expect(bands(page)).toHaveCount(5);
+    await expect(hairlines(page)).toHaveCount(4);
+    // With a card hovered too
+    const viewer = viewerGroup(page);
+    await viewer.scrollIntoViewIfNeeded();
+    const card = (await bands(page).last().boundingBox())!;
+    await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2);
+    await expect(bands(page).last()).toHaveAttribute('data-hovered', 'true');
+    const svgOn = await exportFile(page, 'svg');
+    const pngOn = await exportFile(page, 'png');
+
+    expect(svgOn.data.equals(svgOff.data)).toBe(true);
+    expect(pngOn.data.equals(pngOff.data)).toBe(true);
+    expect(svgOn.data.toString('utf-8')).not.toMatch(/tier-(guide|band|hairline)|underlay/);
+    // 5 tiers × 80 units tall, 350 wide: the numeral alone
+    expect(pngSize(pngOn.data)).toEqual({ width: 350, height: 400 });
+    await expect(viewerGroup(page).locator('svg')).toHaveCount(1);
+  });
+
+  // The cards are behind the SVG, so the glyphs are drawn over them exactly as over the
+  // background: an opaque glyph keeps its colour, and a translucent one shows the card through it
+  for (const alpha of [1, 0.5]) {
+    test(`leave glyphs with an alpha of ${alpha} drawn over the cards, unchanged`, async ({ page }) => {
+      const glyph = { r: 180, g: 40, b: 20 };
+      const background = { r: 240, g: 230, b: 200 };
+      await openWith(page, {
+        'mayastack:glyphColor': JSON.stringify({ ...glyph, a: alpha }),
+        'mayastack:backgroundColor': JSON.stringify({ ...background, a: 1 }),
+      });
+      const viewer = await showNumber(page, FIVE_TIERS);
+      await page.mouse.move(0, 0); // no card hovered
+
+      /** The colour of each point, from a screenshot of the numeral, measured where it is now */
+      const sample = async () => {
+        await viewer.scrollIntoViewIfNeeded();
+        // The middle of the top tier's lowest bar (19: three bars), a point of its card clear of
+        // any glyph, and a point in the card's side inset
+        const bar = (await viewer.locator('g[data-digit-index="0"] path').first().boundingBox())!;
+        const svg = (await viewer.locator('svg.mep-svg').boundingBox())!;
+        const unit = svg.width / 350;
+        const points = {
+          glyph: { x: Math.round(bar.x + bar.width / 2), y: Math.round(bar.y + bar.height / 2) },
+          card: { x: Math.round(svg.x + 30 * unit), y: Math.round(svg.y + 40 * unit) },
+          inset: { x: Math.round(svg.x + 4 * unit), y: Math.round(svg.y + 40 * unit) },
+        };
+        const clip = { x: Math.floor(svg.x), y: Math.floor(svg.y), width: Math.ceil(svg.width), height: Math.ceil(Math.min(svg.height, 200)) };
+        const png = await page.screenshot({ clip });
+        return page.evaluate(async ({ data, points, clip }) => {
+          const image = new Image();
+          image.src = `data:image/png;base64,${data}`;
+          await image.decode();
+          const canvas = document.createElement('canvas');
+          [canvas.width, canvas.height] = [image.width, image.height];
+          const context = canvas.getContext('2d')!;
+          context.drawImage(image, 0, 0);
+          return Object.fromEntries(Object.entries(points).map(([name, { x, y }]) => {
+            const [r, g, b] = context.getImageData(x - clip.x, y - clip.y, 1, 1).data;
+            return [name, { r, g, b }];
+          }));
+        }, { data: png.toString('base64'), points, clip });
+      };
+
+      const off = await sample();
+      await bandsSwitch(page).click();
+      await expect(bands(page)).toHaveCount(5);
+      await page.mouse.move(0, 0);
+      const on = await sample();
+      const cardColour = parseColour(await bands(page).last().evaluate((el) => getComputedStyle(el).backgroundColor));
+
+      // Compositing in the browser rounds to whole channel values
+      const close = (actual: Rgb, expected: Rgb) =>
+        (['r', 'g', 'b'] as const).forEach((c) =>
+          expect(Math.abs(actual[c] - expected[c]), `${JSON.stringify(actual)} vs ${JSON.stringify(expected)}`).toBeLessThanOrEqual(2)
+        );
+
+      // Without cards: the glyph over the background
+      close(off.glyph, over({ ...glyph, a: alpha }, background));
+      close(off.card, background);
+      // With them: the card is visible, the side inset is not, and the glyph is drawn over the card
+      const carded = over(cardColour, background);
+      close(on.card, carded);
+      close(on.inset, background);
+      close(on.glyph, over({ ...glyph, a: alpha }, carded));
+      expect(Math.max(...(['r', 'g', 'b'] as const).map((c) => Math.abs(on.card[c] - off.card[c])))).toBeGreaterThanOrEqual(5);
+      // An opaque glyph keeps its exact colour
+      if (alpha === 1) expect(on.glyph).toEqual(off.glyph);
+    });
+  }
+
+  test('strengthen the card under the mouse, with a shadow, without taking the pointer', async ({ page }) => {
+    await openWith(page, { 'mayastack:showPlaceTierGuides': 'true' });
+    const viewer = await showNumber(page, FIVE_TIERS);
+    await viewer.scrollIntoViewIfNeeded();
+    const hovered = () =>
+      bands(page).evaluateAll((els) => els.filter((el) => el.hasAttribute('data-hovered')).map((el) => (el as HTMLElement).dataset.exponent));
+    const top = bands(page).last(); // exponent 4, at the top
+    const resting = await top.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await hovered()).toEqual([]);
+
+    const box = (await top.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect.poll(hovered).toEqual(['4']);
+    const style = await top.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { bg: s.backgroundColor, shadow: s.boxShadow, duration: s.transitionDuration };
+    });
+    expect(parseColour(style.bg).a).toBeGreaterThan(parseColour(resting).a);
+    expect(style.shadow).not.toBe('none');
+    expect(style.duration).toBe('0.15s');
+
+    // Under the pointer is the SVG, never the cards' layer
+    const hit = await page.evaluate(([x, y]) => {
+      const el = document.elementFromPoint(x, y)!;
+      return { inCards: !!el.closest('[data-place-tier-guides]'), inViewer: !!el.closest('[aria-label="Numeral viewer"]') };
+    }, [box.x + box.width / 2, box.y + box.height / 2]);
+    expect(hit).toEqual({ inCards: false, inViewer: true });
+
+    // Between two cards, none is hovered; leaving the numeral clears it too
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height + 2);
+    await expect.poll(hovered).toEqual([]);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect.poll(hovered).toEqual(['4']);
+    await page.mouse.move(0, 0);
+    await expect.poll(hovered).toEqual([]);
+
+    // The viewer still scrolls under the pointer, and the hover follows the card now under it
+    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^400%/);
+    await viewer.evaluate((el) => el.scrollTo(0, 0)); // zooming kept the middle in view
+    await viewer.scrollIntoViewIfNeeded();
+    const view = (await viewer.boundingBox())!;
+    await page.mouse.move(view.x + view.width / 2, view.y + 40);
+    await expect.poll(hovered).toEqual(['4']);
+    await page.mouse.wheel(0, 700);
+    await expect.poll(() => viewer.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(async () => (await hovered())[0] ?? 'gap').not.toBe('4');
+    expect((await hovered()).length).toBeLessThanOrEqual(1);
+  });
+
+  test('change the hovered card without a transition when reduced motion is preferred', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openWith(page, { 'mayastack:showPlaceTierGuides': 'true' });
+    await showNumber(page, FIVE_TIERS);
+    // The app's reduced-motion rule leaves 0.01 ms (src/index.css), and the cards add no transition of their own
+    const duration = await bands(page).first().evaluate((el) => getComputedStyle(el).transitionDuration);
+    expect(parseFloat(duration)).toBeLessThanOrEqual(0.00001);
+  });
+
+  test('let the pointer through to the viewer, which still scrolls under them', async ({ page }) => {
+    await openWith(page, BOTH_ON);
+    const viewer = await showNumber(page, MAX_DIGITS);
+    await viewer.scrollIntoViewIfNeeded();
+    // The topmost hairline and band, in view while the viewer is at its top (the first are at the bottom)
+    for (const guide of [hairlines(page).last(), bands(page).last()]) {
+      const box = (await guide.boundingBox())!;
+      const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+      const hit = await page.evaluate(([x, y]) => {
+        const el = document.elementFromPoint(x, y)!;
+        return { inOverlay: !!el.closest('[data-place-tier-guides], [data-tier-hairlines]'), inViewer: !!el.closest('[aria-label="Numeral viewer"]') };
+      }, [x, y]);
+      expect(hit).toEqual({ inOverlay: false, inViewer: true });
+    }
+
+    const box = (await bands(page).last().boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 300);
+    await expect.poll(() => viewer.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  });
+
+  test('switch with the keyboard after Show Grid, and leave the viewer’s controls as they were', async ({ page }) => {
+    const viewer = await showNumber(page, FIVE_TIERS);
+    // The viewer follows Reset directly again
+    await page.getByRole('button', { name: 'Reset' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(viewer).toBeFocused();
+
+    await page.getByRole('switch', { name: 'Show Grid:' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(bandsSwitch(page)).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(bandsSwitch(page)).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Tab');
+    await expect(hairlinesSwitch(page)).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(hairlinesSwitch(page)).toHaveAttribute('aria-checked', 'true');
+    await expect(bands(page)).toHaveCount(5);
+    await expect(hairlines(page)).toHaveCount(4);
+    await expect(page.getByRole('switch', { name: 'Show Grid:' })).toHaveAttribute('aria-checked', 'false');
+
+    await viewer.focus();
+    await page.keyboard.press('+');
+    await expect(zoomLevel(page)).toHaveText('150%');
+    await page.keyboard.press('0');
+    await expect(zoomLevel(page)).toHaveText('100%');
+    // The numeral is still one labelled image, the guides hidden from assistive technology
+    await expect(page.getByRole('img', { name: /^Mayan numeral for 3047620: 5 stacked/ })).toBeVisible();
+    await expect(page.locator('[data-place-tier-guides]')).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('[data-tier-hairlines]')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  for (const width of [375, 768, 1280]) {
+    test(`keep the guide switches in the settings card at ${width}px, without widening the page`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await showNumber(page, FIVE_TIERS);
+      await bandsSwitch(page).click();
+      await hairlinesSwitch(page).click();
+      for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+      await expect(zoomLevel(page)).toHaveText(/^400%/);
+
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      const panel = (await settingsPanel(page).boundingBox())!;
+      for (const label of ['Show Place Tier Guides:', 'Show Dividing Hairlines:', 'Shown on screen only, not included in exports.']) {
+        await expect(page.getByText(label, { exact: true })).toBeVisible();
+      }
+      // Each switch and its label inside the panel, side by side, without overlapping
+      for (const toggle of [bandsSwitch(page), hairlinesSwitch(page)]) {
+        await expect(toggle).toBeVisible();
+        const box = (await toggle.boundingBox())!;
+        const name = (await toggle.getAttribute('id'))!;
+        const label = (await page.locator(`label[for="${name}"]`).boundingBox())!;
+        for (const b of [box, label]) {
+          expect(b.x).toBeGreaterThanOrEqual(panel.x - 1);
+          expect(b.x + b.width).toBeLessThanOrEqual(panel.x + panel.width + 1);
+        }
+        expect(label.x + label.width).toBeLessThanOrEqual(box.x + 1);
+      }
+      // The second switch is below the first
+      const [first, second] = [(await bandsSwitch(page).boundingBox())!, (await hairlinesSwitch(page).boundingBox())!];
+      expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
+    });
+  }
+});

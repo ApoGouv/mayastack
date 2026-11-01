@@ -19,7 +19,7 @@ function cards(page: Page) {
     input: page.locator('section').filter({ has: page.getByLabel('Decimal integer') }),
     base20: page.getByRole('heading', { name: 'Base-20 Representation', exact: true }).locator('..'),
     viewer: page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..'),
-    settings: page.getByRole('group', { name: 'SVG Display Settings' }).locator('..'),
+    settings: page.getByRole('group', { name: 'Stela Material & Glyph Settings' }).locator('..'),
   };
 }
 

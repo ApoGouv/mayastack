@@ -141,6 +141,43 @@ describe('NumeralViewport', () => {
     expect(zoomText()).toBe('100%');
   });
 
+  it('places an overlay after the numeral, in the zoom wrapper, which is its positioning context', () => {
+    render(
+      <NumeralViewport label={LABEL} overlay={<div data-testid="overlay" />}>
+        <svg data-testid="numeral" />
+      </NumeralViewport>
+    );
+    const image = screen.getByRole('img', { name: LABEL });
+    expect([...image.children]).toEqual([screen.getByTestId('numeral'), screen.getByTestId('overlay')]);
+    expect(image.className).toContain('relative');
+
+    // It zooms with the numeral
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(image.style.width).toBe('150%');
+    expect(image.contains(screen.getByTestId('overlay'))).toBe(true);
+  });
+
+  it('places an underlay before the numeral, in the zoom wrapper, which zooms it with the numeral', () => {
+    render(
+      <NumeralViewport label={LABEL} underlay={<div data-testid="underlay" />} overlay={<div data-testid="overlay" />}>
+        <svg data-testid="numeral" />
+      </NumeralViewport>
+    );
+    const image = screen.getByRole('img', { name: LABEL });
+    expect([...image.children]).toEqual([
+      screen.getByTestId('underlay'),
+      screen.getByTestId('numeral'),
+      screen.getByTestId('overlay'),
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(image.style.width).toBe('150%');
+  });
+
+  it('has no underlay or overlay unless given', () => {
+    const { image } = renderViewport();
+    expect(image.children).toHaveLength(1);
+  });
+
   it('returns to the top for a new numeral', () => {
     const { viewer, rerender } = renderViewport({ resetKey: 'a' });
 

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DisplaySettingsProvider } from '@/context/DisplaySettingsContext';
 import { MAX_DIGITS_IN_FILENAME, prepareSvgCloneForExport } from '@utils/exportUtils';
 import { toBase20, toBase20Formula } from '@utils/base20';
+import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
+import { rgbaToCss } from '@utils/colors';
 import { spokenText, visibleText } from '@/test/text';
 import HomeView from './HomeView';
 
@@ -187,7 +189,7 @@ describe('HomeView numeral viewport', () => {
     const expectNoResult = (viewer: string, base20: string) => {
       expect(cardText('Mayan Numeral')).toBe(`Mayan Numeral${viewer}`);
       expect(cardText('Base-20 Representation')).toBe(`Base-20 Representation${base20}`);
-      expect(screen.getByRole('group', { name: 'SVG Display Settings' })).not.toBeNull();
+      expect(screen.getByRole('group', { name: 'Stela Material & Glyph Settings' })).not.toBeNull();
       expect(renderedPlaceValues()).toEqual([]);
     };
 
@@ -737,5 +739,263 @@ describe('HomeView quick steps and Random', () => {
       if (generated.length <= MAX_DIGITS_IN_FILENAME) expect(name).toBe(`mayan-numeral-number-${generated}.svg`);
       else expect(name).toBe(`mayan-numeral-number-${generated.slice(0, 10)}...${generated.slice(-10)}-${generated.length}-digits.svg`);
     }
+  });
+});
+
+describe('HomeView tier guides', () => {
+  // Switching a setting saves it, and later tests start from the defaults
+  afterEach(() => localStorage.clear());
+
+  const bandsSwitch = () => screen.getByRole('switch', { name: 'Show Place Tier Guides:' });
+  const hairlinesSwitch = () => screen.getByRole('switch', { name: 'Show Dividing Hairlines:' });
+  const gridSwitch = () => screen.getByRole('switch', { name: 'Show Grid:' });
+  const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+  const cardLayer = () => viewer().querySelector<HTMLElement>('[data-place-tier-guides]');
+  const lineLayer = () => viewer().querySelector<HTMLElement>('[data-tier-hairlines]');
+  const hairlines = () => [...viewer().querySelectorAll<HTMLElement>('[data-tier-hairline]')];
+  const bands = () => [...viewer().querySelectorAll<HTMLElement>('[data-place-tier-band]')];
+
+  it('offers both guides in the settings panel, under Viewer guides, off by default, with no guides shown', () => {
+    renderHomeView();
+    const panel = screen.getByRole('group', { name: 'Stela Material & Glyph Settings' });
+    const exported = within(panel).getByRole('group', { name: 'Exported appearance' });
+    const guides = within(panel).getByRole('group', { name: 'Viewer guides' });
+    expect(panel.tagName).toBe('FIELDSET');
+    expect(screen.queryByRole('group', { name: 'SVG Display Settings' })).toBeNull();
+
+    // The exported appearance keeps its controls; the guides are a group of their own
+    expect(exported.contains(gridSwitch())).toBe(true);
+    expect(exported.contains(screen.getByText('Background color:'))).toBe(true);
+    expect(exported.contains(screen.getByText('Glyph color:'))).toBe(true);
+    expect(within(exported).getAllByRole('switch')).toEqual([gridSwitch()]);
+    expect(within(guides).getAllByRole('switch')).toEqual([bandsSwitch(), hairlinesSwitch()]);
+
+    // The hint says they are not exported, and describes the group
+    const hint = within(guides).getByText('Shown on screen only, not included in exports.');
+    expect(guides.getAttribute('aria-describedby')).toBe(hint.id);
+
+    // Off by default, and no longer in the viewer
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(card('Mayan Numeral').querySelectorAll('[role="switch"]')).toHaveLength(0);
+    expect(screen.queryByRole('switch', { name: /^Show Tier Guides/ })).toBeNull();
+    expect(cardLayer()).toBeNull();
+    expect(lineLayer()).toBeNull();
+  });
+
+  it('follows the grid in the panel’s focus order: grid, place tier guides, then hairlines', () => {
+    renderHomeView();
+    const order = [gridSwitch(), bandsSwitch(), hairlinesSwitch()];
+    const inDocument = [...document.querySelectorAll<HTMLElement>('[role="switch"]')].filter((el) => order.includes(el));
+    expect(inDocument).toEqual(order);
+    order.forEach((toggle) => expect(toggle.tagName).toBe('BUTTON'));
+  });
+
+  it('shows the hairlines at once when switched on, over the SVG but never inside it', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000'); // 1 × 20³: 4 tiers
+    fireEvent.click(hairlinesSwitch());
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(localStorage.getItem('mayastack:showTierHairlines')).toBe('true');
+    expect(localStorage.getItem('mayastack:showPlaceTierGuides')).toBeNull();
+
+    expect(hairlines()).toHaveLength(3);
+    expect(bands()).toHaveLength(0);
+    expect(cardLayer()).toBeNull();
+    expect(lineLayer()!.previousElementSibling).toBe(numeralSvg());
+    expect(numeralSvg().contains(lineLayer())).toBe(false);
+    expect(viewer().querySelectorAll('svg')).toHaveLength(1);
+
+    fireEvent.click(hairlinesSwitch());
+    expect(lineLayer()).toBeNull();
+  });
+
+  it('shows the place tier guides at once when switched on, over the SVG but never inside it', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000');
+    fireEvent.click(bandsSwitch());
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(localStorage.getItem('mayastack:showPlaceTierGuides')).toBe('true');
+    expect(localStorage.getItem('mayastack:showTierHairlines')).toBeNull();
+
+    expect(bands()).toHaveLength(4);
+    expect(hairlines()).toHaveLength(0);
+    expect(lineLayer()).toBeNull();
+    // Behind the SVG, painting its background, which the SVG itself still has for export
+    expect(cardLayer()!.nextElementSibling).toBe(numeralSvg());
+    expect(cardLayer()!.hasAttribute('data-numeral-underlay')).toBe(true);
+    expect(cardLayer()!.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+    expect(numeralSvg().querySelector('rect')!.getAttribute('fill')).toBe('rgba(255, 255, 255, 1)');
+    expect(numeralSvg().contains(cardLayer())).toBe(false);
+    expect(viewer().querySelectorAll('svg')).toHaveLength(1);
+
+    fireEvent.click(bandsSwitch());
+    expect(cardLayer()).toBeNull();
+  });
+
+  it('keeps both guides and the exportable grid independent of one another', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000');
+    const gridPattern = () => numeralSvg().querySelector('pattern');
+    const state = () => [bandsSwitch(), hairlinesSwitch(), gridSwitch()].map((t) => t.getAttribute('aria-checked'));
+
+    fireEvent.click(bandsSwitch());
+    expect(state()).toEqual(['true', 'false', 'false']);
+    expect([bands().length, hairlines().length, gridPattern()]).toEqual([4, 0, null]);
+
+    fireEvent.click(hairlinesSwitch());
+    expect(state()).toEqual(['true', 'true', 'false']);
+    expect([bands().length, hairlines().length, gridPattern()]).toEqual([4, 3, null]);
+
+    fireEvent.click(gridSwitch());
+    expect(state()).toEqual(['true', 'true', 'true']);
+    expect(gridPattern()).not.toBeNull();
+    // With the grid on too, the background stays the SVG's first child, as the screen-only rule
+    // in src/index.css requires, and the grid's rectangle follows it, filled with its pattern
+    const svgRects = () =>
+      [...numeralSvg().children].filter((el) => el.localName === 'rect').map((rect) => rect.getAttribute('fill'));
+    expect(numeralSvg().firstElementChild!.localName).toBe('rect');
+    expect(svgRects()).toEqual(['rgba(255, 255, 255, 1)', 'url(#grid)']);
+
+    fireEvent.click(bandsSwitch());
+    expect(state()).toEqual(['false', 'true', 'true']);
+    expect([bands().length, hairlines().length]).toEqual([0, 3]);
+    expect(gridPattern()).not.toBeNull();
+
+    expect(localStorage.getItem('mayastack:showGrid')).toBe('true');
+    expect(localStorage.getItem('mayastack:showPlaceTierGuides')).toBe('false');
+    expect(localStorage.getItem('mayastack:showTierHairlines')).toBe('true');
+  });
+
+  it('starts from saved preferences, shown on the initial numeral', () => {
+    localStorage.setItem('mayastack:showPlaceTierGuides', 'true');
+    localStorage.setItem('mayastack:showTierHairlines', 'true');
+    const { enter } = renderHomeView();
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('true');
+    // 0 has a single tier: one band, no hairline
+    expect([bands().length, hairlines().length]).toEqual([1, 0]);
+    enter('400');
+    expect([bands().length, hairlines().length]).toEqual([3, 2]);
+  });
+
+  // The largest number renders 99 stacks, 99 cards and 98 hairlines: about 1.5 s alone, and up
+  // to several times that while the whole suite runs in parallel
+  it('exports the same SVG with both guides on or off', { timeout: 15_000 }, () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('9'.repeat(128));
+    const off = exportedMarkup(numeralSvg());
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect([bands().length, hairlines().length]).toEqual([99, 98]);
+    expect(exportedMarkup(numeralSvg())).toBe(off);
+    expect(off).not.toMatch(/tier-(guide|band|hairline)|underlay/);
+  });
+
+  it('colours both guides from the viewer background, never from the glyph colour', () => {
+    localStorage.setItem('mayastack:showPlaceTierGuides', 'true');
+    localStorage.setItem('mayastack:showTierHairlines', 'true');
+    const background = { r: 20, g: 40, b: 90, a: 1 };
+    const expected = getGuideColors(background, VIEWER_BACKDROP.light);
+    const colours = () => ({
+      line: hairlines()[0].style.backgroundColor,
+      card: bands()[0].style.backgroundColor,
+    });
+
+    for (const glyph of ['{"r":0,"g":0,"b":0,"a":1}', '{"r":230,"g":180,"b":40,"a":0.4}']) {
+      localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+      localStorage.setItem('mayastack:glyphColor', glyph);
+      const { enter } = renderHomeView();
+      enter('400');
+      expect(colours()).toEqual({ line: rgbaToCss(expected.hairline), card: rgbaToCss(expected.card) });
+      expect(cardLayer()!.style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+      cleanup();
+    }
+
+    // A light background: dark inks
+    localStorage.setItem('mayastack:backgroundColor', '{"r":255,"g":255,"b":255,"a":1}');
+    const { enter } = renderHomeView();
+    enter('400');
+    const light = getGuideColors({ r: 255, g: 255, b: 255, a: 1 }, VIEWER_BACKDROP.light);
+    expect(colours()).toEqual({ line: rgbaToCss(light.hairline), card: rgbaToCss(light.card) });
+  });
+
+  it('places both guides on the tiers of the rendered SVG, in either mode', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+
+    /** The SVG's logical size, from its own viewBox, which equals its width and height */
+    const svgSize = () => {
+      const [, , width, height] = numeralSvg().getAttribute('viewBox')!.split(' ').map(Number);
+      expect([width, height]).toEqual([Number(numeralSvg().getAttribute('width')), Number(numeralSvg().getAttribute('height'))]);
+      return { width, height };
+    };
+    const round = (value: number) => Math.round(value * 1e6) / 1e6;
+    /** A start and a length in percent, as a range in SVG units */
+    const range = (start: string, length: string, size: number) => [
+      round((parseFloat(start) / 100) * size),
+      round(((parseFloat(start) + parseFloat(length)) / 100) * size),
+    ];
+
+    /** Each hairline in SVG units */
+    const hairlinesInSvgUnits = () => {
+      const { width, height } = svgSize();
+      return hairlines().map((line) => ({
+        group: Number(line.dataset.groupIndex),
+        y: round((parseFloat(line.style.top) / 100) * height),
+        x: range(line.style.left, line.style.width, width),
+      }));
+    };
+    /** Each band in SVG units */
+    const bandsInSvgUnits = () => {
+      const { width, height } = svgSize();
+      return bands().map((band) => ({
+        group: Number(band.dataset.groupIndex),
+        exponent: Number(band.dataset.exponent),
+        y: range(band.style.top, band.style.height, height),
+        x: range(band.style.left, band.style.width, width),
+      }));
+    };
+    /** The exponents the SVG renders: one per digit stack */
+    const renderedExponents = () =>
+      [...numeralSvg().querySelectorAll('g[data-digit-exponent]')].map((g) => Number(g.getAttribute('data-digit-exponent'))).sort();
+
+    // Number mode, 3 tiers in 240 units: boundaries 80 and 160 units down, across all 350 units
+    enter('800'); // 2 × 20² + 0 × 20 + 0
+    // Both 3% of the group's width in from each side: 10.5 of 350 units
+    expect(hairlinesInSvgUnits()).toEqual([
+      { group: 0, y: 160, x: [10.5, 339.5] },
+      { group: 0, y: 80, x: [10.5, 339.5] },
+    ]);
+    // One band per rendered tier, each its 80-unit cell less 2 units at each end
+    expect(bandsInSvgUnits()).toEqual([
+      { group: 0, exponent: 0, y: [162, 238], x: [10.5, 339.5] },
+      { group: 0, exponent: 1, y: [82, 158], x: [10.5, 339.5] },
+      { group: 0, exponent: 2, y: [2, 78], x: [10.5, 339.5] },
+    ]);
+    expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
+
+    // Date mode, 25th: day 25 (2 tiers), month (1 tier), year (3 tiers: 400 to 7,999)
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 25th, \d{4}$/ })[0]);
+    expect(numeralSvg().getAttribute('viewBox')).toBe('0 0 350 240');
+    // 3 of each group's 100 units in from each side
+    expect(hairlinesInSvgUnits()).toEqual([
+      { group: 0, y: 160, x: [3, 97] },
+      { group: 2, y: 160, x: [253, 347] },
+      { group: 2, y: 80, x: [253, 347] },
+    ]);
+    // Bands for each group's own tiers only: nothing above the day's 2 tiers or the month's 1
+    expect(bandsInSvgUnits()).toEqual([
+      { group: 0, exponent: 0, y: [162, 238], x: [3, 97] },
+      { group: 0, exponent: 1, y: [82, 158], x: [3, 97] },
+      { group: 1, exponent: 0, y: [162, 238], x: [128, 222] },
+      { group: 2, exponent: 0, y: [162, 238], x: [253, 347] },
+      { group: 2, exponent: 1, y: [82, 158], x: [253, 347] },
+      { group: 2, exponent: 2, y: [2, 78], x: [253, 347] },
+    ]);
+    expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
   });
 });

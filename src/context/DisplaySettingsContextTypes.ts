@@ -21,7 +21,10 @@ export interface DisplaySettingsContextType {
   showGrid: boolean;
   setShowGrid: (show: boolean) => void;
 
-  // Screen-only tier guide visibility setting (off by default)
-  showTierGuides: boolean;
-  setShowTierGuides: (show: boolean) => void;
+  // Screen-only tier guide visibility settings, each independent and off by default:
+  // shaded bands, one per tier (Place Tier Guides), and lines between tiers (Dividing Hairlines)
+  showPlaceTierGuides: boolean;
+  setShowPlaceTierGuides: (show: boolean) => void;
+  showTierHairlines: boolean;
+  setShowTierHairlines: (show: boolean) => void;
 }

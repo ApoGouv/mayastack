@@ -188,4 +188,15 @@
   color: #000000;
 }
 
+/* Screen-only Place Tier Guides (UI-09): while their layer precedes the numeral's SVG in the
+   viewer, the layer paints the background and the cards, and the SVG is drawn over it with its
+   own background rectangle (always its first child) transparent. Page styles never reach an
+   export, which serializes the SVG's markup, so the exported artwork is unchanged. */
+[data-numeral-underlay] ~ svg.mep-svg {
+  position: relative;
+}
+[data-numeral-underlay] ~ svg.mep-svg > rect:first-child {
+  fill: transparent;
+}
+
 

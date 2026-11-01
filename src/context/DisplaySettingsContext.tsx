@@ -13,7 +13,8 @@ const THEME_KEY = 'mayastack:theme';
 const SHOW_GRID_KEY = 'mayastack:showGrid';
 const BACKGROUND_COLOR_KEY = 'mayastack:backgroundColor';
 const GLYPH_COLOR_KEY = 'mayastack:glyphColor';
-const SHOW_TIER_GUIDES_KEY = 'mayastack:showTierGuides';
+const SHOW_PLACE_TIER_GUIDES_KEY = 'mayastack:showPlaceTierGuides';
+const SHOW_TIER_HAIRLINES_KEY = 'mayastack:showTierHairlines';
 
 // Colours change continuously while a picker is dragged, so a colour is saved only once it
 // has stayed the same this long (ms)
@@ -61,7 +62,8 @@ const readSavedColor = (key: string, fallback: RgbaColor): RgbaColor =>
 // The system theme is the default, so it is saved by removing any saved theme
 const saveTheme = (theme: ColorTheme) => writeStored(THEME_KEY, theme !== 'system' ? theme : null);
 const saveShowGrid = (show: boolean) => writeStored(SHOW_GRID_KEY, String(show));
-const saveShowTierGuides = (show: boolean) => writeStored(SHOW_TIER_GUIDES_KEY, String(show));
+const saveShowPlaceTierGuides = (show: boolean) => writeStored(SHOW_PLACE_TIER_GUIDES_KEY, String(show));
+const saveShowTierHairlines = (show: boolean) => writeStored(SHOW_TIER_HAIRLINES_KEY, String(show));
 
 // Saves a setting each time it changes, but not on first render: a setting is saved when it
 // is changed, not just because the app was opened. The ref holds the value last started from
@@ -88,7 +90,8 @@ const getSystemPrefersDark = () => window.matchMedia(DARK_QUERY).matches;
 const defaultBackgroundColor: RgbaColor = { r: 255, g: 255, b: 255, a: 1 }; // white
 const defaultGlyphColor: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }; // black
 const defaultShowGrid = false; // Hide grid by default
-const defaultShowTierGuides = false; // Hide tier guides by default
+const defaultShowPlaceTierGuides = false; // Hide the place tier guides by default
+const defaultShowTierHairlines = false; // Hide the dividing hairlines by default
 
 /**
  * Provides shared display settings state to the application via React Context.
@@ -114,8 +117,11 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
   const [showGrid, setShowGrid] = useState<boolean>(() =>
     readSavedBoolean(SHOW_GRID_KEY, defaultShowGrid)
   );
-  const [showTierGuides, setShowTierGuides] = useState<boolean>(() =>
-    readSavedBoolean(SHOW_TIER_GUIDES_KEY, defaultShowTierGuides)
+  const [showPlaceTierGuides, setShowPlaceTierGuides] = useState<boolean>(() =>
+    readSavedBoolean(SHOW_PLACE_TIER_GUIDES_KEY, defaultShowPlaceTierGuides)
+  );
+  const [showTierHairlines, setShowTierHairlines] = useState<boolean>(() =>
+    readSavedBoolean(SHOW_TIER_HAIRLINES_KEY, defaultShowTierHairlines)
   );
 
   // Colours waiting to be saved, by key (the latest value of each), and the timer that saves them
@@ -198,7 +204,8 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
   // is the one chosen, so an OS colour-scheme change under the system theme saves nothing.
   useSaveOnChange(theme, saveTheme);
   useSaveOnChange(showGrid, saveShowGrid);
-  useSaveOnChange(showTierGuides, saveShowTierGuides);
+  useSaveOnChange(showPlaceTierGuides, saveShowPlaceTierGuides);
+  useSaveOnChange(showTierHairlines, saveShowTierHairlines);
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -221,8 +228,10 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         setTheme,
         showGrid,
         setShowGrid,
-        showTierGuides,
-        setShowTierGuides
+        showPlaceTierGuides,
+        setShowPlaceTierGuides,
+        showTierHairlines,
+        setShowTierHairlines
       }}
     >
       {children}

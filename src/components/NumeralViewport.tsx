@@ -14,6 +14,16 @@ interface NumeralViewportProps {
   maxHeight?: number;
   /** Changing this value (e.g. for a new number) scrolls back to the top */
   resetKey?: string;
+  /**
+   * Screen-only content behind the numeral, e.g. place tier guides: placed before it in the
+   * zoom wrapper, which is its positioning context, so it zooms and scrolls with the numeral
+   */
+  underlay?: React.ReactNode;
+  /**
+   * Screen-only content over the numeral, e.g. tier hairlines: placed after it in the zoom
+   * wrapper, which is its positioning context, so it zooms and scrolls with the numeral
+   */
+  overlay?: React.ReactNode;
 }
 
 /**
@@ -28,6 +38,8 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   label,
   maxHeight = 480,
   resetKey,
+  underlay,
+  overlay,
 }) => {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
@@ -144,8 +156,10 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
         style={{ maxHeight }}
       >
         {/* One image for assistive technology instead of thousands of glyph shapes */}
-        <div role="img" aria-label={label} style={{ width: `${zoom * 100}%` }}>
+        <div role="img" aria-label={label} className="relative" style={{ width: `${zoom * 100}%` }}>
+          {underlay}
           {children}
+          {overlay}
         </div>
       </div>
     </div>
