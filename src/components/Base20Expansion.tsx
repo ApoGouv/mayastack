@@ -78,8 +78,10 @@ const AnalyticalBreakdown: React.FC<AnalyticalBreakdownProps> = ({ id, labelledB
         // In the tab order only while there is something to scroll
         tabIndex={scrollable ? 0 : undefined}
         // A value focused while tabbing backwards is scrolled to the top of the box: the padding
-        // keeps it, with its focus ring, below the sticky header (about 45px tall)
-        className="max-h-75 overflow-y-auto scroll-pt-14 rounded-md border border-line-strong scrollbar-themed focus-ring"
+        // keeps it, with its focus ring, below the sticky header (about 45px tall). Positioned, so that
+        // it contains the rows' visually hidden text (absolutely positioned): otherwise that text
+        // stretches the page below the footer, as far as the rows reach unscrolled
+        className="relative max-h-75 overflow-y-auto scroll-pt-14 rounded-md border border-line-strong scrollbar-themed focus-ring"
       >
         <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm tabular-nums">
           <caption className="sr-only">Place-value contribution of each base-20 tier</caption>
@@ -270,7 +272,8 @@ const Base20Expansion: React.FC<Base20ExpansionProps> = ({ digits, breakdownOpen
 
   // The formula has one term per tier, so for large numbers it is capped in height and
   // scrolls. Only then does it become a focusable, labelled region, so keyboard users can
-  // scroll it; short formulas stay plain text with their natural height
+  // scroll it; short formulas stay plain text with their natural height. Positioned, like the
+  // breakdown, so that it contains its terms' visually hidden text
   const formulaRef = useRef<HTMLDivElement>(null);
   const formulaScrollable = useOverflowing(formulaRef, placeValues);
 
@@ -306,7 +309,7 @@ const Base20Expansion: React.FC<Base20ExpansionProps> = ({ digits, breakdownOpen
 
         <div
           ref={formulaRef}
-          className="mt-2 max-h-64 overflow-y-auto scrollbar-themed font-mono text-sm leading-relaxed text-fg-muted focus-ring"
+          className="relative mt-2 max-h-64 overflow-y-auto scrollbar-themed font-mono text-sm leading-relaxed text-fg-muted focus-ring"
           tabIndex={formulaScrollable ? 0 : undefined}
           role={formulaScrollable ? 'region' : undefined}
           aria-labelledby={formulaScrollable ? formulaLabelId : undefined}
