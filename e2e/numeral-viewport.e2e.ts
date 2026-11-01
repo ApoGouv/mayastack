@@ -599,6 +599,113 @@ test.describe('numeral scale and position', () => {
       expect(ends.slice(1), `${width}px`).toEqual(Array(4).fill(ends[0]));
     });
   }
+
+  test.describe('resizing the screen (UI-13 slice 4.1)', () => {
+    /** Waits two frames: for scroll events and resize reports from what happened before */
+    const settle = (page: Page) =>
+      page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+
+    /** Resizes the screen and waits until the viewer shows a point at its centre again */
+    async function resizeTo(page: Page, size: { width: number; height: number }, point: { x: number; y: number }, what: string) {
+      await page.setViewportSize(size);
+      await expect.poll(async () => {
+        const m = await measure(page);
+        return Math.max(Math.abs(m.centre.x - point.x), Math.abs(m.centre.y - point.y)) * m.pxPerUnit;
+      }, what).toBeLessThanOrEqual(1);
+    }
+
+    test('keeps the point at the viewer’s centre, both ways, through resizes', async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const viewer = await showNumber(page, MAX_DIGITS);
+      await zoomTo(page, '400%');
+      await viewer.evaluate((el) => el.scrollTo(300, 5000));
+      await settle(page);
+      const start = await measure(page);
+      expect(start.width).toBeGreaterThan(start.clientWidth);
+
+      // Slice 4 measured a shift of 188 CSS px from 1280 to 375 px at 400%, before this slice
+      for (const size of [{ width: 375, height: 667 }, { width: 320, height: 568 }, { width: 1440, height: 900 }, { width: 1280, height: 800 }]) {
+        await resizeTo(page, size, start.centre, `${size.width} × ${size.height}`);
+        const m = await measure(page);
+        expect(m.pageOverflow, `${size.width} × ${size.height}`).toBe(0);
+      }
+    });
+
+    test('keeps a new numeral’s start, and the start after Reset, through resizes', async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      const viewer = await showNumber(page, MAX_DIGITS);
+      for (const size of [{ width: 1280, height: 720 }, { width: 320, height: 568 }]) {
+        await page.setViewportSize(size);
+        await settle(page);
+        const m = await measure(page);
+        expect(m.scrollTop, `${size.width}px`).toBe(0);
+        expect(Math.abs(m.centre.x - 175) * m.pxPerUnit, `${size.width}px`).toBeLessThanOrEqual(1);
+      }
+
+      await zoomTo(page, '200%');
+      await viewer.evaluate((el) => el.scrollTo(100, 3000));
+      await settle(page);
+      await page.getByRole('button', { name: 'Reset' }).click();
+      await expect(zoomLevel(page)).toHaveText('100%');
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await settle(page);
+      const m = await measure(page);
+      expect(m.scrollTop).toBe(0);
+      expect(Math.abs(m.centre.x - 175) * m.pxPerUnit).toBeLessThanOrEqual(1);
+    });
+
+    test('keeps a point scrolled to after a resize correction, then returns to a point a wider viewer clamped', async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      const viewer = await showNumber(page, MAX_DIGITS);
+      await zoomTo(page, '400%');
+      await viewer.evaluate((el) => el.scrollTo(200, 4000));
+      await settle(page);
+      const first = (await measure(page)).centre;
+      await resizeTo(page, { width: 1280, height: 800 }, first, 'first point at 1280px');
+
+      // Scrolled after the correction: the new point is kept
+      await viewer.evaluate((el) => el.scrollTo(el.scrollWidth, 9000));
+      await settle(page);
+      const second = await measure(page);
+      expect(second.scrollLeft).toBe(second.sideways); // at the right edge
+      await resizeTo(page, { width: 375, height: 667 }, second.centre, 'second point at 375px');
+
+      // At the right edge of the narrow viewer: wider, it can only come part of the way...
+      await viewer.evaluate((el) => el.scrollTo(el.scrollWidth, 9000));
+      await settle(page);
+      const edge = await measure(page);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await settle(page);
+      const clamped = await measure(page);
+      expect(clamped.scrollLeft).toBe(clamped.sideways);
+      expect(Math.abs(clamped.centre.x - edge.centre.x) * clamped.pxPerUnit).toBeGreaterThan(50);
+      // ...and narrow again, it returns to the point it was showing
+      await resizeTo(page, { width: 375, height: 667 }, edge.centre, 'back at 375px');
+    });
+
+    // Headless Chromium still reports whole-pixel scroll positions at this scale; fractional
+    // positions are covered by NumeralViewport.test.tsx
+    test.describe('at 150% display scaling', () => {
+      test.use({ deviceScaleFactor: 1.5 });
+
+      test('keeps the point through repeated resizes, without drift', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 800 });
+        const viewer = await showNumber(page, MAX_DIGITS);
+        await zoomTo(page, '300%');
+        await viewer.evaluate((el) => el.scrollTo(250.4, 4321.7));
+        await settle(page);
+        const start = await measure(page);
+        const ends: number[][] = [];
+        for (let i = 0; i < 4; i++) {
+          await resizeTo(page, { width: 375, height: 667 }, start.centre, `cycle ${i + 1} at 375px`);
+          await resizeTo(page, { width: 1280, height: 800 }, start.centre, `cycle ${i + 1} at 1280px`);
+          const m = await measure(page);
+          ends.push([m.scrollLeft, m.scrollTop]);
+        }
+        expect(ends.slice(1)).toEqual(Array(3).fill(ends[0]));
+      });
+    });
+  });
 });
 
 test.describe('export with the viewport', () => {
