@@ -6,8 +6,8 @@ import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
 import Base20Expansion, { TierBadge } from '@components/Base20Expansion';
+import { Functions } from '@components/icons/Functions';
 import { Layers } from '@components/icons/Layers';
-import { ViewAgenda } from '@components/icons/ViewAgenda';
 import RenderModeSelector from '@/components/inputs/RenderModeSelector';
 import type { RenderMode } from '@/components/inputs/RenderModeSelector';
 import DisplaySettings from '@components/DisplaySettings';
@@ -129,11 +129,11 @@ export default function HomeView() {
     setDateInputRaw(raw);
   };
 
-  // The viewer card's heading, the same with and without a result. Its icon (stacked bars) differs
-  // from the base-20 card's (Layers)
+  // The viewer card's heading, the same with and without a result. Its icon (Layers, stacked
+  // tiers) differs from the base-20 card's (Functions, Σ for the positional sum)
   const viewerHeading = (
     <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
-      <ViewAgenda className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
+      <Layers className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
       Mayan Numeral Stack
     </h2>
   );
@@ -225,7 +225,7 @@ export default function HomeView() {
             under the heading where there is no room); the content takes a full line below them */}
         <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:col-span-5 lg:col-start-1 lg:row-start-2">
           <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
-            <Layers className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
+            <Functions className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
             Base-20 Representation
           </h2>
           {hasValidNumberInput && mayanData && <TierBadge tiers={mayanData.digitGroups[0].digits.length} />}

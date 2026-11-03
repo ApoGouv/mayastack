@@ -222,20 +222,20 @@ describe('HomeView numeral viewport', () => {
     expectNoResult('Choose a date to see its Mayan numerals.', 'Choose a date to see it in base 20.');
   });
 
-  // UI-13, slice 5a: the heading leads the viewer's header row, beside the zoom controls
+  // UI-13, slice 5a: the heading leads the viewer's header row, beside the zoom controls. Its icon
+  // is Layers (stacked tiers), and the base-20 card's is Functions (Σ, the positional sum)
   it('names the viewer "Mayan Numeral Stack", with its own decorative icon, with and without a result', () => {
     const { enter } = renderHomeView();
     const heading = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' });
+    const base20Heading = () => screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' });
     const iconPath = (h: HTMLElement) => h.querySelector('svg[aria-hidden="true"] > path')?.getAttribute('d');
-    const base20Icon = iconPath(screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' }));
 
     for (const text of ['123', '', '12.5', '7']) {
       enter(text);
       const result = text === '123' || text === '7';
       expect(heading().textContent, text).toBe('Mayan Numeral Stack');
-      // Not the base-20 card's Layers
-      expect(iconPath(heading()), text).toMatch(/^M19 13H5/);
-      expect(iconPath(heading())).not.toBe(base20Icon);
+      expect(iconPath(heading()), text).toMatch(/^m11\.99 18\.54/);
+      expect(iconPath(base20Heading()), text).toMatch(/^M18 4H6/);
       // With a result, in the same row as the zoom controls; without one, there are none
       const controls = screen.queryByRole('group', { name: 'Zoom controls' });
       if (result) expect(heading().parentElement, text).toBe(controls!.parentElement);
