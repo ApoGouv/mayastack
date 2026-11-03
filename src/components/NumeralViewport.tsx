@@ -150,6 +150,12 @@ interface NumeralViewportProps {
    * follow its scrolling, e.g. the place tier guides' hover. The viewport keeps its own otherwise.
    */
   scrollerRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * The viewer's heading, e.g. its card's `h2`: shown at the start of the header row, with the
+   * zoom controls beside it, or under it where there is no room. Without it, the row has the
+   * zoom controls only.
+   */
+  header?: React.ReactNode;
 }
 
 /**
@@ -183,6 +189,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   underlay,
   overlay,
   scrollerRef: givenScrollerRef,
+  header,
 }) => {
   const ownScrollerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = givenScrollerRef ?? ownScrollerRef;
@@ -285,36 +292,45 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
 
   return (
     // As wide as the viewer card's content
-    <div className="w-full space-y-2">
-      {/* A plain group: a toolbar role would promise arrow-key navigation between the buttons */}
-      <div role="group" aria-label="Zoom controls" className="flex items-center gap-2">
-        {/* aria-disabled rather than disabled, so a focused button keeps its focus at a limit */}
-        <button
-          type="button"
-          className={buttonClass}
-          aria-label="Zoom out"
-          aria-disabled={atMin}
-          onClick={() => zoomTo(zoomIndex - 1)}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          aria-label="Zoom in"
-          aria-disabled={atMax}
-          onClick={() => zoomTo(zoomIndex + 1)}
-        >
-          +
-        </button>
-        <button type="button" className={buttonClass} onClick={reset}>
-          Reset
-        </button>
-        <span aria-live="polite" className="text-sm tabular-nums text-fg-muted">
-          {Math.round(zoom * 100)}%
-          {atMin && <span className="sr-only"> (minimum zoom)</span>}
-          {atMax && <span className="sr-only"> (maximum zoom)</span>}
-        </span>
+    <div className="w-full space-y-3">
+      {/* The header row, outside the scroller, so it never takes part in the scroll positions
+          kept through zooming and resizing: the heading, then the zoom controls beside it, or
+          on their own line under it where there is no room. The controls never wrap */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        {header}
+        {/* A plain group: a toolbar role would promise arrow-key navigation between the buttons */}
+        <div role="group" aria-label="Zoom controls" className="flex shrink-0 items-center gap-2">
+          {/* aria-disabled rather than disabled, so a focused button keeps its focus at a limit */}
+          <button
+            type="button"
+            className={buttonClass}
+            aria-label="Zoom out"
+            aria-disabled={atMin}
+            onClick={() => zoomTo(zoomIndex - 1)}
+          >
+            −
+          </button>
+          {/* As wide as "400%" at every level, so Zoom in never moves under the pointer */}
+          <span aria-live="polite" className="w-12 text-center text-sm tabular-nums text-fg-muted">
+            {Math.round(zoom * 100)}%
+            {atMin && <span className="sr-only"> (minimum zoom)</span>}
+            {atMax && <span className="sr-only"> (maximum zoom)</span>}
+          </span>
+          <button
+            type="button"
+            className={buttonClass}
+            aria-label="Zoom in"
+            aria-disabled={atMax}
+            onClick={() => zoomTo(zoomIndex + 1)}
+          >
+            +
+          </button>
+          {/* Decorative: separates the steps from Reset */}
+          <span aria-hidden="true" className="h-5 w-px bg-line-strong" />
+          <button type="button" className={buttonClass} onClick={reset}>
+            Reset
+          </button>
+        </div>
       </div>
 
       <p id={hintId} className="sr-only">

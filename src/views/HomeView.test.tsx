@@ -42,8 +42,11 @@ const renderHomeView = () => {
   return { input, enter, press, clear, zero, step, renderedPlaceValues, numeralSvg };
 };
 
-/** A workspace card, from its heading */
-const card = (heading: string) => screen.getByRole('heading', { level: 2, name: heading }).parentElement!;
+/**
+ * A workspace card, from its heading: the nearest card around it (the viewer's heading is in its
+ * header row since UI-13's slice 5a, not directly in the card)
+ */
+const card = (heading: string) => screen.getByRole('heading', { level: 2, name: heading }).closest<HTMLElement>('.rounded-lg')!;
 
 /** The whole text of a workspace card, from its heading */
 const cardText = (heading: string) => card(heading).textContent;
@@ -190,7 +193,8 @@ describe('HomeView numeral viewport', () => {
   it('keeps every workspace card in place for empty, invalid and valid input, without stale results', () => {
     const { input, enter, clear, zero, renderedPlaceValues } = renderHomeView();
     const expectNoResult = (viewer: string, base20: string) => {
-      expect(cardText('Mayan Numeral')).toBe(`Mayan Numeral${viewer}`);
+      // Changed deliberately in UI-13: "Mayan Numeral Stack", the same heading as with a result
+      expect(cardText('Mayan Numeral Stack')).toBe(`Mayan Numeral Stack${viewer}`);
       expect(cardText('Base-20 Representation')).toBe(`Base-20 Representation${base20}`);
       expect(screen.getByRole('group', { name: 'Stela Material & Glyph Settings' })).not.toBeNull();
       expect(renderedPlaceValues()).toEqual([]);
@@ -216,6 +220,28 @@ describe('HomeView numeral viewport', () => {
     expectNoResult('Enter a whole number to see its Mayan numeral.', 'Enter a whole number to see it in base 20.');
     fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
     expectNoResult('Choose a date to see its Mayan numerals.', 'Choose a date to see it in base 20.');
+  });
+
+  // UI-13, slice 5a: the heading leads the viewer's header row, beside the zoom controls
+  it('names the viewer "Mayan Numeral Stack", with its own decorative icon, with and without a result', () => {
+    const { enter } = renderHomeView();
+    const heading = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' });
+    const iconPath = (h: HTMLElement) => h.querySelector('svg[aria-hidden="true"] > path')?.getAttribute('d');
+    const base20Icon = iconPath(screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' }));
+
+    for (const text of ['123', '', '12.5', '7']) {
+      enter(text);
+      const result = text === '123' || text === '7';
+      expect(heading().textContent, text).toBe('Mayan Numeral Stack');
+      // Not the base-20 card's Layers
+      expect(iconPath(heading()), text).toMatch(/^M19 13H5/);
+      expect(iconPath(heading())).not.toBe(base20Icon);
+      // With a result, in the same row as the zoom controls; without one, there are none
+      const controls = screen.queryByRole('group', { name: 'Zoom controls' });
+      if (result) expect(heading().parentElement, text).toBe(controls!.parentElement);
+      else expect(controls, text).toBeNull();
+      expect(card('Mayan Numeral Stack').contains(heading())).toBe(true);
+    }
   });
 
   it('exports the same complete SVG before and after zooming and scrolling', () => {
@@ -780,7 +806,7 @@ describe('HomeView tier guides', () => {
     // Off by default, and no longer in the viewer
     expect(bandsSwitch().getAttribute('aria-checked')).toBe('false');
     expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('false');
-    expect(card('Mayan Numeral').querySelectorAll('[role="switch"]')).toHaveLength(0);
+    expect(card('Mayan Numeral Stack').querySelectorAll('[role="switch"]')).toHaveLength(0);
     expect(screen.queryByRole('switch', { name: /^Show Tier Guides/ })).toBeNull();
     expect(cardLayer()).toBeNull();
     expect(lineLayer()).toBeNull();

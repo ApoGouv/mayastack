@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { createRef } from 'react';
+import { createRef, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import NumeralViewport from './NumeralViewport';
@@ -12,7 +12,7 @@ afterEach(() => {
 const LABEL = 'Mayan numeral for 123: 2 stacked base-20 digits, highest place value at the top';
 
 /** Renders the viewport around a stand-in numeral and returns its parts */
-function renderViewport(props: { resetKey?: string } = {}) {
+function renderViewport(props: { resetKey?: string; header?: ReactNode } = {}) {
   const result = render(
     <NumeralViewport numeralWidth={350} label={LABEL} {...props}>
       <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
@@ -228,11 +228,70 @@ describe('NumeralViewport', () => {
   });
 
   it('spans the viewer card’s width, with no canvas surround of its own (changed deliberately in UI-13)', () => {
-    const { viewer } = renderViewport();
-    const root = screen.getByRole('group', { name: 'Zoom controls' }).parentElement!;
+    const { viewer, container } = renderViewport();
+    // Changed deliberately in UI-13's slice 5a: the zoom controls are in a header row
+    const root = container.firstElementChild as HTMLElement;
     expect(root.contains(viewer)).toBe(true);
     expect(root.className.split(' ')).toContain('w-full');
     expect(root.className).not.toMatch(/\b(max-w-|bg-|p-)/);
+  });
+
+  describe('header row (UI-13, slice 5a)', () => {
+    const HEADING = <h2>Mayan Numeral Stack</h2>;
+
+    it('shows the given heading, then the zoom controls, in one wrapping row above the hint and the viewer', () => {
+      const { viewer, container } = renderViewport({ header: HEADING });
+      const heading = screen.getByRole('heading', { name: 'Mayan Numeral Stack' });
+      const controls = screen.getByRole('group', { name: 'Zoom controls' });
+      const row = heading.parentElement!;
+      const root = container.firstElementChild as HTMLElement;
+
+      expect([...row.children]).toEqual([heading, controls]);
+      expect(row.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-wrap', 'items-center', 'justify-between']));
+      // The row, then the hint, then the viewer: outside the scroller, which keeps the scroll positions
+      expect(root.firstElementChild).toBe(row);
+      expect(row.contains(viewer) || viewer.contains(row)).toBe(false);
+      const hint = document.getElementById(viewer.getAttribute('aria-describedby')!)!;
+      expect([...root.children]).toEqual([row, hint, viewer]);
+      // The controls never wrap within themselves, nor shrink
+      expect(controls.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'shrink-0']));
+      expect(controls.className).not.toContain('flex-wrap');
+    });
+
+    it('works without a heading: the row has the zoom controls only', () => {
+      const { zoomIn, zoomText, container } = renderViewport();
+      const controls = screen.getByRole('group', { name: 'Zoom controls' });
+      expect([...controls.parentElement!.children]).toEqual([controls]);
+      expect((container.firstElementChild as HTMLElement).firstElementChild).toBe(controls.parentElement);
+      expect(screen.queryByRole('heading')).toBeNull();
+      fireEvent.click(zoomIn);
+      expect(zoomText()).toBe('150%');
+    });
+
+    it('orders the controls Zoom out, the percentage, Zoom in, a decorative separator, then Reset', () => {
+      const { zoomIn, zoomOut, reset, zoomStatus } = renderViewport({ header: HEADING });
+      const controls = screen.getByRole('group', { name: 'Zoom controls' });
+      const [first, percentage, third, separator, fifth, ...rest] = [...controls.children];
+
+      expect([first, percentage, third, fifth]).toEqual([zoomOut, zoomStatus, zoomIn, reset]);
+      expect(rest).toEqual([]);
+      // The percentage: a non-interactive, fixed-width, tabular readout in the polite live region
+      expect(percentage.getAttribute('aria-live')).toBe('polite');
+      expect(percentage.tagName).toBe('SPAN');
+      expect(percentage.hasAttribute('tabindex')).toBe(false);
+      expect(percentage.className.split(' ')).toEqual(expect.arrayContaining(['w-12', 'text-center', 'tabular-nums']));
+      // The separator: hidden from assistive technology, not focusable, with no text
+      expect(separator.getAttribute('aria-hidden')).toBe('true');
+      expect(separator.hasAttribute('tabindex')).toBe(false);
+      expect(separator.textContent).toBe('');
+    });
+
+    it('keeps the tab order Zoom out, Zoom in, Reset, then the viewer', () => {
+      const { viewer, zoomIn, zoomOut, reset } = renderViewport({ header: HEADING });
+      const focusable = [...document.querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
+      expect(focusable).toEqual([zoomOut, zoomIn, reset, viewer]);
+      for (const button of [zoomOut, zoomIn, reset]) expect(button.className).toContain('focus-ring');
+    });
   });
 
   it('has no underlay or overlay unless given', () => {

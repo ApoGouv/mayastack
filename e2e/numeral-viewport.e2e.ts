@@ -29,6 +29,14 @@ function visibleStacks(page: Page) {
 
 const zoomLevel = (page: Page) => page.getByRole('group', { name: 'Zoom controls' }).locator('[aria-live]');
 
+/**
+ * The viewer card: the nearest card around its heading, which is in the viewer's header row with
+ * a result (UI-13, slice 5a) and directly in the card without one
+ */
+const viewerCard = (page: Page) =>
+  page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true })
+    .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+
 /** Exports through the real Export menu and returns the downloaded file */
 async function exportFile(page: Page, format: 'svg' | 'png') {
   await page.getByRole('group', { name: 'Numeral viewer' }).scrollIntoViewIfNeeded();
@@ -54,7 +62,7 @@ test.describe('bounded numeral viewport', () => {
   test('keeps the viewer and the numeral result bounded for 1 to 128 digits', async ({ page }) => {
     // Changed deliberately in UI-13: the stage has the screen's height (448 px at 1280 × 720,
     // the default), whatever the numeral's, instead of a 480 px maximum and a short numeral's own
-    const result = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
+    const result = viewerCard(page);
     const heights: Record<string, { viewer: number; result: number }> = {};
     for (const digits of ['7', FIFTY_DIGITS, '9'.repeat(100), MAX_DIGITS]) {
       const viewer = await showNumber(page, digits);
@@ -150,7 +158,7 @@ test.describe('bounded numeral viewport', () => {
     for (const [width, height] of [[375, 900], [768, 900], [1280, 900]] as const) {
       await page.setViewportSize({ width, height });
       const viewer = await showNumber(page, FIFTY_DIGITS);
-      const card = (await page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').boundingBox())!;
+      const card = (await viewerCard(page).boundingBox())!;
       const box = (await viewer.boundingBox())!;
       expect(box.width, `${width}px`).toBe(card.width - 32);
       expect(box.height, `${width}px`).toBe(width >= 1024 ? 620 : 480);
@@ -400,7 +408,7 @@ test.describe('numeral scale and position', () => {
   test('gives the stage the approved height at every approved screen size, the same at every zoom level', async ({ page }) => {
     // Six screen sizes, three zoom levels each, every zoom step waited for
     test.slow();
-    const card = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
+    const card = viewerCard(page);
     for (const screen of SCREENS) {
       const what = `${screen.width} × ${screen.height}`;
       await page.setViewportSize(screen);
@@ -600,6 +608,131 @@ test.describe('numeral scale and position', () => {
     });
   }
 
+  test.describe('viewer header and zoom toolbar (UI-13 slice 5a)', () => {
+    const heading = (page: Page) => page.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack', exact: true });
+    const controls = (page: Page) => page.getByRole('group', { name: 'Zoom controls' });
+
+    /** The header row's parts and the stage, as laid out on screen, and the card's content box */
+    const headerLayout = async (page: Page) => {
+      const card = (await viewerCard(page).boundingBox())!;
+      const [h, c, stage] = await Promise.all([heading(page), controls(page), page.getByRole('group', { name: 'Numeral viewer' })]
+        .map(async (locator) => (await locator.boundingBox())!));
+      const parts = await controls(page).evaluate((group) =>
+        [...group.children].map((el) => {
+          const b = el.getBoundingClientRect();
+          return { tag: el.tagName.toLowerCase(), name: el.getAttribute('aria-label') ?? el.textContent!.trim(), x: b.x, y: b.y, width: b.width, height: b.height };
+        }));
+      const content = { left: card.x + 16, right: card.x + card.width - 16, width: card.width - 32 };
+      return { card, content, heading: h, controls: c, stage, parts };
+    };
+
+    // The six approved sizes, the lg boundary and a tablet width
+    const SIZES = [...SCREENS, { width: 1024, height: 768 }, { width: 768, height: 1024 }];
+
+    test('puts the heading and the zoom controls in one header row above the stage, wrapping only where they do not fit', async ({ page }) => {
+      test.slow();
+      for (const size of SIZES) {
+        const what = `${size.width} × ${size.height}`;
+        await page.setViewportSize({ width: size.width, height: size.height });
+        await showNumber(page, FIFTY_DIGITS);
+        const { card, content, heading: h, controls: c, stage, parts } = await headerLayout(page);
+
+        // At the top of the card, within its content box, with no page-level overflow
+        expect(Math.min(h.y, c.y) - card.y, what).toBeCloseTo(16, 0);
+        for (const box of [h, c]) {
+          expect(box.x, what).toBeGreaterThanOrEqual(content.left - 0.5);
+          expect(box.x + box.width, what).toBeLessThanOrEqual(content.right + 0.5);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), what).toBe(0);
+
+        // Beside the heading where both fit with the 12 px gap, otherwise on their own line under it,
+        // never overlapping it
+        const wraps = h.width + 12 + c.width > content.width;
+        if (wraps) {
+          expect(c.y, what).toBeGreaterThanOrEqual(h.y + h.height);
+          expect(c.x, what).toBeCloseTo(content.left, 0);
+        } else {
+          expect(Math.abs(c.y + c.height / 2 - (h.y + h.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(c.x + c.width, what).toBeCloseTo(content.right, 0);
+        }
+        // Phones wrap; tablets and desktops stay on one row (the measured threshold, 472 px, is
+        // recorded in the roadmap rather than asserted here, so font metrics can move it)
+        expect(wraps, what).toBe(size.width <= 375);
+
+        // The controls in one row, in order, with buttons of at least 24 × 24 px
+        expect(parts.map((p) => p.name), what).toEqual(['Zoom out', '100%', 'Zoom in', '', 'Reset']);
+        for (const p of parts) expect(Math.abs(p.y + p.height / 2 - (c.y + c.height / 2)), `${what}: ${p.name}`).toBeLessThanOrEqual(1);
+        for (let i = 1; i < parts.length; i++) expect(parts[i].x, what).toBeGreaterThan(parts[i - 1].x + parts[i - 1].width - 0.5);
+        for (const p of parts.filter((part) => part.tag === 'button')) {
+          expect(p.width, `${what}: ${p.name}`).toBeGreaterThanOrEqual(24);
+          expect(p.height, `${what}: ${p.name}`).toBeGreaterThanOrEqual(24);
+        }
+
+        // The stage 12 px under the header row; its height is unchanged (17.5rem offset kept)
+        expect(stage.y - Math.max(h.y + h.height, c.y + c.height), what).toBeCloseTo(12, 0);
+        // 1024 × 768: 100svh − 17.5rem; 768 × 1024: the 30rem maximum below lg
+        const expected = 'stage' in size ? size.stage : size.width >= 1024 ? size.height - 280 : 480;
+        expect(stage.height, what).toBeCloseTo(expected, 0);
+        if (size.width >= 1024) expect(card.y + card.height, what).toBeLessThanOrEqual(size.height);
+      }
+    });
+
+    test('keeps Zoom in, Reset and the percentage in place at every zoom level', async ({ page }) => {
+      for (const size of [{ width: 1280, height: 800 }, { width: 320, height: 568 }]) {
+        await page.setViewportSize(size);
+        await showNumber(page, FIFTY_DIGITS);
+        const positions = new Set<string>();
+        for (const level of LEVELS) {
+          await zoomTo(page, level);
+          const { parts } = await headerLayout(page);
+          positions.add(JSON.stringify(parts.map((p) => [p.x, p.width].map((v) => Math.round(v * 2) / 2))));
+        }
+        expect(positions.size, `${size.width} × ${size.height}`).toBe(1);
+        await page.getByRole('button', { name: 'Reset' }).click();
+      }
+    });
+
+    test('keeps the tab order and the shortcuts: Zoom out, Zoom in, Reset, then the viewer', async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      const viewer = await showNumber(page, FIFTY_DIGITS);
+      await page.getByRole('button', { name: 'Zoom out' }).focus();
+      for (const name of ['Zoom in', 'Reset']) {
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('button', { name, exact: true })).toBeFocused();
+      }
+      await page.keyboard.press('Tab');
+      await expect(viewer).toBeFocused();
+      await page.keyboard.press('+');
+      await expect(zoomLevel(page)).toHaveText('150%');
+      await page.keyboard.press('0');
+      await expect(zoomLevel(page)).toHaveText('100%');
+      // The percentage and the separator are never focused
+      await expect(controls(page).locator('span[aria-live], span[aria-hidden="true"]')).toHaveCount(2);
+      expect(await controls(page).locator('span').evaluateAll((spans) => spans.filter((s) => (s as HTMLElement).tabIndex >= 0).length)).toBe(0);
+    });
+
+    test('keeps the point at the viewer’s centre while the header wraps and unwraps', async ({ page }) => {
+      await page.setViewportSize({ width: 768, height: 1024 });
+      const viewer = await showNumber(page, MAX_DIGITS);
+      await zoomTo(page, '400%');
+      await viewer.evaluate((el) => el.scrollTo(300, 5000));
+      // Two frames, for the scroll event to be followed
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      const start = await measure(page);
+      for (const [width, height, wraps] of [[375, 667, true], [768, 1024, false], [320, 568, true], [768, 1024, false]] as const) {
+        await page.setViewportSize({ width, height });
+        await expect.poll(async () => {
+          const m = await measure(page);
+          return Math.max(Math.abs(m.centre.x - start.centre.x), Math.abs(m.centre.y - start.centre.y)) * m.pxPerUnit;
+        }, `${width} × ${height}`).toBeLessThanOrEqual(1);
+        const { heading: h, controls: c } = await headerLayout(page);
+        expect(c.y >= h.y + h.height, `${width} × ${height}`).toBe(wraps);
+      }
+      // Back at the starting size, exactly where it was
+      expect(Math.abs((await measure(page)).scrollTop - start.scrollTop)).toBeLessThanOrEqual(1);
+    });
+  });
+
   test.describe('resizing the screen (UI-13 slice 4.1)', () => {
     /** Waits two frames: for scroll events and resize reports from what happened before */
     const settle = (page: Page) =>
@@ -717,7 +850,7 @@ test.describe('export with the viewport', () => {
       await page.setViewportSize({ width, height: 400 });
       await showNumber(page, MAX_DIGITS);
       const exportButton = page.getByRole('button', { name: '📦 Export' });
-      const resultCard = page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..');
+      const resultCard = viewerCard(page);
 
       // Top of the page
       await page.evaluate(() => window.scrollTo(0, 0));
@@ -854,7 +987,7 @@ test.describe('base-20 representation', () => {
   // "Positional Sum Formula" label, with "+" between the terms and spoken exponents
   const representation = (page: Page) => page.getByRole('region', { name: 'Positional Sum Formula' });
   const resultTop = async (page: Page) =>
-    (await page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').boundingBox())!.y;
+    (await viewerCard(page).boundingBox())!.y;
 
   test('stops growing with the number, so the page stays the same height', async ({ page }) => {
     await showNumber(page, '9'.repeat(100));
@@ -1289,7 +1422,7 @@ test.describe('screen-only tier guides', () => {
     const guidesGroup = settingsPanel(page).getByRole('group', { name: 'Viewer guides' });
     await expect(guidesGroup.getByRole('switch')).toHaveCount(2);
     await expect(guidesGroup.getByText('Shown on screen only, not included in exports.')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..').getByRole('switch')).toHaveCount(0);
+    await expect(viewerCard(page).getByRole('switch')).toHaveCount(0);
     await expect(bandsSwitch(page)).toHaveAttribute('aria-checked', 'false');
     await expect(hairlinesSwitch(page)).toHaveAttribute('aria-checked', 'false');
     await expect(page.locator('[data-place-tier-guides], [data-tier-hairlines]')).toHaveCount(0);

@@ -193,7 +193,11 @@ test.describe('heading font', () => {
    */
   const HEADING_FONT_ELEMENTS: string[] = [
     'h1: 🌄 Convert to Mayan Numerals',
-    'h2: Mayan Numeral',
+    // Changed deliberately in UI-13 (slice 5a): "Mayan Numeral Stack", with a decorative icon that,
+    // like the base-20 heading's, inherits the font but has no text for it to render
+    'h2: Mayan Numeral Stack',
+    'svg: ',
+    'path: ',
     'h2: Base-20 Representation',
     // Changed deliberately in UI-07: the decorative icon in the base-20 heading inherits its font,
     // but has no text for it to render

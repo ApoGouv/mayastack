@@ -13,12 +13,20 @@ async function openWorkspace(page: Page, theme: Theme, width: number) {
   await expect(page.getByRole('group', { name: 'Numeral viewer' })).toBeVisible();
 }
 
+/**
+ * The viewer card: the nearest card around its heading, which is in the viewer's header row with
+ * a result (UI-13, slice 5a) and directly in the card without one
+ */
+const viewerCard = (page: Page) =>
+  page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true })
+    .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+
 /** The workspace's four cards: input, base-20 representation, viewer and settings */
 function cards(page: Page) {
   return {
     input: page.locator('section').filter({ has: page.getByLabel('Decimal integer') }),
     base20: page.getByRole('heading', { name: 'Base-20 Representation', exact: true }).locator('..'),
-    viewer: page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..'),
+    viewer: viewerCard(page),
     settings: page.getByRole('group', { name: 'Stela Material & Glyph Settings' }).locator('..'),
   };
 }
@@ -182,7 +190,7 @@ test.describe('workspace layout', () => {
     await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
     await expect(page.getByRole('img', { name: /^Mayan numerals for day 15, month \d+ and year \d+$/ })).toBeVisible();
 
-    const viewer = await box(page.getByRole('heading', { name: 'Mayan Numeral', exact: true }).locator('..'));
+    const viewer = await box(viewerCard(page));
     const input = await box(page.locator('section').filter({ has: page.getByLabel('Date input') }));
     expect(viewer.x).toBeGreaterThan(input.x + input.width);
     expect(await pageOverflow(page)).toBe(0);
@@ -192,7 +200,7 @@ test.describe('workspace layout', () => {
     await openWorkspace(page, 'light', 1280);
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 2, name: 'Base-20 Representation' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: 'Mayan Numeral' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { level: 3 })).toHaveCount(0);
   });
 });

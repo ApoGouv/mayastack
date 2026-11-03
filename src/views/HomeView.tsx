@@ -7,6 +7,7 @@ import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
 import Base20Expansion, { TierBadge } from '@components/Base20Expansion';
 import { Layers } from '@components/icons/Layers';
+import { ViewAgenda } from '@components/icons/ViewAgenda';
 import RenderModeSelector from '@/components/inputs/RenderModeSelector';
 import type { RenderMode } from '@/components/inputs/RenderModeSelector';
 import DisplaySettings from '@components/DisplaySettings';
@@ -128,6 +129,15 @@ export default function HomeView() {
     setDateInputRaw(raw);
   };
 
+  // The viewer card's heading, the same with and without a result. Its icon (stacked bars) differs
+  // from the base-20 card's (Layers)
+  const viewerHeading = (
+    <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
+      <ViewAgenda className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
+      Mayan Numeral Stack
+    </h2>
+  );
+
   return (
     <div className="grid grid-cols-1 gap-8 max-w-7xl mx-auto">
       {/* Header Section */}
@@ -162,7 +172,8 @@ export default function HomeView() {
 
         {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result */}
         <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
-          <h2 className="font-heading text-lg font-semibold mb-4">Mayan Numeral</h2>
+          {/* The heading leads the viewer's header row, beside its zoom controls; without a result,
+              it stands alone */}
           {hasValidinput && mayanData ? (
             /* MayanRenderer and ExportPanel */
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
@@ -172,6 +183,7 @@ export default function HomeView() {
                   label={mayanData.label}
                   resetKey={mayanData.key}
                   scrollerRef={viewerScrollerRef}
+                  header={viewerHeading}
                   underlay={
                     showPlaceTierGuides && (
                       <PlaceTierGuides
@@ -199,9 +211,12 @@ export default function HomeView() {
               }
             </MayanExportPanel>
           ) : (
-            <p className="rounded-lg border border-dashed border-line p-8 text-center text-fg-muted">
-              {emptyMessages.viewer}
-            </p>
+            <>
+              {viewerHeading}
+              <p className="mt-4 rounded-lg border border-dashed border-line p-8 text-center text-fg-muted">
+                {emptyMessages.viewer}
+              </p>
+            </>
           )}
         </div>
 
