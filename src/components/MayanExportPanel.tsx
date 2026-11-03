@@ -83,7 +83,7 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   };
 
   return (
-    <div className="mt-6 flex justify-center">
+    <div className="flex justify-center">
       {/* The viewer, which sets its own width */}
       {children(exportRef)}
 
