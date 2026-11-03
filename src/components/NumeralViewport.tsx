@@ -287,8 +287,10 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
     e.preventDefault();
   };
 
+  // Borderless in the canvas tray: surface-active for hover and press, since surface-hover barely
+  // differs from canvas in the light theme. At a limit, fg-disabled and no hover or press fill
   const buttonClass =
-    'cursor-pointer px-2 py-1 text-sm rounded border border-line-strong bg-surface text-fg hover:bg-surface-hover active:bg-surface-active focus-ring aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
+    'cursor-pointer inline-flex h-7 items-center justify-center rounded text-sm text-fg-muted hover:bg-surface-active hover:text-fg active:bg-surface-active active:text-fg focus-ring aria-disabled:cursor-not-allowed aria-disabled:bg-transparent aria-disabled:text-fg-disabled';
 
   return (
     // As wide as the viewer card's content
@@ -299,11 +301,11 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {header}
         {/* A plain group: a toolbar role would promise arrow-key navigation between the buttons */}
-        <div role="group" aria-label="Zoom controls" className="flex shrink-0 items-center gap-2">
+        <div role="group" aria-label="Zoom controls" className="flex shrink-0 items-center gap-1 rounded-md bg-canvas p-0.5">
           {/* aria-disabled rather than disabled, so a focused button keeps its focus at a limit */}
           <button
             type="button"
-            className={buttonClass}
+            className={`${buttonClass} w-7`}
             aria-label="Zoom out"
             aria-disabled={atMin}
             onClick={() => zoomTo(zoomIndex - 1)}
@@ -318,7 +320,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
           </span>
           <button
             type="button"
-            className={buttonClass}
+            className={`${buttonClass} w-7`}
             aria-label="Zoom in"
             aria-disabled={atMax}
             onClick={() => zoomTo(zoomIndex + 1)}
@@ -326,8 +328,8 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
             +
           </button>
           {/* Decorative: separates the steps from Reset */}
-          <span aria-hidden="true" className="h-5 w-px bg-line-strong" />
-          <button type="button" className={buttonClass} onClick={reset}>
+          <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-line-strong" />
+          <button type="button" className={`${buttonClass} px-2`} onClick={reset}>
             Reset
           </button>
         </div>
