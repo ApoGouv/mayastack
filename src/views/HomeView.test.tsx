@@ -236,12 +236,77 @@ describe('HomeView numeral viewport', () => {
       expect(heading().textContent, text).toBe('Mayan Numeral Stack');
       expect(iconPath(heading()), text).toMatch(/^m11\.99 18\.54/);
       expect(iconPath(base20Heading()), text).toMatch(/^M18 4H6/);
-      // With a result, in the same row as the zoom controls; without one, there are none
+      // With a result, in the same row as the zoom controls; without one, there are none.
+      // Changed deliberately in UI-13 (slice 5b): in the row's heading cluster, beside the tier
+      // indicator, rather than directly in the row
       const controls = screen.queryByRole('group', { name: 'Zoom controls' });
-      if (result) expect(heading().parentElement, text).toBe(controls!.parentElement);
+      if (result) expect(heading().parentElement!.parentElement, text).toBe(controls!.parentElement);
       else expect(controls, text).toBeNull();
       expect(card('Mayan Numeral Stack').contains(heading())).toBe(true);
     }
+  });
+
+  // UI-13, slice 5b: the tier-direction indicator beside the heading
+  describe('tier-direction indicator', () => {
+    const heading = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' });
+    /** The indicator in the viewer card, found by its visible text, or null */
+    const indicator = () =>
+      within(card('Mayan Numeral Stack')).queryByText(/^(Top: 20|1 tier · 20⁰$)/)?.parentElement ?? null;
+
+    it('shows the numeral’s orientation beside the heading, outside it and outside the numeral', () => {
+      const { enter, numeralSvg } = renderHomeView();
+      for (const [text, shown, spoken] of [
+        ['7', '1 tier · 20⁰', 'One tier, 20 to the power of 0'],
+        ['123', 'Top: 20¹ ↓ Bottom: 20⁰', 'Top tier 20 to the power of 1, down to the bottom tier, 20 to the power of 0'],
+        ['9'.repeat(128), 'Top: 20⁹⁸ ↓ Bottom: 20⁰', 'Top tier 20 to the power of 98, down to the bottom tier, 20 to the power of 0'],
+      ]) {
+        enter(text);
+        expect(visibleText(indicator()!), text).toBe(shown);
+        expect(spokenText(indicator()!), text).toBe(spoken);
+        // The heading's name is unchanged; the indicator is in the header, not the numeral or its export
+        expect(heading().textContent, text).toBe('Mayan Numeral Stack');
+        expect(heading().contains(indicator()), text).toBe(false);
+        expect(numeralSvg().contains(indicator()), text).toBe(false);
+        expect(screen.getByRole('group', { name: 'Numeral viewer' }).contains(indicator()), text).toBe(false);
+        expect(exportedMarkup(numeralSvg()), text).not.toMatch(/Top:|tier/);
+        // The heading cluster, before the zoom controls in the header row
+        const cluster = heading().parentElement!;
+        expect([...cluster.children], text).toEqual([heading(), indicator()]);
+        expect(cluster.nextElementSibling, text).toBe(screen.getByRole('group', { name: 'Zoom controls' }));
+      }
+    });
+
+    it('follows the tallest group in Date mode', () => {
+      renderHomeView();
+      fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+      fireEvent.click(screen.getByLabelText('Date input'));
+      fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+
+      // Day 15 and the month have one tier each; every year from 400 to 7999 has three
+      expect(visibleText(indicator()!)).toBe('Top: 20² ↓ Bottom: 20⁰');
+      expect(spokenText(indicator()!)).toBe('Top tier 20 to the power of 2, down to the bottom tier, 20 to the power of 0');
+    });
+
+    it('is not shown without a result, where the heading stands alone', () => {
+      const { enter } = renderHomeView();
+      for (const text of ['', '12.5']) {
+        enter(text);
+        expect(indicator(), text).toBeNull();
+        expect(cardText('Mayan Numeral Stack'), text).not.toMatch(/tier|Top:/);
+      }
+      fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+      expect(indicator()).toBeNull();
+    });
+
+    it('leaves the base-20 card’s heading and ascending tier badge unchanged', () => {
+      const { enter } = renderHomeView();
+      enter('123');
+      const base20 = card('Base-20 Representation');
+      expect(within(base20).getByRole('heading', { level: 2 }).textContent).toBe('Base-20 Representation');
+      expect(visibleText(base20)).toContain('2 tiers · 20⁰–20¹');
+      expect(spokenText(base20)).toContain('2 tiers, powers of 20 from 0 to 1');
+      expect(visibleText(base20)).not.toMatch(/Top:|↓/);
+    });
   });
 
   it('exports the same complete SVG before and after zooming and scrolling', () => {

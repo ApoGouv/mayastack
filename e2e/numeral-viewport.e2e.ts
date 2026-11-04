@@ -612,18 +612,23 @@ test.describe('numeral scale and position', () => {
     const heading = (page: Page) => page.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack', exact: true });
     const controls = (page: Page) => page.getByRole('group', { name: 'Zoom controls' });
 
+    /** The heading's cluster in the header row: the heading and the tier-direction indicator (slice 5b) */
+    const cluster = (page: Page) => heading(page).locator('xpath=..');
+    const indicator = (page: Page) => heading(page).locator('xpath=following-sibling::*[1]');
+
     /** The header row's parts and the stage, as laid out on screen, and the card's content box */
     const headerLayout = async (page: Page) => {
       const card = (await viewerCard(page).boundingBox())!;
-      const [h, c, stage] = await Promise.all([heading(page), controls(page), page.getByRole('group', { name: 'Numeral viewer' })]
-        .map(async (locator) => (await locator.boundingBox())!));
+      const [h, c, stage, cl, ind] = await Promise.all(
+        [heading(page), controls(page), page.getByRole('group', { name: 'Numeral viewer' }), cluster(page), indicator(page)]
+          .map(async (locator) => (await locator.boundingBox())!));
       const parts = await controls(page).evaluate((group) =>
         [...group.children].map((el) => {
           const b = el.getBoundingClientRect();
           return { tag: el.tagName.toLowerCase(), name: el.getAttribute('aria-label') ?? el.textContent!.trim(), x: b.x, y: b.y, width: b.width, height: b.height };
         }));
       const content = { left: card.x + 16, right: card.x + card.width - 16, width: card.width - 32 };
-      return { card, content, heading: h, controls: c, stage, parts };
+      return { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind };
     };
 
     // The six approved sizes, the lg boundary and a tablet width
@@ -635,29 +640,54 @@ test.describe('numeral scale and position', () => {
         const what = `${size.width} × ${size.height}`;
         await page.setViewportSize({ width: size.width, height: size.height });
         await showNumber(page, FIFTY_DIGITS);
-        const { card, content, heading: h, controls: c, stage, parts } = await headerLayout(page);
+        const { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind } = await headerLayout(page);
 
         // At the top of the card, within its content box, with no page-level overflow
         expect(Math.min(h.y, c.y) - card.y, what).toBeCloseTo(16, 0);
-        for (const box of [h, c]) {
+        for (const box of [h, c, ind]) {
           expect(box.x, what).toBeGreaterThanOrEqual(content.left - 0.5);
           expect(box.x + box.width, what).toBeLessThanOrEqual(content.right + 0.5);
         }
         expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), what).toBe(0);
 
         // Beside the heading where both fit with the 12 px gap, otherwise on their own line under it,
-        // never overlapping it
+        // never overlapping it. Changed deliberately in UI-13 (slice 5b): the heading is in a
+        // cluster with the tier-direction indicator, which wraps first, so the controls still go
+        // under it only where the heading alone leaves no room; beside it, they are centred on
+        // the cluster, which has two lines where the indicator is under the heading
         const wraps = h.width + 12 + c.width > content.width;
         if (wraps) {
-          expect(c.y, what).toBeGreaterThanOrEqual(h.y + h.height);
+          expect(c.y, what).toBeGreaterThanOrEqual(cl.y + cl.height);
           expect(c.x, what).toBeCloseTo(content.left, 0);
         } else {
-          expect(Math.abs(c.y + c.height / 2 - (h.y + h.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(Math.abs(c.y + c.height / 2 - (cl.y + cl.height / 2)), what).toBeLessThanOrEqual(1);
           expect(c.x + c.width, what).toBeCloseTo(content.right, 0);
+          expect(cl.x + cl.width, what).toBeLessThanOrEqual(c.x - 12 + 0.5);
         }
-        // Phones wrap; tablets and desktops stay on one row (the measured threshold, 472 px, is
-        // recorded in the roadmap rather than asserted here, so font metrics can move it)
+        // Phones wrap; tablets and desktops stay on one row (the measured threshold, 462 px since
+        // the compact toolbar, is recorded in the roadmap rather than asserted here, so font
+        // metrics can move it)
         expect(wraps, what).toBe(size.width <= 375);
+
+        // The indicator: beside the heading, centred on it, where it fits in the room the controls
+        // leave; otherwise under the heading, at its start
+        const room = wraps ? content.width : content.width - 12 - c.width;
+        const indicatorWraps = h.width + 12 + ind.width > room;
+        if (indicatorWraps) {
+          expect(ind.y, what).toBeGreaterThanOrEqual(h.y + h.height);
+          expect(ind.x, what).toBeCloseTo(h.x, 0);
+        } else {
+          expect(Math.abs(ind.y + ind.height / 2 - (h.y + h.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(ind.x, what).toBeCloseTo(h.x + h.width + 12, 0);
+        }
+        // Robust at these sizes: one row on desktops; both wrapped on phones (the measured
+        // thresholds are in the roadmap)
+        if (size.width >= 1280) expect(indicatorWraps, what).toBe(false);
+        if (size.width <= 375) expect(indicatorWraps, what).toBe(true);
+        // The heading on one line, the indicator never wrapping within itself or clipped
+        expect(h.height, what).toBeLessThanOrEqual(28.5);
+        expect(ind.height, what).toBeLessThanOrEqual(20.5);
+        expect(await indicator(page).evaluate((el) => el.scrollWidth - el.clientWidth), what).toBeLessThanOrEqual(0);
 
         // The controls in one row, in order, with buttons of at least 24 × 24 px
         expect(parts.map((p) => p.name), what).toEqual(['Zoom out', '100%', 'Zoom in', '', 'Reset']);
@@ -669,12 +699,33 @@ test.describe('numeral scale and position', () => {
         }
 
         // The stage 12 px under the header row; its height is unchanged (17.5rem offset kept)
-        expect(stage.y - Math.max(h.y + h.height, c.y + c.height), what).toBeCloseTo(12, 0);
+        expect(stage.y - Math.max(cl.y + cl.height, c.y + c.height), what).toBeCloseTo(12, 0);
         // 1024 × 768: 100svh − 17.5rem; 768 × 1024: the 30rem maximum below lg
         const expected = 'stage' in size ? size.stage : size.width >= 1024 ? size.height - 280 : 480;
         expect(stage.height, what).toBeCloseTo(expected, 0);
         if (size.width >= 1024) expect(card.y + card.height, what).toBeLessThanOrEqual(size.height);
       }
+    });
+
+    test('shows the tier-direction indicator for the tallest group, within the card, without overflow (slice 5b)', async ({ page }) => {
+      for (const width of [1280, 1024, 375, 320]) {
+        await page.setViewportSize({ width, height: 800 });
+        for (const [digits, shown] of [['7', '1 tier · 20⁰'], [MAX_DIGITS, 'Top: 20⁹⁸ ↓ Bottom: 20⁰']]) {
+          await showNumber(page, digits);
+          await expect(indicator(page).locator('[aria-hidden="true"]'), `${width}px`).toHaveText(shown);
+          const { content, indicator: ind } = await headerLayout(page);
+          expect(ind.x, `${width}px`).toBeGreaterThanOrEqual(content.left - 0.5);
+          expect(ind.x + ind.width, `${width}px`).toBeLessThanOrEqual(content.right + 0.5);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${width}px`).toBe(0);
+        }
+      }
+      // Date mode: the year's three tiers, not the day's one
+      await showDate(page);
+      await expect(indicator(page).locator('[aria-hidden="true"]')).toHaveText('Top: 20² ↓ Bottom: 20⁰');
+      await expect(indicator(page)).toHaveText(/Top tier 20 to the power of 2, down to the bottom tier, 20 to the power of 0$/);
+      // The heading's accessible name is unchanged, and the indicator is not part of the numeral
+      await expect(heading(page)).toHaveAccessibleName('Mayan Numeral Stack');
+      expect(await page.locator('svg.mep-svg').evaluate((svg) => svg.textContent)).not.toMatch(/Top|tier/);
     });
 
     test('keeps Zoom in, Reset and the percentage in place at every zoom level', async ({ page }) => {

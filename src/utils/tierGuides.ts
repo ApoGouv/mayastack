@@ -54,6 +54,16 @@ export const PLACE_TIER_BAND_INSET = 2;
  */
 export const TIER_GUIDE_SIDE_INSET = 0.03;
 
+/**
+ * The tier count of a numeral: its tallest group's, the tiers the SVG is tall, as groups are
+ * aligned at the bottom. 0 for no groups.
+ *
+ * @param digitGroups - Each group's base-20 digits, highest place value first
+ */
+export function getTierCount(digitGroups: number[][]): number {
+  return Math.max(0, ...digitGroups.map((digits) => digits.length));
+}
+
 /** The numeral's logical size, as MayanRenderer gives its SVG (width, height and viewBox) */
 export function getNumeralSize(
   digitGroups: number[][],
@@ -62,7 +72,7 @@ export function getNumeralSize(
   const groups = digitGroups.length;
   return {
     width: groups > 0 ? widthPerGroup * groups + spacing * (groups - 1) : 0,
-    height: Math.max(0, ...digitGroups.map((digits) => digits.length)) * heightPerGlyphStack,
+    height: getTierCount(digitGroups) * heightPerGlyphStack,
   };
 }
 
@@ -103,7 +113,7 @@ export function getTierHairlines(digitGroups: number[][], layout: NumeralLayout)
 
   const { width: totalWidth } = getNumeralSize(digitGroups, layout);
   // The tallest group's tier count: the SVG is this many tiers tall
-  const maxTiers = Math.max(...digitGroups.map((digits) => digits.length));
+  const maxTiers = getTierCount(digitGroups);
 
   const lines: TierHairline[] = [];
   digitGroups.forEach((digits, groupIndex) => {
@@ -142,7 +152,7 @@ export function getPlaceTierBands(
   if (digitGroups.length === 0) return [];
 
   const { width: totalWidth, height: totalHeight } = getNumeralSize(digitGroups, layout);
-  const maxTiers = Math.max(...digitGroups.map((digits) => digits.length));
+  const maxTiers = getTierCount(digitGroups);
   const height = (heightPerGlyphStack - 2 * inset) / totalHeight;
 
   const bands: PlaceTierBand[] = [];

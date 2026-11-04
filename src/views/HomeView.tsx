@@ -16,8 +16,9 @@ import NumeralViewport from '@components/NumeralViewport';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
 import { PlaceTierGuides, TierHairlines } from '@components/TierGuides';
+import TierOrientation from '@components/TierOrientation';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { getNumeralSize, type NumeralLayout } from '@utils/tierGuides';
+import { getNumeralSize, getTierCount, type NumeralLayout } from '@utils/tierGuides';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 
 type DigitGroup = { label: string; digits: number[] };
@@ -130,9 +131,10 @@ export default function HomeView() {
   };
 
   // The viewer card's heading, the same with and without a result. Its icon (Layers, stacked
-  // tiers) differs from the base-20 card's (Functions, Σ for the positional sum)
+  // tiers) differs from the base-20 card's (Functions, Σ for the positional sum). It never wraps
+  // (it fits at 320 px), so the header cluster is never narrower than the whole heading
   const viewerHeading = (
-    <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
+    <h2 className="font-heading text-lg font-semibold flex items-center gap-2 whitespace-nowrap">
       <Layers className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
       Mayan Numeral Stack
     </h2>
@@ -183,7 +185,17 @@ export default function HomeView() {
                   label={mayanData.label}
                   resetKey={mayanData.key}
                   scrollerRef={viewerScrollerRef}
-                  header={viewerHeading}
+                  header={
+                    // The heading and the tier-direction indicator (UI-13, slice 5b), outside the
+                    // heading so its name is unchanged. The cluster wraps first: its basis is 0, so
+                    // the zoom controls go under it only where even the heading leaves no room
+                    // beside them, and otherwise it takes the rest of the row, with the indicator
+                    // beside the heading or under it. From the tallest group, also in Date mode
+                    <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                      {viewerHeading}
+                      <TierOrientation tiers={getTierCount(digitGroups)} />
+                    </div>
+                  }
                   underlay={
                     showPlaceTierGuides && (
                       <PlaceTierGuides

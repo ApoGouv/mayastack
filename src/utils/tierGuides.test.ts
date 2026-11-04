@@ -4,6 +4,7 @@ import {
   findPlaceTierBand,
   getNumeralSize,
   getPlaceTierBands,
+  getTierCount,
   getTierHairlines,
   PLACE_TIER_BAND_INSET,
   TIER_GUIDE_SIDE_INSET,
@@ -21,6 +22,34 @@ const across = (guide: { left: number; width: number }, width: number) => [
   units(guide.left, width),
   units(guide.left + guide.width, width),
 ];
+
+describe('getTierCount', () => {
+  it('counts the tiers of a single group', () => {
+    expect(getTierCount([[0]])).toBe(1);
+    expect(getTierCount([[7]])).toBe(1);
+    expect(getTierCount([toBase20(20n)])).toBe(2);
+    expect(getTierCount([toBase20(10n ** 128n - 1n)])).toBe(99);
+  });
+
+  it('gives the tallest group’s tier count, wherever it is', () => {
+    expect(getTierCount([[5, 1, 6], [10], [1, 5]])).toBe(3);
+    expect(getTierCount([[1, 5], [10], [5, 1, 6]])).toBe(3);
+    expect(getTierCount([[10], [5, 1, 6, 0], [1, 5]])).toBe(4);
+    // A Date-mode numeral: day 3, month 11 and year 2026, whose year is the tallest
+    expect(getTierCount([toBase20(3n), toBase20(11n), toBase20(2026n)])).toBe(3);
+  });
+
+  it('is 0 without groups, as the numeral then has no height', () => {
+    expect(getTierCount([])).toBe(0);
+    expect(getTierCount([[]])).toBe(0);
+  });
+
+  it('agrees with the numeral’s height', () => {
+    for (const groups of [[[7]], [[1, 5], [10], [5, 1, 6]], [toBase20(10n ** 128n - 1n)], []]) {
+      expect(getTierCount(groups) * DATE.heightPerGlyphStack).toBe(getNumeralSize(groups, DATE).height);
+    }
+  });
+});
 
 describe('getNumeralSize', () => {
   it('gives the size of the renderer’s SVG', () => {
