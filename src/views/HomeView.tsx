@@ -17,6 +17,7 @@ import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
 import { PlaceTierGuides, TierHairlines } from '@components/TierGuides';
 import TierOrientation from '@components/TierOrientation';
+import GlyphKey from '@components/GlyphKey';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { getNumeralSize, getTierCount, type NumeralLayout } from '@utils/tierGuides';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
@@ -196,6 +197,9 @@ export default function HomeView() {
                       <TierOrientation tiers={getTierCount(digitGroups)} />
                     </div>
                   }
+                  // The glyph key (UI-13, slice 5c), under the stage, outside the numeral and its
+                  // export; only with a result, like the stage it explains
+                  footer={<GlyphKey />}
                   underlay={
                     showPlaceTierGuides && (
                       <PlaceTierGuides

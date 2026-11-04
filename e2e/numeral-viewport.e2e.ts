@@ -784,6 +784,136 @@ test.describe('numeral scale and position', () => {
     });
   });
 
+  test.describe('glyph key (UI-13 slice 5c)', () => {
+    const key = (page: Page) => page.getByRole('list', { name: 'Glyph key' });
+    // The theme's muted text colour, the labels'; and its accent text colour, the glyphs'
+    const FG_MUTED = { light: 'rgb(79, 71, 56)', dark: 'rgb(194, 182, 157)' } as const;
+    const ACCENT_FG = { light: 'rgb(115, 92, 0)', dark: 'rgb(229, 193, 88)' } as const;
+
+    /** The key, its entries' glyphs and labels, and the stage and card around it, as laid out */
+    const keyLayout = (page: Page) =>
+      key(page).evaluate((list) => {
+        const box = (el: Element) => {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        };
+        const stage = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
+        const card = stage.closest('.rounded-lg')!;
+        return {
+          list: box(list),
+          stage: box(stage),
+          card: box(card),
+          entries: [...list.children].map((item) => {
+            const svg = item.querySelector('svg')!;
+            const glyph = (svg.firstElementChild as SVGGraphicsElement).getBBox();
+            const { x, y, width, height } = svg.viewBox.baseVal;
+            return {
+              item: box(item),
+              svg: box(svg),
+              label: box(item.querySelector('span')!),
+              text: item.textContent!,
+              viewBox: { x, y, width, height },
+              glyph: { x: glyph.x, y: glyph.y, width: glyph.width, height: glyph.height },
+              color: getComputedStyle(svg).color,
+              overflow: getComputedStyle(svg).overflow,
+              labelColor: getComputedStyle(item).color,
+              clipped: item.scrollWidth - item.clientWidth,
+            };
+          }),
+          pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      });
+
+    test('shows the actual glyphs at 0.6 of their size beside their labels, in one row under the stage, in both themes', async ({ page }) => {
+      // Seven screen sizes in each theme
+      test.slow();
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate((theme) => localStorage.setItem('mayastack:theme', theme), theme);
+        for (const screen of [...SCREENS, { width: 1024, height: 768, stage: 488 }]) {
+          const what = `${theme}, ${screen.width} × ${screen.height}`;
+          await page.setViewportSize(screen);
+          await page.goto('./');
+          await showNumber(page, FIFTY_DIGITS);
+          const { list, stage, card, entries, pageOverflow } = await keyLayout(page);
+
+          expect(entries.map((e) => e.text), what).toEqual(['Shell = 0', 'Dot = 1', 'Bar = 5']);
+          // 12 px under the stage, the last thing in the card, across its content box
+          expect(list.y - (stage.y + stage.height), what).toBeCloseTo(12, 0);
+          expect(card.y + card.height - (list.y + list.height), what).toBeCloseTo(16, 0);
+          expect(list.x, what).toBeCloseTo(card.x + 16, 0);
+          expect(list.width, what).toBeCloseTo(card.width - 32, 0);
+          // The stage's height is unchanged (slice 5d refines it); from lg, the card still fits the screen
+          expect(stage.height, what).toBeCloseTo(screen.stage, 0);
+          if (screen.width >= 1024) expect(card.y + card.height, what).toBeLessThanOrEqual(screen.height);
+          expect(pageOverflow, what).toBe(0);
+
+          // One row at every approved size, starting at the content edge, in line with the
+          // heading and the stage: it fits 256 px, the narrowest content box
+          const first = entries[0].item;
+          for (const e of entries) expect(e.item.y, what).toBeCloseTo(first.y, 0);
+          expect(first.x, what).toBeCloseTo(list.x, 1);
+          expect(first.x, what).toBeCloseTo(stage.x, 1);
+
+          for (const e of entries) {
+            const which = `${what}: ${e.text}`;
+            // The glyph fills its viewBox exactly, drawn at scale 1: the shell's outline with its
+            // stroke's outer half; the dot's circle; the bar's line, whose 6-unit stroke its box omits
+            if (e.text === 'Shell = 0') {
+              expect(e.viewBox.x, which).toBeCloseTo(e.glyph.x - 0.75, 3);
+              expect(e.viewBox.y, which).toBeCloseTo(e.glyph.y - 0.75, 3);
+              expect(e.viewBox.width, which).toBeCloseTo(e.glyph.width + 1.5, 3);
+              expect(e.viewBox.height, which).toBeCloseTo(e.glyph.height + 1.5, 3);
+            } else if (e.text === 'Dot = 1') {
+              expect(e.viewBox, which).toEqual(e.glyph);
+            } else {
+              expect([e.viewBox.x, e.viewBox.width, e.viewBox.height], which).toEqual([e.glyph.x, e.glyph.width, 6]);
+              expect(e.glyph.y, which).toBe(3);
+            }
+            // At 0.6 of the viewer's size at 100%, keeping the glyph's proportions
+            expect(e.svg.width, which).toBeCloseTo(e.viewBox.width * 0.6, 1);
+            expect(e.svg.height, which).toBeCloseTo(e.viewBox.height * 0.6, 1);
+            // Before its label, centred on it, nothing clipped; the glyph in the accent text
+            // colour, not clipped to its flush viewBox, and the label in the muted text colour
+            expect(Math.abs(e.svg.y + e.svg.height / 2 - (e.label.y + e.label.height / 2)), which).toBeLessThanOrEqual(0.5);
+            expect(e.svg.x + e.svg.width, which).toBeLessThanOrEqual(e.label.x);
+            expect(e.clipped, which).toBe(0);
+            expect(e.color, which).toBe(ACCENT_FG[theme]);
+            expect(e.overflow, which).toBe('visible');
+            expect(e.labelColor, which).toBe(FG_MUTED[theme]);
+          }
+        }
+      }
+    });
+
+    test('wraps whole entries, each glyph staying beside its label, where the key is narrow', async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 568 });
+      await showNumber(page, '26');
+      // Narrower than any screen makes it, to see how it wraps
+      await key(page).evaluate((list) => { list.style.width = '120px'; });
+      const { list, entries } = await keyLayout(page);
+
+      expect(new Set(entries.map((e) => Math.round(e.item.y))).size).toBeGreaterThan(1);
+      for (const e of entries) {
+        expect(Math.abs(e.svg.y + e.svg.height / 2 - (e.label.y + e.label.height / 2)), e.text).toBeLessThanOrEqual(0.5);
+        expect(e.svg.x + e.svg.width, e.text).toBeLessThanOrEqual(e.label.x);
+        expect(e.item.x, e.text).toBeGreaterThanOrEqual(list.x - 0.5);
+        expect(e.item.x + e.item.width, e.text).toBeLessThanOrEqual(list.x + list.width + 0.5);
+        expect(e.clipped, e.text).toBe(0);
+      }
+    });
+
+    test('is in Date mode too, outside the numeral’s SVG, and not shown without a result', async ({ page }) => {
+      await showDate(page);
+      await expect(key(page).getByRole('listitem')).toHaveText(['Shell = 0', 'Dot = 1', 'Bar = 5']);
+      expect(await key(page).evaluate((list) => list.closest('svg, [role="group"][aria-label="Numeral viewer"]'))).toBeNull();
+      expect(await page.locator('svg.mep-svg').evaluate((svg) => svg.textContent)).not.toMatch(/Shell|Dot|Bar/);
+
+      await page.getByRole('radio', { name: 'Number' }).check();
+      await page.getByLabel('Decimal integer').fill('');
+      await expect(key(page)).toHaveCount(0);
+    });
+  });
+
   test.describe('resizing the screen (UI-13 slice 4.1)', () => {
     /** Waits two frames: for scroll events and resize reports from what happened before */
     const settle = (page: Page) =>
@@ -950,6 +1080,22 @@ test.describe('export with the viewport', () => {
     const svg = after.data.toString('utf-8');
     expect(svg).toContain('width="350" height="7920" viewBox="0 0 350 7920"');
     expect(svg.match(/data-digit-index=/g)).toHaveLength(99);
+  });
+
+  // UI-13, slice 5c: the glyph key, on screen beside the numeral, is never exported
+  test('exports only the numeral’s own glyphs, at its own size, with the glyph key on screen', async ({ page }) => {
+    // 26 = 1 × 20¹ + 6 × 20⁰: two dots and a bar; the key draws one more dot, outside the SVG
+    await showNumber(page, '26');
+    const key = page.getByRole('list', { name: 'Glyph key' });
+    await expect(key).toBeVisible();
+    expect(await page.locator('svg.mep-svg circle').count()).toBe(2);
+    expect(await key.locator('circle').count()).toBe(1);
+
+    const svg = (await exportFile(page, 'svg')).data.toString('utf-8');
+    expect(svg).toContain('width="350" height="160" viewBox="0 0 350 160"');
+    expect(svg.match(/<circle/g)).toHaveLength(2);
+    expect(svg).not.toMatch(/Shell|Dot = |Bar = |Glyph key|<ul|<li/);
+    expect(pngSize((await exportFile(page, 'png')).data)).toEqual({ width: 350, height: 160 });
   });
 
   test('exports a complete, identical PNG at the original size before and after zooming', async ({ page }) => {

@@ -309,6 +309,68 @@ describe('HomeView numeral viewport', () => {
     });
   });
 
+  // UI-13, slice 5c: the glyph key under the stage
+  describe('glyph key', () => {
+    const key = () => screen.queryByRole('list', { name: 'Glyph key' });
+    const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+
+    it('lists the glyphs under the stage, in the viewer card, outside the numeral and its export', () => {
+      const { enter, numeralSvg } = renderHomeView();
+      for (const text of ['0', '26', '9'.repeat(128)]) {
+        enter(text);
+        const list = key()!;
+        expect(within(list).getAllByRole('listitem').map((item) => item.textContent), text).toEqual(['Shell = 0', 'Dot = 1', 'Bar = 5']);
+        // Directly under the stage, in the same card, never in the header row
+        expect(viewer().nextElementSibling, text).toBe(list);
+        expect(card('Mayan Numeral Stack').contains(list), text).toBe(true);
+        expect(screen.getByRole('group', { name: 'Zoom controls' }).parentElement!.contains(list), text).toBe(false);
+        // Outside the viewer and the numeral's SVG, the source of SVG and PNG export
+        expect(viewer().contains(list), text).toBe(false);
+        expect(numeralSvg().contains(list), text).toBe(false);
+        expect(list.closest('svg'), text).toBeNull();
+        expect(exportedMarkup(numeralSvg()), text).not.toMatch(/Shell|Dot|Bar|Glyph key/);
+      }
+    });
+
+    it('adds no glyphs to the numeral or its export', () => {
+      const { enter, numeralSvg } = renderHomeView();
+      // 26 = 1 × 20¹ + 6 × 20⁰: a dot, then a bar and a dot. The key draws one more dot, outside
+      enter('26');
+      const exported = exportedMarkup(numeralSvg());
+      expect(exported.match(/<circle/g)).toHaveLength(2);
+      expect(numeralSvg().querySelectorAll('circle')).toHaveLength(2);
+      expect(key()!.querySelectorAll('circle')).toHaveLength(1);
+      expect(exported).toContain('width="350" height="160" viewBox="0 0 350 160"');
+      // 0: the one shell, its five paths; the key's shell is outside the SVG
+      enter('0');
+      expect(numeralSvg().querySelectorAll('path')).toHaveLength(5);
+      expect(exportedMarkup(numeralSvg())).toContain('width="350" height="80" viewBox="0 0 350 80"');
+    });
+
+    it('stays in Date mode, and is not shown without a result', () => {
+      const { enter } = renderHomeView();
+      for (const text of ['', '12.5']) {
+        enter(text);
+        expect(key(), text).toBeNull();
+        expect(cardText('Mayan Numeral Stack'), text).not.toMatch(/Shell|Dot|Bar/);
+      }
+      fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+      expect(key()).toBeNull();
+      fireEvent.click(screen.getByLabelText('Date input'));
+      fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+      expect(viewer().nextElementSibling).toBe(key());
+      expect(within(key()!).getAllByRole('listitem')).toHaveLength(3);
+    });
+
+    it('is never focusable, so the viewer card’s tab order is unchanged', () => {
+      renderHomeView();
+      expect(key()!.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0);
+      const focusable = [...card('Mayan Numeral Stack').querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
+      expect(focusable.slice(0, 4).map((el) => el.getAttribute('aria-label') ?? el.textContent))
+        .toEqual(['Zoom out', 'Zoom in', 'Reset', 'Numeral viewer']);
+    });
+  });
+
   it('exports the same complete SVG before and after zooming and scrolling', () => {
     const { enter, numeralSvg } = renderHomeView();
     enter('9'.repeat(128));

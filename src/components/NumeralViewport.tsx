@@ -156,6 +156,11 @@ interface NumeralViewportProps {
    * zoom controls only.
    */
   header?: React.ReactNode;
+  /**
+   * Screen-only content under the stage, e.g. the glyph key: outside the scroller, so it never
+   * scrolls or zooms with the numeral
+   */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -179,7 +184,8 @@ interface NumeralViewportProps {
  * padding, and clipping only what is drawn outside it), which contains the zoom wrapper, the
  * slab: the underlay, the numeral and the overlay, in that order, with a screen-only edge and
  * shadow. The slab is centred both ways while it fits, and starts at the stage's padding where
- * it does not, so all of it stays reachable by scrolling.
+ * it does not, so all of it stays reachable by scrolling. The header row is above the scroller,
+ * and the footer, if any, under it.
  */
 const NumeralViewport: React.FC<NumeralViewportProps> = ({
   children,
@@ -190,6 +196,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   overlay,
   scrollerRef: givenScrollerRef,
   header,
+  footer,
 }) => {
   const ownScrollerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = givenScrollerRef ?? ownScrollerRef;
@@ -374,6 +381,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
           </div>
         </div>
       </div>
+      {footer}
     </div>
   );
 };

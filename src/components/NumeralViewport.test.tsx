@@ -12,7 +12,7 @@ afterEach(() => {
 const LABEL = 'Mayan numeral for 123: 2 stacked base-20 digits, highest place value at the top';
 
 /** Renders the viewport around a stand-in numeral and returns its parts */
-function renderViewport(props: { resetKey?: string; header?: ReactNode } = {}) {
+function renderViewport(props: { resetKey?: string; header?: ReactNode; footer?: ReactNode } = {}) {
   const result = render(
     <NumeralViewport numeralWidth={350} label={LABEL} {...props}>
       <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
@@ -292,6 +292,25 @@ describe('NumeralViewport', () => {
       expect(focusable).toEqual([zoomOut, zoomIn, reset, viewer]);
       for (const button of [zoomOut, zoomIn, reset]) expect(button.className).toContain('focus-ring');
     });
+  });
+
+  // UI-13, slice 5c: the footer, for the glyph key
+  it('shows the given footer under the viewer, outside it, and nothing there without one', () => {
+    const { viewer, image, container, rerender } = renderViewport({ footer: <p>Key</p> });
+    const footer = screen.getByText('Key');
+    const root = container.firstElementChild as HTMLElement;
+
+    expect(root.lastElementChild).toBe(footer);
+    expect(viewer.nextElementSibling).toBe(footer);
+    expect(viewer.contains(footer) || image.contains(footer)).toBe(false);
+
+    rerender(
+      <NumeralViewport numeralWidth={350} label={LABEL}>
+        <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
+      </NumeralViewport>
+    );
+    expect(screen.queryByText('Key')).toBeNull();
+    expect(root.lastElementChild).toBe(screen.getByRole('group', { name: 'Numeral viewer' }));
   });
 
   it('has no underlay or overlay unless given', () => {
