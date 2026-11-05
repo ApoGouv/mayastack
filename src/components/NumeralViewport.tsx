@@ -185,14 +185,16 @@ interface NumeralViewportProps {
  * the viewer's size keeps the intended view: the start, or the point the user scrolled to or a
  * zoom kept (see Anchor).
  *
- * Structure: the scroller (the focusable "Numeral viewer", the only scroll container: the
- * stage, as wide as the viewer card, of a fixed height for the screen's, in `canvas`, the
- * backdrop behind a translucent numeral, marked `data-numeral-backdrop`) contains the stage box
- * (`data-numeral-stage`: at least as large as the scroller, as large as the slab and its
- * padding, and clipping only what is drawn outside it), which contains the paper
- * (`data-numeral-paper`: the slab's surface, with the numeral's background, a fixed 12 px
- * padding that does not zoom, and a screen-only edge and shadow), which contains the zoom
- * wrapper: the underlay, the numeral and the overlay, in that order. The paper is centred both
+ * Structure: the stage (`data-numeral-stage`: the scroller, the focusable "Numeral viewer",
+ * the only scroll container, as wide as the viewer card, of a fixed height for the screen's, in
+ * `canvas`, the backdrop behind a translucent numeral, also marked `data-numeral-backdrop`)
+ * contains the stage content (`data-numeral-stage-content`: at least as large as the stage, as
+ * large as the paper and its padding, and clipping only what is drawn outside it), which
+ * contains the paper (`data-numeral-paper`: the visible surface, with the numeral's background,
+ * a fixed 12 px padding that does not zoom, and a screen-only edge and shadow), which contains
+ * the numeral image (`data-numeral-image`: the zoom wrapper, with `role="img"` and the label):
+ * the underlay, the numeral's SVG and the overlay, in that order. The SVG (`svg.mep-svg`) is
+ * deliberately given no attribute here: its markup is what is exported. The paper is centred both
  * ways while it fits, and starts at the stage's padding where it does not, so all of it stays
  * reachable by scrolling. Scroll positions are measured against the zoom wrapper, so neither
  * padding shifts the anchor. The header row is above the scroller, and the footer, if any,
@@ -368,30 +370,32 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
         // The stage: an inset panel in `canvas`, the backdrop the tier guides' colours assume
         // behind a translucent numeral (VIEWER_BACKDROP). Its height is the screen's, never the
         // numeral's, so it stays the same at every zoom level
+        data-numeral-stage
         data-numeral-backdrop
         className="numeral-stage-height overflow-auto rounded-md border border-line bg-canvas shadow-inner scrollbar-themed focus-ring"
       >
-        {/* The stage box: a flex box at least as large as the scroller and as large as the slab
-            and its padding, so the scroller's scrollable area always includes the whole slab.
-            It is not a scroll container; it clips only what is drawn outside it */}
-        <div data-numeral-stage className="flex w-max min-w-full min-h-full p-4 overflow-clip">
-          {/* The paper, the slab's visible surface: the numeral's background, painted once
-              across its fixed 12 px padding and the numeral (a screen-only rule in
+        {/* The stage content: a flex box at least as large as the stage and as large as the
+            paper and its padding, so the stage's scrollable area always includes the whole
+            paper. It is not a scroll container; it clips only what is drawn outside it */}
+        <div data-numeral-stage-content className="flex w-max min-w-full min-h-full p-4 overflow-clip">
+          {/* The paper, the visible surface around the numeral image: the numeral's background,
+              painted once across its fixed 12 px padding and the numeral (a screen-only rule in
               `src/index.css` makes the SVG's own background rectangle transparent inside it), and
               its edge and shadow, the page's, never part of the SVG. Automatic margins centre it
               both ways while it fits, and become 0 where it does not, so it then starts at the
-              stage box's padding instead of overflowing out of reach; it is never shrunk. Its
+              stage content's padding instead of overflowing out of reach; it is never shrunk. Its
               padding does not zoom, and is never exported */}
           <div
             data-numeral-paper
             className="m-auto shrink-0 p-3 shadow-sm ring-1 ring-line"
             style={{ backgroundColor: background }}
           >
-            {/* The zoom wrapper, one image for assistive technology instead of thousands of glyph
-                shapes, and the positioning context of the underlay and overlay. Its width is the
-                numeral's in CSS px at this zoom, never shrunk */}
+            {/* The numeral image, the zoom wrapper: one image for assistive technology instead of
+                thousands of glyph shapes, and the positioning context of the underlay and
+                overlay. Its width is the numeral's in CSS px at this zoom, never shrunk */}
             <div
               ref={numeralRef}
+              data-numeral-image
               role="img"
               aria-label={label}
               className="relative"

@@ -14,12 +14,11 @@ async function openWorkspace(page: Page, theme: Theme, width: number) {
 }
 
 /**
- * The viewer card: the nearest card around its heading, which is in the viewer's header row with
- * a result (UI-13, slice 5a) and directly in the card without one
+ * The viewer card, marked `data-viewer-card` (UI-13), around its heading, which is in the
+ * viewer's header row with a result (UI-13, slice 5a) and directly in the card without one
  */
 const viewerCard = (page: Page) =>
-  page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true })
-    .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+  page.locator('[data-viewer-card]').filter({ has: page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true }) });
 
 /** The workspace's four cards: input, base-20 representation, viewer and settings */
 function cards(page: Page) {

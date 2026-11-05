@@ -215,25 +215,46 @@ describe('NumeralViewport', () => {
     expect(viewer.scrollTop).toBe(0);
   });
 
-  it('has the scroller, the stage in canvas and the backdrop, then the stage box, the paper and the zoom wrapper', () => {
+  it('has the stage in canvas and the backdrop, then the stage content, the paper and the numeral image', () => {
     const { viewer, image } = renderViewport();
-    // The scroller is the only scroll container, and the backdrop behind a translucent numeral
+    // The stage is the scroller, the only scroll container, and the backdrop behind a
+    // translucent numeral. Changed deliberately in UI-13: it now carries data-numeral-stage
+    expect(viewer.hasAttribute('data-numeral-stage')).toBe(true);
     expect(viewer.hasAttribute('data-numeral-backdrop')).toBe(true);
     expect(viewer.className.split(' ')).toEqual(expect.arrayContaining(['overflow-auto', 'bg-canvas']));
     expect(document.querySelectorAll('[data-numeral-backdrop]')).toHaveLength(1);
-    // The stage box: the scroller's only child, holding the slab, padded, at least the scroller's size
-    const stage = viewer.firstElementChild as HTMLElement;
+    expect(document.querySelectorAll('[data-numeral-stage]')).toHaveLength(1);
+    // Its accessible role, name, description and focusability are unchanged
+    expect(viewer.getAttribute('role')).toBe('group');
+    expect(viewer.getAttribute('aria-label')).toBe('Numeral viewer');
+    expect(viewer.getAttribute('tabindex')).toBe('0');
+    expect(document.getElementById(viewer.getAttribute('aria-describedby')!)?.className).toBe('sr-only');
+    // The stage content: the stage's only child, holding the paper, padded, at least the stage's
+    // size (formerly marked data-numeral-stage)
+    const content = viewer.firstElementChild as HTMLElement;
     expect(viewer.children).toHaveLength(1);
-    expect(stage.hasAttribute('data-numeral-stage')).toBe(true);
-    expect(stage.className.split(' ')).toEqual(
+    expect(content.hasAttribute('data-numeral-stage-content')).toBe(true);
+    expect(content.hasAttribute('data-numeral-stage')).toBe(false);
+    expect(document.querySelectorAll('[data-numeral-stage-content]')).toHaveLength(1);
+    expect(content.className.split(' ')).toEqual(
       expect.arrayContaining(['flex', 'w-max', 'min-w-full', 'min-h-full', 'p-4', 'overflow-clip'])
     );
-    // Changed deliberately in UI-13: the paper between the stage box and the zoom wrapper
-    const paper = stage.firstElementChild as HTMLElement;
-    expect([...stage.children]).toEqual([paper]);
+    // Changed deliberately in UI-13: the paper between the stage content and the numeral image
+    const paper = content.firstElementChild as HTMLElement;
+    expect([...content.children]).toEqual([paper]);
     expect(paper.hasAttribute('data-numeral-paper')).toBe(true);
     expect([...paper.children]).toEqual([image]);
     expect(document.querySelectorAll('[data-numeral-paper]')).toHaveLength(1);
+    // The numeral image: the zoom wrapper, with its role and label unchanged
+    expect(image.hasAttribute('data-numeral-image')).toBe(true);
+    expect(document.querySelectorAll('[data-numeral-image]')).toHaveLength(1);
+    expect(image.getAttribute('role')).toBe('img');
+    expect(image.getAttribute('aria-label')).toBe(LABEL);
+    expect(image.className).toBe('relative');
+    // The numeral given as children, the exported SVG in the app, is passed through unmarked
+    const numeral = screen.getByTestId('numeral');
+    expect(numeral.parentElement).toBe(image);
+    expect([...numeral.attributes].map((a) => a.name).sort()).toEqual(['data-testid', 'height', 'viewBox', 'width'].sort());
   });
 
   it('gives the paper the background, the 12 px padding, the edge and the shadow, and the zoom wrapper none of them (UI-13)', () => {

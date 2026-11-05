@@ -155,6 +155,22 @@ describe('HomeView numeral viewport', () => {
     ).toBeTruthy();
   });
 
+  it('marks the viewer card, and only it, and leaves the exported SVG without the viewer’s DOM names (UI-13)', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    // Marked with or without a result, as the card is always there
+    const marked = () => [...document.querySelectorAll<HTMLElement>('[data-viewer-card]')];
+    expect(marked()).toEqual([card('Mayan Numeral Stack')]);
+    enter('8000');
+    expect(marked()).toEqual([card('Mayan Numeral Stack')]);
+    const [viewerCard] = marked();
+    expect(viewerCard.contains(screen.getByRole('group', { name: 'Numeral viewer' }))).toBe(true);
+    expect(viewerCard.contains(screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' }))).toBe(false);
+    // The SVG artwork keeps its own markup: none of the viewer's data attributes, nor any ARIA
+    const svg = numeralSvg();
+    expect(svg.parentElement!.hasAttribute('data-numeral-image')).toBe(true);
+    expect([...svg.attributes].map((a) => a.name).filter((name) => name.startsWith('data-') || name.startsWith('aria-') || name === 'role')).toEqual([]);
+  });
+
   it('describes the largest number by its length, inside the bounded viewer', () => {
     const { enter } = renderHomeView();
     enter('9'.repeat(128));
@@ -996,9 +1012,11 @@ describe('HomeView tier guides', () => {
     enter('8000'); // 1 × 20³: 4 tiers, 350 × 320 units
     fireEvent.click(bandsSwitch());
     const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
-    // The zoom wrapper sits in the paper, in the stage box (UI-13), not directly in the viewer
+    // The numeral image sits in the paper, in the stage content (UI-13), not directly in the viewer
+    expect(image.hasAttribute('data-numeral-image')).toBe(true);
     expect(image.parentElement!.hasAttribute('data-numeral-paper')).toBe(true);
-    expect(image.parentElement!.parentElement!.hasAttribute('data-numeral-stage')).toBe(true);
+    expect(image.parentElement!.parentElement!.hasAttribute('data-numeral-stage-content')).toBe(true);
+    expect(viewer().hasAttribute('data-numeral-stage')).toBe(true);
     expect(image.parentElement!.parentElement!.parentElement).toBe(viewer());
 
     // happy-dom lays nothing out: the wrapper is 350 × 320 px at (0, top)

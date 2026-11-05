@@ -30,12 +30,11 @@ function visibleStacks(page: Page) {
 const zoomLevel = (page: Page) => page.getByRole('group', { name: 'Zoom controls' }).locator('[aria-live]');
 
 /**
- * The viewer card: the nearest card around its heading, which is in the viewer's header row with
- * a result (UI-13, slice 5a) and directly in the card without one
+ * The viewer card, marked `data-viewer-card` (UI-13), around its heading, which is in the
+ * viewer's header row with a result (UI-13, slice 5a) and directly in the card without one
  */
 const viewerCard = (page: Page) =>
-  page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true })
-    .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+  page.locator('[data-viewer-card]').filter({ has: page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true }) });
 
 /** Exports through the real Export menu and returns the downloaded file */
 async function exportFile(page: Page, format: 'svg' | 'png') {
@@ -152,7 +151,7 @@ test.describe('bounded numeral viewport', () => {
     await expect(zoomLevel(page)).toHaveText('150%');
   });
 
-  test('keeps the stage’s structure: the scroller, a padded, clipping stage box, the paper, then the zoom wrapper', async ({ page }) => {
+  test('keeps the stage’s structure: the scroller, a padded, clipping stage content, the paper, then the numeral image', async ({ page }) => {
     // Changed deliberately in UI-13: the stage spans the viewer card's content (card less its
     // 16 px padding at each side) instead of 384 px, and its height is the screen's
     for (const [width, height] of [[375, 900], [768, 900], [1280, 900]] as const) {
@@ -164,30 +163,40 @@ test.describe('bounded numeral viewport', () => {
       expect(box.height, `${width}px`).toBe(width >= 1024 ? 620 : 480);
       expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px`).toBeLessThanOrEqual(width);
       const structure = await viewer.evaluate((scroller) => {
-        const stage = scroller.firstElementChild as HTMLElement;
-        const style = getComputedStyle(stage);
-        const s = stage.getBoundingClientRect();
-        // Changed deliberately in UI-13: the paper, with its 12 px padding, between the stage box and the zoom wrapper
-        const paper = stage.firstElementChild as HTMLElement;
+        const content = scroller.firstElementChild as HTMLElement;
+        const style = getComputedStyle(content);
+        const s = content.getBoundingClientRect();
+        // Changed deliberately in UI-13: the paper, with its 12 px padding, between the stage content and the numeral image
+        const paper = content.firstElementChild as HTMLElement;
+        const image = paper.firstElementChild as HTMLElement;
+        const svg = image.querySelector('svg.mep-svg')!;
         return {
+          // Changed deliberately in UI-13: the scroller is the stage, and its child the stage content
+          stage: scroller.hasAttribute('data-numeral-stage'),
+          viewerCard: scroller.closest('[data-viewer-card]') !== null,
           children: scroller.children.length,
-          stage: stage.hasAttribute('data-numeral-stage'),
+          content: content.hasAttribute('data-numeral-stage-content'),
           overflow: style.overflow,
           padding: style.padding,
-          // The stage box spans the whole scrollable area, and at least the scroller
+          // The stage content spans the whole scrollable area, and at least the scroller
           covers: s.width === scroller.scrollWidth && s.height === scroller.scrollHeight
             && s.width >= scroller.clientWidth && s.height >= scroller.clientHeight,
-          stageChildren: stage.children.length,
+          contentChildren: content.children.length,
           paper: paper.hasAttribute('data-numeral-paper'),
           paperPadding: getComputedStyle(paper).padding,
           paperChildren: paper.children.length,
-          wrapper: paper.firstElementChild!.getAttribute('role'),
+          image: image.hasAttribute('data-numeral-image'),
+          wrapper: image.getAttribute('role'),
+          // The SVG artwork, the source of the exports, has none of the viewer's DOM names
+          svgParent: svg.parentElement === image,
+          svgMarked: [...svg.attributes].some((a) => a.name.startsWith('data-') || a.name.startsWith('aria-') || a.name === 'role'),
           scrollers: [...scroller.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)).length,
         };
       });
       expect(structure, `${width}px`).toEqual({
-        children: 1, stage: true, overflow: 'clip', padding: '16px', covers: true,
-        stageChildren: 1, paper: true, paperPadding: '12px', paperChildren: 1, wrapper: 'img', scrollers: 0,
+        stage: true, viewerCard: true, children: 1, content: true, overflow: 'clip', padding: '16px', covers: true,
+        contentChildren: 1, paper: true, paperPadding: '12px', paperChildren: 1, image: true, wrapper: 'img',
+        svgParent: true, svgMarked: false, scrollers: 0,
       });
     }
   });
@@ -807,7 +816,7 @@ test.describe('numeral scale and position', () => {
           return { x, y, width, height };
         };
         const stage = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
-        const card = stage.closest('.rounded-lg')!;
+        const card = stage.closest('[data-viewer-card]')!;
         return {
           list: box(list),
           stage: box(stage),
@@ -2229,7 +2238,7 @@ test.describe('screen-only tier guides', () => {
           return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
         };
         const paper = document.querySelector('[data-numeral-paper]')!;
-        const wrapper = paper.querySelector(':scope > [role="img"]')!;
+        const wrapper = paper.querySelector(':scope > [data-numeral-image]')!;
         return { paper: rect(paper), wrapper: rect(wrapper), svg: rect(wrapper.querySelector('svg.mep-svg')!), dpr: devicePixelRatio };
       });
 

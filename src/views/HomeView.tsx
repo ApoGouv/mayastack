@@ -175,7 +175,7 @@ export default function HomeView() {
         </section>
 
         {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result */}
-        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
+        <div data-viewer-card className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
           {/* The heading leads the viewer's header row, beside its zoom controls; without a result,
               it stands alone */}
           {hasValidinput && mayanData ? (
