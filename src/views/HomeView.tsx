@@ -21,6 +21,7 @@ import GlyphKey from '@components/GlyphKey';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { getNumeralSize, getTierCount, type NumeralLayout } from '@utils/tierGuides';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
+import { rgbaToCss } from '@utils/colors';
 
 type DigitGroup = { label: string; digits: number[] };
 
@@ -183,6 +184,9 @@ export default function HomeView() {
               {(ref) =>
                 <NumeralViewport
                   numeralWidth={numeralWidth}
+                  // The numeral's background, as MayanRenderer fills it: the viewer's paper
+                  // paints it on screen, once, around and behind the numeral
+                  background={rgbaToCss(backgroundColor)}
                   label={mayanData.label}
                   resetKey={mayanData.key}
                   scrollerRef={viewerScrollerRef}
@@ -205,7 +209,6 @@ export default function HomeView() {
                       <PlaceTierGuides
                         digitGroups={digitGroups}
                         layout={numeralLayout}
-                        background={backgroundColor}
                         colors={guideColors}
                         scrollerRef={viewerScrollerRef}
                       />

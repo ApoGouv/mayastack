@@ -977,10 +977,12 @@ describe('HomeView tier guides', () => {
     expect(bands()).toHaveLength(4);
     expect(hairlines()).toHaveLength(0);
     expect(lineLayer()).toBeNull();
-    // Behind the SVG, painting its background, which the SVG itself still has for export
+    // Behind the SVG. Changed deliberately in UI-13: the viewer's paper paints the background,
+    // once, not the cards' layer; the SVG itself still has it for export
     expect(cardLayer()!.nextElementSibling).toBe(numeralSvg());
     expect(cardLayer()!.hasAttribute('data-numeral-underlay')).toBe(true);
-    expect(cardLayer()!.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+    expect(cardLayer()!.style.backgroundColor).toBe('');
+    expect(viewer().querySelector<HTMLElement>('[data-numeral-paper]')!.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
     expect(numeralSvg().querySelector('rect')!.getAttribute('fill')).toBe('rgba(255, 255, 255, 1)');
     expect(numeralSvg().contains(cardLayer())).toBe(false);
     expect(viewer().querySelectorAll('svg')).toHaveLength(1);
@@ -994,9 +996,10 @@ describe('HomeView tier guides', () => {
     enter('8000'); // 1 × 20³: 4 tiers, 350 × 320 units
     fireEvent.click(bandsSwitch());
     const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
-    // The zoom wrapper sits in the stage box, not directly in the viewer
-    expect(image.parentElement!.hasAttribute('data-numeral-stage')).toBe(true);
-    expect(image.parentElement!.parentElement).toBe(viewer());
+    // The zoom wrapper sits in the paper, in the stage box (UI-13), not directly in the viewer
+    expect(image.parentElement!.hasAttribute('data-numeral-paper')).toBe(true);
+    expect(image.parentElement!.parentElement!.hasAttribute('data-numeral-stage')).toBe(true);
+    expect(image.parentElement!.parentElement!.parentElement).toBe(viewer());
 
     // happy-dom lays nothing out: the wrapper is 350 × 320 px at (0, top)
     let top = 0;
@@ -1069,6 +1072,40 @@ describe('HomeView tier guides', () => {
     expect(off).not.toMatch(/tier-(guide|band|hairline)|underlay/);
   });
 
+  it('paints the chosen background once, on the viewer’s paper, with the guides on or off, and exports the SVG unchanged (UI-13)', () => {
+    // A translucent background: painted once, by the paper alone
+    const background = { r: 20, g: 40, b: 90, a: 0.35 };
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000');
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    const paper = image.parentElement!;
+    const css = rgbaToCss(background);
+    const painted = () =>
+      [...viewer().querySelectorAll<HTMLElement>('*')].filter((el) => el.style.backgroundColor === css);
+
+    for (const [bandsOn, hairlinesOn] of [[false, false], [true, false], [true, true], [false, true]]) {
+      if ((bandsSwitch().getAttribute('aria-checked') === 'true') !== bandsOn) fireEvent.click(bandsSwitch());
+      if ((hairlinesSwitch().getAttribute('aria-checked') === 'true') !== hairlinesOn) fireEvent.click(hairlinesSwitch());
+      const what = `cards ${bandsOn}, hairlines ${hairlinesOn}`;
+      expect(paper.hasAttribute('data-numeral-paper'), what).toBe(true);
+      // The paper alone, in the viewer, has the background: not the cards' layer, the zoom wrapper or the scroller
+      expect(painted(), what).toEqual([paper]);
+      expect(image.style.backgroundColor, what).toBe('');
+      // The SVG keeps its own background rectangle for export, outside the paper's markup
+      expect(numeralSvg().firstElementChild!.getAttribute('fill'), what).toBe(css);
+      expect(paper.contains(numeralSvg()), what).toBe(true);
+    }
+
+    // The export is the SVG's markup alone: the same with the guides on or off, without the paper
+    const exported = exportedMarkup(numeralSvg());
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect(exportedMarkup(numeralSvg())).toBe(exported);
+    expect(exported).not.toMatch(/numeral-paper|ring-|shadow|padding/);
+    expect(exported).toContain(`fill="${css}"`);
+  });
+
   it('colours both guides from the viewer background, never from the glyph colour', () => {
     localStorage.setItem('mayastack:showPlaceTierGuides', 'true');
     localStorage.setItem('mayastack:showTierHairlines', 'true');
@@ -1085,7 +1122,9 @@ describe('HomeView tier guides', () => {
       const { enter } = renderHomeView();
       enter('400');
       expect(colours()).toEqual({ line: rgbaToCss(expected.hairline), card: rgbaToCss(expected.card) });
-      expect(cardLayer()!.style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+      // Changed deliberately in UI-13: the paper paints the background, not the cards' layer
+      expect(viewer().querySelector<HTMLElement>('[data-numeral-paper]')!.style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+      expect(cardLayer()!.style.backgroundColor).toBe('');
       cleanup();
     }
 
@@ -1121,7 +1160,8 @@ describe('HomeView tier guides', () => {
       return hairlines().map((line) => ({
         group: Number(line.dataset.groupIndex),
         y: round((parseFloat(line.style.top) / 100) * height),
-        x: range(line.style.left, line.style.width, width),
+        // From the left edge to the right edge, given as their distances from the numeral's sides
+        x: [round((parseFloat(line.style.left) / 100) * width), round((1 - parseFloat(line.style.right) / 100) * width)],
       }));
     };
     /** Each band in SVG units */
@@ -1131,7 +1171,8 @@ describe('HomeView tier guides', () => {
         group: Number(band.dataset.groupIndex),
         exponent: Number(band.dataset.exponent),
         y: range(band.style.top, band.style.height, height),
-        x: range(band.style.left, band.style.width, width),
+        // From the left edge to the right edge, given as their distances from the numeral's sides
+        x: [round((parseFloat(band.style.left) / 100) * width), round((1 - parseFloat(band.style.right) / 100) * width)],
       }));
     };
     /** The exponents the SVG renders: one per digit stack */
@@ -1140,16 +1181,18 @@ describe('HomeView tier guides', () => {
 
     // Number mode, 3 tiers in 240 units: boundaries 80 and 160 units down, across all 350 units
     enter('800'); // 2 × 20² + 0 × 20 + 0
-    // Both 3% of the group's width in from each side: 10.5 of 350 units
+    // The hairlines across the whole numeral, as the bands. Changed deliberately in UI-13, from
+    // 3% of the group's width in from each side (10.5 of 350 units)
     expect(hairlinesInSvgUnits()).toEqual([
-      { group: 0, y: 160, x: [10.5, 339.5] },
-      { group: 0, y: 80, x: [10.5, 339.5] },
+      { group: 0, y: 160, x: [0, 350] },
+      { group: 0, y: 80, x: [0, 350] },
     ]);
-    // One band per rendered tier, each its 80-unit cell less 2 units at each end
+    // One band per rendered tier, each its 80-unit cell less 2 units at each end. Changed
+    // deliberately in UI-13: across the whole numeral, with no side inset
     expect(bandsInSvgUnits()).toEqual([
-      { group: 0, exponent: 0, y: [162, 238], x: [10.5, 339.5] },
-      { group: 0, exponent: 1, y: [82, 158], x: [10.5, 339.5] },
-      { group: 0, exponent: 2, y: [2, 78], x: [10.5, 339.5] },
+      { group: 0, exponent: 0, y: [162, 238], x: [0, 350] },
+      { group: 0, exponent: 1, y: [82, 158], x: [0, 350] },
+      { group: 0, exponent: 2, y: [2, 78], x: [0, 350] },
     ]);
     expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
 
@@ -1158,20 +1201,22 @@ describe('HomeView tier guides', () => {
     fireEvent.click(screen.getByLabelText('Date input'));
     fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 25th, \d{4}$/ })[0]);
     expect(numeralSvg().getAttribute('viewBox')).toBe('0 0 350 240');
-    // 3 of each group's 100 units in from each side
+    // The hairlines across each group's whole 100 units, as its bands, never over the spacing
+    // between groups (changed deliberately in UI-13, from 3 units in at each side)
     expect(hairlinesInSvgUnits()).toEqual([
-      { group: 0, y: 160, x: [3, 97] },
-      { group: 2, y: 160, x: [253, 347] },
-      { group: 2, y: 80, x: [253, 347] },
+      { group: 0, y: 160, x: [0, 100] },
+      { group: 2, y: 160, x: [250, 350] },
+      { group: 2, y: 80, x: [250, 350] },
     ]);
-    // Bands for each group's own tiers only: nothing above the day's 2 tiers or the month's 1
+    // Bands for each group's own tiers only: nothing above the day's 2 tiers or the month's 1,
+    // each across its group's whole 100 units (UI-13), never over the spacing between groups
     expect(bandsInSvgUnits()).toEqual([
-      { group: 0, exponent: 0, y: [162, 238], x: [3, 97] },
-      { group: 0, exponent: 1, y: [82, 158], x: [3, 97] },
-      { group: 1, exponent: 0, y: [162, 238], x: [128, 222] },
-      { group: 2, exponent: 0, y: [162, 238], x: [253, 347] },
-      { group: 2, exponent: 1, y: [82, 158], x: [253, 347] },
-      { group: 2, exponent: 2, y: [2, 78], x: [253, 347] },
+      { group: 0, exponent: 0, y: [162, 238], x: [0, 100] },
+      { group: 0, exponent: 1, y: [82, 158], x: [0, 100] },
+      { group: 1, exponent: 0, y: [162, 238], x: [125, 225] },
+      { group: 2, exponent: 0, y: [162, 238], x: [250, 350] },
+      { group: 2, exponent: 1, y: [82, 158], x: [250, 350] },
+      { group: 2, exponent: 2, y: [2, 78], x: [250, 350] },
     ]);
     expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
   });

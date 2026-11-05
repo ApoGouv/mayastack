@@ -209,15 +209,19 @@
   color: #000000;
 }
 
+/* The viewer's paper (UI-13): it paints the numeral's background once, across its padding and
+   behind the numeral, so on screen the SVG's own background rectangle (always its first child)
+   is transparent, and a translucent background is never composited twice. Only inside the
+   paper: page styles never reach an export, which serializes the SVG's markup, so the exported
+   artwork, background included, is unchanged. */
+[data-numeral-paper] svg.mep-svg > rect:first-child {
+  fill: transparent;
+}
+
 /* Screen-only Place Tier Guides (UI-09): while their layer precedes the numeral's SVG in the
-   viewer, the layer paints the background and the cards, and the SVG is drawn over it with its
-   own background rectangle (always its first child) transparent. Page styles never reach an
-   export, which serializes the SVG's markup, so the exported artwork is unchanged. */
+   viewer, the SVG is lifted above it, so the glyphs and the grid are drawn over the cards. */
 [data-numeral-underlay] ~ svg.mep-svg {
   position: relative;
-}
-[data-numeral-underlay] ~ svg.mep-svg > rect:first-child {
-  fill: transparent;
 }
 
 

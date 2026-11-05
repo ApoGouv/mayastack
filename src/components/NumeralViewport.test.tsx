@@ -10,11 +10,13 @@ afterEach(() => {
 });
 
 const LABEL = 'Mayan numeral for 123: 2 stacked base-20 digits, highest place value at the top';
+/** A translucent numeral background, as a CSS colour */
+const BACKGROUND = 'rgba(20, 40, 90, 0.5)';
 
 /** Renders the viewport around a stand-in numeral and returns its parts */
 function renderViewport(props: { resetKey?: string; header?: ReactNode; footer?: ReactNode } = {}) {
   const result = render(
-    <NumeralViewport numeralWidth={350} label={LABEL} {...props}>
+    <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} {...props}>
       <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
     </NumeralViewport>
   );
@@ -66,8 +68,10 @@ describe('NumeralViewport', () => {
 
   it('shows the numeral at 1 CSS px per SVG unit at 100%, scaled exactly at every zoom level, and centred', () => {
     const { zoomIn, zoomOut, image, zoomText } = renderViewport();
-    // Its own width in CSS px, never a share of the viewer's, never shrunk, centred both ways
-    expect(image.className.split(' ')).toEqual(expect.arrayContaining(['relative', 'm-auto', 'shrink-0']));
+    // Its own width in CSS px, never a share of the viewer's; its paper (UI-13), around it, is
+    // never shrunk and is centred both ways
+    expect(image.className.split(' ')).toContain('relative');
+    expect(image.parentElement!.className.split(' ')).toEqual(expect.arrayContaining(['m-auto', 'shrink-0']));
     for (let i = 0; i < 3; i++) fireEvent.click(zoomOut);
     const widths: Record<string, string> = {};
     for (let i = 0; i < 8; i++) {
@@ -165,7 +169,7 @@ describe('NumeralViewport', () => {
 
   it('places an overlay after the numeral, in the zoom wrapper, which is its positioning context', () => {
     render(
-      <NumeralViewport numeralWidth={350} label={LABEL} overlay={<div data-testid="overlay" />}>
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} overlay={<div data-testid="overlay" />}>
         <svg data-testid="numeral" />
       </NumeralViewport>
     );
@@ -181,7 +185,7 @@ describe('NumeralViewport', () => {
 
   it('places an underlay before the numeral, in the zoom wrapper, which zooms it with the numeral', () => {
     render(
-      <NumeralViewport numeralWidth={350} label={LABEL} underlay={<div data-testid="underlay" />} overlay={<div data-testid="overlay" />}>
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} underlay={<div data-testid="underlay" />} overlay={<div data-testid="overlay" />}>
         <svg data-testid="numeral" />
       </NumeralViewport>
     );
@@ -198,7 +202,7 @@ describe('NumeralViewport', () => {
   it('sets a scroller ref it is given to the viewer, and still scrolls through it', () => {
     const scrollerRef = createRef<HTMLDivElement>();
     render(
-      <NumeralViewport numeralWidth={350} label={LABEL} scrollerRef={scrollerRef}>
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} scrollerRef={scrollerRef}>
         <svg data-testid="numeral" />
       </NumeralViewport>
     );
@@ -211,7 +215,7 @@ describe('NumeralViewport', () => {
     expect(viewer.scrollTop).toBe(0);
   });
 
-  it('has the scroller, the stage in canvas and the backdrop, then the stage box, then the slab', () => {
+  it('has the scroller, the stage in canvas and the backdrop, then the stage box, the paper and the zoom wrapper', () => {
     const { viewer, image } = renderViewport();
     // The scroller is the only scroll container, and the backdrop behind a translucent numeral
     expect(viewer.hasAttribute('data-numeral-backdrop')).toBe(true);
@@ -224,7 +228,54 @@ describe('NumeralViewport', () => {
     expect(stage.className.split(' ')).toEqual(
       expect.arrayContaining(['flex', 'w-max', 'min-w-full', 'min-h-full', 'p-4', 'overflow-clip'])
     );
-    expect([...stage.children]).toEqual([image]);
+    // Changed deliberately in UI-13: the paper between the stage box and the zoom wrapper
+    const paper = stage.firstElementChild as HTMLElement;
+    expect([...stage.children]).toEqual([paper]);
+    expect(paper.hasAttribute('data-numeral-paper')).toBe(true);
+    expect([...paper.children]).toEqual([image]);
+    expect(document.querySelectorAll('[data-numeral-paper]')).toHaveLength(1);
+  });
+
+  it('gives the paper the background, the 12 px padding, the edge and the shadow, and the zoom wrapper none of them (UI-13)', () => {
+    const { image, zoomIn, zoomOut } = renderViewport();
+    const paper = image.parentElement!;
+    const classes = (el: HTMLElement) => el.className.split(' ');
+
+    // The paper: centred both ways while it fits, never shrunk, 12 px of padding on all four
+    // sides (Tailwind's p-3), the page's edge and shadow, and the background it is given, alpha
+    // included, painted once across the padding and behind the numeral
+    expect(classes(paper)).toEqual(expect.arrayContaining(['m-auto', 'shrink-0', 'p-3', 'ring-1', 'ring-line', 'shadow-sm']));
+    expect(classes(paper).filter((c) => /^p[xytrblse]?-/.test(c))).toEqual(['p-3']);
+    expect(paper.style.backgroundColor).toBe(BACKGROUND);
+    expect(paper.getAttribute('role')).toBeNull();
+    expect(paper.hasAttribute('aria-label')).toBe(false);
+
+    // The zoom wrapper keeps the image role and name, its width and its positioning context,
+    // with no padding, background, edge or shadow of its own
+    expect(image.getAttribute('aria-label')).toBe(LABEL);
+    expect(classes(image)).toEqual(['relative']);
+    expect(image.style.backgroundColor).toBe('');
+    expect(image.style.width).toBe('350px');
+
+    // The padding does not zoom: only the wrapper's width changes
+    for (const [button, width] of [[zoomIn, '525px'], [zoomOut, '350px'], [zoomOut, '262.5px']] as const) {
+      fireEvent.click(button);
+      expect(image.style.width).toBe(width);
+      expect(image.parentElement).toBe(paper);
+      expect(classes(paper).filter((c) => /^p[xytrblse]?-/.test(c))).toEqual(['p-3']);
+      expect(paper.style.padding).toBe('');
+      expect(paper.style.backgroundColor).toBe(BACKGROUND);
+    }
+  });
+
+  it('paints the background it is given, also when it changes', () => {
+    const { image, rerender } = renderViewport();
+    rerender(
+      <NumeralViewport numeralWidth={350} background="rgba(0, 0, 0, 0)" label={LABEL}>
+        <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
+      </NumeralViewport>
+    );
+    expect(image.parentElement!.style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
   });
 
   it('spans the viewer card’s width, with no canvas surround of its own (changed deliberately in UI-13)', () => {
@@ -305,7 +356,7 @@ describe('NumeralViewport', () => {
     expect(viewer.contains(footer) || image.contains(footer)).toBe(false);
 
     rerender(
-      <NumeralViewport numeralWidth={350} label={LABEL}>
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL}>
         <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
       </NumeralViewport>
     );
@@ -323,13 +374,16 @@ describe('NumeralViewport', () => {
 
     viewer.scrollTop = 500;
     rerender(
-      <NumeralViewport numeralWidth={350} label={LABEL} resetKey="b">
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} resetKey="b">
         <svg data-testid="numeral" />
       </NumeralViewport>
     );
     expect(viewer.scrollTop).toBe(0);
   });
 });
+
+/** The zoom wrapper's distance from the stage box's edge: its 16 px padding and the paper's 12 px */
+const SLAB_INSET = 16 + 12;
 
 /** A ResizeObserver whose reports the test sends, as happy-dom's never reports */
 class FakeResizeObserver {
@@ -357,8 +411,9 @@ class FakeResizeObserver {
 
 /**
  * The viewport around the 350 × 160 stand-in numeral, with the layout a browser would give it,
- * which happy-dom does not: the scroller's client size; the stage box's 16 px padding, with the
- * slab centred both ways while it fits; scroll positions clamped to the scrollable area at once
+ * which happy-dom does not: the scroller's client size; the stage box's 16 px padding and the
+ * paper's 12 px around the zoom wrapper (SLAB_INSET at each side), with the slab centred both ways
+ * while it fits; scroll positions clamped to the scrollable area at once
  * (also when the scroller resizes) and rounded to device pixels; and scroll events dispatched only
  * when the test says, since browsers dispatch them later than the scrolling.
  */
@@ -384,7 +439,7 @@ function renderLaidOut({
     const w = parseFloat(image.style.width);
     return { w, h: (w * 160) / 350, zoom: w / 350 };
   };
-  const content = () => ({ w: Math.max(s.width, slab().w + 32), h: Math.max(s.height, slab().h + 32) });
+  const content = () => ({ w: Math.max(s.width, slab().w + 2 * SLAB_INSET), h: Math.max(s.height, slab().h + 2 * SLAB_INSET) });
   const round = (value: number) => Math.round(value * pixelRatio) / pixelRatio;
   const clamp = (value: number, max: number) => {
     const clamped = Math.min(Math.max(value, 0), Math.max(max, 0));
@@ -556,18 +611,19 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
   it('zooms around the point it shows, also where a resize clamped the intended one, which the zoom then replaces', () => {
     const v = renderLaidOut({ width: 300, height: 200 });
     for (let i = 0; i < 3; i++) fireEvent.click(v.zoomIn); // 300%
-    // The point (230, 100) at the centre: 16 px of padding + 230 × 3 − 150 px, and likewise down
-    v.userScroll(556, 216);
+    // The point (230, 100) at the centre: 28 px of padding (the stage's 16 and the paper's 12)
+    // + 230 × 3 − 150 px, and likewise down
+    v.userScroll(568, 228);
     const point = v.centre();
     expect(point.x).toBeCloseTo(230, 5);
     expect(point.y).toBeCloseTo(100, 5);
-    // At 300% a 900 × 450 viewer cannot scroll that far (its centre reaches x ≈ 205, y ≈ 90)
+    // At 300% a 900 × 450 viewer cannot scroll that far (its centre reaches x ≈ 209, y ≈ 94)
     v.resize(900, 450);
     v.report();
     const shown = v.centre();
     expect(v.offBy(point)).toBeGreaterThan(10);
 
-    // At 400% the same viewer could show the intended point (x up to ≈ 241, y up to ≈ 107), but
+    // At 400% the same viewer could show the intended point (x up to ≈ 244, y up to ≈ 110), but
     // zooming keeps the point the user sees in place, as approved for UI-13
     fireEvent.click(v.zoomIn);
     expect(v.zoomText()).toContain('400%');

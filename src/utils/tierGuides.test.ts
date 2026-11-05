@@ -7,7 +7,6 @@ import {
   getTierCount,
   getTierHairlines,
   PLACE_TIER_BAND_INSET,
-  TIER_GUIDE_SIDE_INSET,
   type NumeralLayout,
 } from './tierGuides';
 
@@ -64,29 +63,36 @@ describe('getNumeralSize', () => {
   });
 });
 
-describe('the guides’ side inset', () => {
-  it('leaves 3% of the group’s width clear at each side, the guides centred in it', () => {
-    expect(TIER_GUIDE_SIDE_INSET).toBe(0.03);
-    // Number mode: 10.5 of 350 units at each side
-    expect(across(getTierHairlines([[1, 0]], NUMBER)[0], 350)).toEqual([10.5, 339.5]);
-    expect(across(getPlaceTierBands([[1, 0]], NUMBER)[0], 350)).toEqual([10.5, 339.5]);
-  });
-
-  it('is the same for the hairlines and the bands of every group', () => {
+// Changed deliberately in UI-13: the viewer's paper gives the numeral its margin, so neither the
+// bands nor (since slice 5c) the hairlines keep their former 3% side inset
+describe('the guides’ side extent', () => {
+  it('leaves no inset at the sides of the bands or the hairlines: the whole numeral in Number mode', () => {
+    const [band] = getPlaceTierBands([[1, 0]], NUMBER);
+    expect(band.left).toBe(0);
+    expect(band.width).toBe(1);
+    expect(across(band, 350)).toEqual([0, 350]);
+    const [line] = getTierHairlines([[1, 0]], NUMBER);
+    expect(line.left).toBe(0);
+    expect(line.width).toBe(1);
+    // Every hairline of the largest number, too
+    for (const l of getTierHairlines([toBase20(10n ** 128n - 1n)], NUMBER)) expect(across(l, 350)).toEqual([0, 350]);
+    // Date mode: each group's full 100 units, 125 units after the last, never over the spacing
     const groups = [toBase20(25), toBase20(10), toBase20(2026)];
+    expect(getPlaceTierBands(groups, DATE).map((b) => across(b, 350))).toEqual([
+      [0, 100], [0, 100],
+      [125, 225],
+      [250, 350], [250, 350], [250, 350],
+    ]);
+    // Date mode: each hairline across its group's full 100 units, exactly as that group's bands,
+    // never over the 25-unit spacing between groups (100 to 125 and 225 to 250)
     const lines = getTierHairlines(groups, DATE);
+    expect(lines.map((line) => [line.groupIndex, ...across(line, 350)])).toEqual([[0, 0, 100], [2, 250, 350], [2, 250, 350]]);
     const bands = getPlaceTierBands(groups, DATE);
     for (const line of lines) {
-      for (const band of bands.filter(({ groupIndex }) => groupIndex === line.groupIndex)) {
-        expect(across(band, 350)).toEqual(across(line, 350));
+      for (const band of bands.filter((b) => b.groupIndex === line.groupIndex)) {
+        expect([line.left, line.width]).toEqual([band.left, band.width]);
       }
     }
-    // Date mode: 3 of 100 units at each side, in each group 125 units after the last
-    expect(bands.map((band) => across(band, 350))).toEqual([
-      [3, 97], [3, 97],
-      [128, 222],
-      [253, 347], [253, 347], [253, 347],
-    ]);
   });
 });
 
@@ -98,9 +104,7 @@ describe('getTierHairlines', () => {
 
   it('draws one line across the group between two tiers', () => {
     const [line] = getTierHairlines([[1, 0]], NUMBER);
-    expect(line).toMatchObject({ groupIndex: 0, boundary: 1, top: 0.5 });
-    expect(line.left).toBeCloseTo(0.03, 12);
-    expect(line.width).toBeCloseTo(0.94, 12);
+    expect(line).toMatchObject({ groupIndex: 0, boundary: 1, top: 0.5, left: 0, width: 1 });
   });
 
   it('draws a line at each tier boundary of the largest number, never at its outer edges', () => {
@@ -132,7 +136,8 @@ describe('getTierHairlines', () => {
       [2, 1, 160],
       [2, 2, 80],
     ]);
-    expect(lines.map((line) => across(line, 350))).toEqual([[3, 97], [253, 347], [253, 347]]);
+    // Each across its own group's full 100 units (UI-13)
+    expect(lines.map((line) => across(line, 350))).toEqual([[0, 100], [250, 350], [250, 350]]);
   });
 
   it('draws nothing without groups', () => {
@@ -151,8 +156,8 @@ describe('getTierHairlines', () => {
     ]) {
       expect(() => getTierHairlines([[1, 0]], layout)).toThrow(RangeError);
     }
-    // No spacing is a valid layout: the second group starts halfway, then its inset
-    expect(units(getTierHairlines([[1, 0], [1, 0]], { ...NUMBER, spacing: 0 })[1].left, 700)).toBe(360.5);
+    // No spacing is a valid layout: the second group's line starts halfway, with no inset
+    expect(units(getTierHairlines([[1, 0], [1, 0]], { ...NUMBER, spacing: 0 })[1].left, 700)).toBe(350);
   });
 });
 
@@ -171,7 +176,7 @@ describe('getPlaceTierBands', () => {
     const [band] = getPlaceTierBands([[7]], NUMBER);
     expect(band).toMatchObject({ groupIndex: 0, exponent: 0 });
     expect(edges(band, 80)).toEqual([2, 78]);
-    expect(across(band, 350)).toEqual([10.5, 339.5]);
+    expect(across(band, 350)).toEqual([0, 350]);
   });
 
   it('shades each tier of a group, bottom tier first, with a gap between adjacent bands', () => {
@@ -250,8 +255,8 @@ describe('getPlaceTierBands', () => {
     for (const inset of [-1, NaN, Infinity, 40, 41]) {
       expect(() => getPlaceTierBands([[1, 0]], NUMBER, inset)).toThrow(RangeError);
     }
-    // No spacing is a valid layout
-    expect(units(getPlaceTierBands([[1, 0], [1, 0]], { ...NUMBER, spacing: 0 })[2].left, 700)).toBe(360.5);
+    // No spacing is a valid layout: the second group's bands start halfway
+    expect(units(getPlaceTierBands([[1, 0], [1, 0]], { ...NUMBER, spacing: 0 })[2].left, 700)).toBe(350);
   });
 });
 
@@ -269,15 +274,17 @@ describe('findPlaceTierBand', () => {
     expect(at(50, 120)).toEqual([0, 1]);
     expect(at(175, 200)).toEqual([1, 0]);
     expect(at(300, 40)).toEqual([2, 2]);
-    // Its edges belong to it
-    expect(at(3, 162)).toEqual([0, 0]);
-    expect(at(97, 238)).toEqual([0, 0]);
+    // Its edges belong to it: the group's own edges, since the bands span it (UI-13)
+    expect(at(0, 162)).toEqual([0, 0]);
+    expect(at(100, 238)).toEqual([0, 0]);
+    expect(at(1, 200)).toEqual([0, 0]);
+    expect(at(350, 40)).toEqual([2, 2]);
   });
 
   it('finds none between bands, beside them, or above a shorter group', () => {
     expect(at(50, 80)).toBeUndefined(); // the gap between the day's tiers
-    expect(at(1, 200)).toBeUndefined(); // the side inset
     expect(at(110, 200)).toBeUndefined(); // the spacing between groups
+    expect(at(237.5, 200)).toBeUndefined();
     expect(at(50, 40)).toBeUndefined(); // above the day's two tiers
     expect(at(175, 120)).toBeUndefined(); // above the month's one tier
     expect(at(-10, 200)).toBeUndefined();

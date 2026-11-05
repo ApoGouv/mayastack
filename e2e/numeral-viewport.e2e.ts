@@ -152,7 +152,7 @@ test.describe('bounded numeral viewport', () => {
     await expect(zoomLevel(page)).toHaveText('150%');
   });
 
-  test('keeps the stage’s structure: the scroller, a padded, clipping stage box, then the slab', async ({ page }) => {
+  test('keeps the stage’s structure: the scroller, a padded, clipping stage box, the paper, then the zoom wrapper', async ({ page }) => {
     // Changed deliberately in UI-13: the stage spans the viewer card's content (card less its
     // 16 px padding at each side) instead of 384 px, and its height is the screen's
     for (const [width, height] of [[375, 900], [768, 900], [1280, 900]] as const) {
@@ -167,6 +167,8 @@ test.describe('bounded numeral viewport', () => {
         const stage = scroller.firstElementChild as HTMLElement;
         const style = getComputedStyle(stage);
         const s = stage.getBoundingClientRect();
+        // Changed deliberately in UI-13: the paper, with its 12 px padding, between the stage box and the zoom wrapper
+        const paper = stage.firstElementChild as HTMLElement;
         return {
           children: scroller.children.length,
           stage: stage.hasAttribute('data-numeral-stage'),
@@ -175,12 +177,17 @@ test.describe('bounded numeral viewport', () => {
           // The stage box spans the whole scrollable area, and at least the scroller
           covers: s.width === scroller.scrollWidth && s.height === scroller.scrollHeight
             && s.width >= scroller.clientWidth && s.height >= scroller.clientHeight,
-          wrapper: stage.firstElementChild!.getAttribute('role'),
+          stageChildren: stage.children.length,
+          paper: paper.hasAttribute('data-numeral-paper'),
+          paperPadding: getComputedStyle(paper).padding,
+          paperChildren: paper.children.length,
+          wrapper: paper.firstElementChild!.getAttribute('role'),
           scrollers: [...scroller.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)).length,
         };
       });
       expect(structure, `${width}px`).toEqual({
-        children: 1, stage: true, overflow: 'clip', padding: '16px', covers: true, wrapper: 'img', scrollers: 0,
+        children: 1, stage: true, overflow: 'clip', padding: '16px', covers: true,
+        stageChildren: 1, paper: true, paperPadding: '12px', paperChildren: 1, wrapper: 'img', scrollers: 0,
       });
     }
   });
@@ -448,7 +455,8 @@ test.describe('numeral scale and position', () => {
       expect(m.scrollHeight, what).toBe(m.clientHeight);
       expect(Math.abs(m.top - m.bottom), what).toBeLessThanOrEqual(1);
       // Horizontally: centred where it fits; on a phone, wider than the stage, it starts at its centre
-      if (m.width + 32 <= m.clientWidth) expect(Math.abs(m.left - m.right), what).toBeLessThanOrEqual(1);
+      // (the slab fits with the stage's 16 px and the paper's 12 px of padding at each side)
+      if (m.width + 56 <= m.clientWidth) expect(Math.abs(m.left - m.right), what).toBeLessThanOrEqual(1);
       else expect(Math.abs(m.centre.x - 175), what).toBeLessThanOrEqual(0.5);
     }
 
@@ -491,14 +499,15 @@ test.describe('numeral scale and position', () => {
         const what = `${screen.width} × ${screen.height} at ${level}`;
         await viewer.evaluate((el) => el.scrollTo(el.scrollLeft, 0));
         const top = await measure(page);
-        // The top tier, the highest place value, after the stage's 16 px padding
-        expect(top.top, what).toBe(16);
+        // The top tier, the highest place value, after the stage's 16 px padding and the
+        // paper's 12 px (changed deliberately in UI-13; the paper's does not zoom)
+        expect(top.top, what).toBe(28);
         expect(await wholeInView(0), what).toBe(true);
         await viewer.evaluate((el) => el.scrollTo(el.scrollLeft, el.scrollHeight));
         const bottom = await measure(page);
-        // The bottom tier, the units, with the stage's padding below it: the scrollable area is the slab and its padding
-        expect(bottom.scrollHeight - bottom.top - bottom.height, what).toBe(16);
-        expect(bottom.scrollHeight, what).toBe(bottom.height + 32);
+        // The bottom tier, the units, with both paddings below it: the scrollable area is the numeral and the paddings
+        expect(bottom.scrollHeight - bottom.top - bottom.height, what).toBe(28);
+        expect(bottom.scrollHeight, what).toBe(bottom.height + 56);
         expect(await wholeInView(98), what).toBe(true);
       }
       await page.getByRole('button', { name: 'Reset' }).click();
@@ -1538,9 +1547,10 @@ test.describe('screen-only tier guides', () => {
         const above = stacks[first + stacksPerGroup[group] - 1 - k];
         const below = stacks[first + stacksPerGroup[group] - k];
         const expectedY = svg.top + ((maxTiers - k) / maxTiers) * svg.height;
-        // 3% of the group's width in from each side, as the cards
-        const expectedLeft = svg.left + (group * (groupWidth + 25) + 0.03 * groupWidth) * unit;
-        const expectedWidth = 0.94 * groupWidth * unit;
+        // Across the group's whole width, exactly as its cards (changed deliberately in UI-13,
+        // from 3% in at each side): in Number mode, the whole numeral
+        const expectedLeft = svg.left + group * (groupWidth + 25) * unit;
+        const expectedWidth = groupWidth * unit;
 
         const name = `group ${group}, boundary ${k}`;
         if (Math.abs(y - expectedY) > TOLERANCE) problems.push(`${name}: y ${y}, expected ${expectedY}`);
@@ -1590,9 +1600,10 @@ test.describe('screen-only tier guides', () => {
         const first = stacksPerGroup.slice(0, group).reduce((sum, n) => sum + n, 0);
         const stack = stacks[first + stacksPerGroup[group] - 1 - e];
         const cellTop = svg.top + ((maxTiers - 1 - e) / maxTiers) * svg.height;
-        // 3% of the group's width in from each side, as the hairlines
-        const expectedLeft = svg.left + (group * (groupWidth + 25) + 0.03 * groupWidth) * unit;
-        const expectedWidth = 0.94 * groupWidth * unit;
+        // Across the group's whole width (changed deliberately in UI-13, from 3% in at each side,
+        // as the hairlines): in Number mode, the whole numeral
+        const expectedLeft = svg.left + group * (groupWidth + 25) * unit;
+        const expectedWidth = groupWidth * unit;
 
         const name = `group ${group}, exponent ${e}`;
         if (Math.abs(box.top - (cellTop + 2 * unit)) > TOLERANCE) problems.push(`${name}: top ${box.top}, expected ${cellTop + 2 * unit}`);
@@ -1812,7 +1823,8 @@ test.describe('screen-only tier guides', () => {
       )
     );
     expect(layers).toEqual(['cards', 'svg', 'hairlines']);
-    // On screen only, the SVG's own background is transparent over the cards' layer, which paints it
+    // On screen only, the SVG's own background is transparent. Changed deliberately in UI-13:
+    // the viewer's paper paints it, behind the cards' layer, which paints only the cards
     const styles = await viewerGroup(page).evaluate((viewer) => {
       const svg = viewer.querySelector('svg.mep-svg')!;
       return {
@@ -1820,22 +1832,28 @@ test.describe('screen-only tier guides', () => {
         rectFill: getComputedStyle(svg.querySelector('rect')!).fill,
         rectAttribute: svg.querySelector('rect')!.getAttribute('fill'),
         layer: getComputedStyle(viewer.querySelector('[data-place-tier-guides]')!).backgroundColor,
+        paper: getComputedStyle(viewer.querySelector('[data-numeral-paper]')!).backgroundColor,
       };
     });
     expect(styles).toEqual({
       svgPosition: 'relative',
       rectFill: 'rgba(0, 0, 0, 0)',
       rectAttribute: 'rgba(255, 255, 255, 1)',
-      layer: 'rgb(255, 255, 255)',
+      layer: 'rgba(0, 0, 0, 0)',
+      paper: 'rgb(255, 255, 255)',
     });
 
-    // Without the cards, the SVG is as before
+    // Without the cards, the SVG is not lifted, and its background stays transparent over the paper
     await bandsSwitch(page).click();
     const plain = await viewerGroup(page).evaluate((viewer) => {
       const svg = viewer.querySelector('svg.mep-svg')!;
-      return [getComputedStyle(svg).position, getComputedStyle(svg.querySelector('rect')!).fill];
+      return [
+        getComputedStyle(svg).position,
+        getComputedStyle(svg.querySelector('rect')!).fill,
+        getComputedStyle(viewer.querySelector('[data-numeral-paper]')!).backgroundColor,
+      ];
     });
-    expect(plain).toEqual(['static', 'rgb(255, 255, 255)']);
+    expect(plain).toEqual(['static', 'rgba(0, 0, 0, 0)', 'rgb(255, 255, 255)']);
   });
 
   // The screen-only rule keys on the SVG's first child: with the grid on, that must still be the
@@ -1878,7 +1896,7 @@ test.describe('screen-only tier guides', () => {
     /**
      * The colours along a row of the top tier, from a screenshot: 30 units down, between the
      * grid's horizontal lines (every 20 units) and clear of the glyphs (from about 41 units), and
-     * from 15 to 335 units across, within the card (10.5 to 339.5), crossing its vertical lines
+     * from 15 to 335 units across, within the card (0 to 350 since UI-13), crossing its vertical lines
      */
     const row = async () => {
       await viewer.scrollIntoViewIfNeeded();
@@ -1933,14 +1951,14 @@ test.describe('screen-only tier guides', () => {
     expect(gridLines(cardOnly, carded)).toEqual({ lines: 0, runs: 0 });
     expect(nearly(cardOnly, carded)).toBe(cardOnly.length);
 
-    // Without the guides, the SVG paints its own background again, under the same grid
+    // Without the guides, the paper's background shows under the same grid (UI-13: the SVG's own stays transparent)
     await page.getByRole('switch', { name: 'Show Grid:' }).click();
     await bandsSwitch(page).click();
     await hairlinesSwitch(page).click();
     await expect(bands(page)).toHaveCount(0);
     await expect(hairlines(page)).toHaveCount(0);
     const plain = await rects();
-    expect(plain).toMatchObject({ svgPosition: 'static', first: 'rect', firstFill: 'rgb(60, 60, 70)', gridIsFirst: false });
+    expect(plain).toMatchObject({ svgPosition: 'static', first: 'rect', firstFill: 'rgba(0, 0, 0, 0)', gridIsFirst: false });
     const withoutGuides = await row();
     expect(gridLines(withoutGuides, background)).toEqual({ lines: 16, runs: 16 });
     expect(nearly(withoutGuides, background)).toBeGreaterThan(withoutGuides.length / 2);
@@ -1990,14 +2008,16 @@ test.describe('screen-only tier guides', () => {
       const sample = async () => {
         await viewer.scrollIntoViewIfNeeded();
         // The middle of the top tier's lowest bar (19: three bars), a point of its card clear of
-        // any glyph, and a point in the card's side inset
+        // any glyph, a point of its card near its side (UI-13: the cards have no side inset), and
+        // a point in the 4-unit gap between the top two tiers' cards
         const bar = (await viewer.locator('g[data-digit-index="0"] path').first().boundingBox())!;
         const svg = (await viewer.locator('svg.mep-svg').boundingBox())!;
         const unit = svg.width / 350;
         const points = {
           glyph: { x: Math.round(bar.x + bar.width / 2), y: Math.round(bar.y + bar.height / 2) },
           card: { x: Math.round(svg.x + 30 * unit), y: Math.round(svg.y + 40 * unit) },
-          inset: { x: Math.round(svg.x + 4 * unit), y: Math.round(svg.y + 40 * unit) },
+          side: { x: Math.round(svg.x + 4 * unit), y: Math.round(svg.y + 40 * unit) },
+          gap: { x: Math.round(svg.x + 30 * unit), y: Math.round(svg.y + 80 * unit) },
         };
         const clip = { x: Math.floor(svg.x), y: Math.floor(svg.y), width: Math.ceil(svg.width), height: Math.ceil(Math.min(svg.height, 200)) };
         const png = await page.screenshot({ clip });
@@ -2032,10 +2052,13 @@ test.describe('screen-only tier guides', () => {
       // Without cards: the glyph over the background
       close(off.glyph, over({ ...glyph, a: alpha }, background));
       close(off.card, background);
-      // With them: the card is visible, the side inset is not, and the glyph is drawn over the card
+      // With them: the card is visible, also near its side, the gap between cards is not, and
+      // the glyph is drawn over the card
       const carded = over(cardColour, background);
       close(on.card, carded);
-      close(on.inset, background);
+      close(on.side, carded);
+      close(off.side, background);
+      close(on.gap, background);
       close(on.glyph, over({ ...glyph, a: alpha }, carded));
       expect(Math.max(...(['r', 'g', 'b'] as const).map((c) => Math.abs(on.card[c] - off.card[c])))).toBeGreaterThanOrEqual(5);
       // An opaque glyph keeps its exact colour
@@ -2185,4 +2208,242 @@ test.describe('screen-only tier guides', () => {
       expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
     });
   }
+
+  /**
+   * UI-13: the viewer's paper, between the stage box and the zoom wrapper, paints the numeral's
+   * background once across its fixed 12 px padding and the numeral, with the SVG's own
+   * background rectangle transparent on screen; the guides keep their geometry inside the zoom
+   * wrapper, and the exports are the SVG alone.
+   */
+  test.describe('viewer paper (UI-13)', () => {
+    // 1 × 20³: 4 tiers, 350 × 320 units; at 150%, 525 × 480 px, which with both paddings fits
+    // the 1440 × 900 stage (686 × 620 px), centred, away from its inset shadow and the Export trigger
+    const FOUR_TIERS = '8000';
+    const TRANSLUCENT = { r: 20, g: 40, b: 90, a: 0.35 };
+
+    /** The paper's and the zoom wrapper's boxes on screen, in CSS px */
+    const boxes = (page: Page) =>
+      page.evaluate(() => {
+        const rect = (el: Element) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+        };
+        const paper = document.querySelector('[data-numeral-paper]')!;
+        const wrapper = paper.querySelector(':scope > [role="img"]')!;
+        return { paper: rect(paper), wrapper: rect(wrapper), svg: rect(wrapper.querySelector('svg.mep-svg')!), dpr: devicePixelRatio };
+      });
+
+    test('keeps a fixed 12 px margin around the zoom wrapper, clear of the guides, which keep their geometry', async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openWith(page, BOTH_ON);
+      const viewer = await showNumber(page, FIVE_TIERS);
+      const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+      const zoomOut = page.getByRole('button', { name: 'Zoom out' });
+      for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['150%', zoomIn, 4], ['400%', zoomIn, 3]] as const) {
+        for (let i = 0; i < presses; i++) await button.click();
+        await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+        await viewer.evaluate((el) => el.scrollTo(0, 0));
+        const { paper, wrapper, svg } = await boxes(page);
+        // The same 12 px at every zoom level, on all four sides: the padding does not zoom
+        for (const [side, gap] of Object.entries({
+          left: wrapper.left - paper.left, top: wrapper.top - paper.top,
+          right: paper.right - wrapper.right, bottom: paper.bottom - wrapper.bottom,
+        })) expect(gap, `${side} at ${level}`).toBeCloseTo(12, 1);
+        // The zoom wrapper is the numeral's box, at its zoomed size
+        expect(svg, level).toEqual(wrapper);
+        expect(wrapper.width, level).toBeCloseTo(350 * (parseFloat(level) / 100), 1);
+
+        // Every band and hairline lies within the zoom wrapper, never in the paper's margin
+        const outside = await viewer.evaluate((el, w) =>
+          [...el.querySelectorAll('[data-place-tier-band], [data-tier-hairline]')]
+            .map((g) => g.getBoundingClientRect())
+            .filter((r) => r.left < w.left - 0.5 || r.right > w.right + 0.5 || r.top < w.top - 0.5 || r.bottom > w.bottom + 0.5).length,
+        wrapper);
+        expect(outside, level).toBe(0);
+        // Each band and each hairline spans the zoom wrapper exactly, from its left edge to its
+        // right (UI-13), so the hairlines' ends meet the bands' sides
+        const spans = (selector: string) => viewer.evaluate((el, selector) =>
+          [...el.querySelectorAll(selector)].map((b) => {
+            const r = b.getBoundingClientRect();
+            return { left: r.left, right: r.right, width: r.width };
+          }), selector);
+        for (const [guide, count] of [['[data-place-tier-band]', 5], ['[data-tier-hairline]', 4]] as const) {
+          const found = await spans(guide);
+          expect(found, `${guide} at ${level}`).toHaveLength(count);
+          for (const box of found) {
+            expect(Math.abs(box.left - wrapper.left), `${guide} at ${level}: left`).toBeLessThanOrEqual(0.05);
+            expect(Math.abs(box.right - wrapper.right), `${guide} at ${level}: right`).toBeLessThanOrEqual(0.05);
+            expect(Math.abs(box.width - wrapper.width), `${guide} at ${level}: width`).toBeLessThanOrEqual(0.05);
+          }
+        }
+        // And they keep their alignment with the tiers, the cards' insets and the gaps between them
+        for (const result of [await checkBands(page, [5]), await checkHairlines(page, [5])]) {
+          expect(result.checked, level).toBeGreaterThan(0);
+          expect(result.problems, level).toEqual([]);
+        }
+      }
+      // Hairlines between the tiers only: 4 for 5 tiers
+      await expect(hairlines(page)).toHaveCount(4);
+    });
+
+    /**
+     * Samples, from a screenshot of the paper at device resolution, four lines that cross from
+     * the paper's padding into the SVG, one across each edge, all clear of the glyphs, the cards
+     * and the hairlines: the side rows in the 4-unit gap between the top two tiers' cards, midway
+     * between the upper card's bottom edge and the hairline's top edge (both cards and hairline
+     * span the numeral's width since UI-13); the columns within the cards' 2-unit top and bottom
+     * insets. Returns each line's pixels, in device pixels.
+     */
+    async function boundaryLines(page: Page) {
+      await page.mouse.move(0, 0); // no card hovered
+      // The page at its top, where the whole viewer is on screen, clear of the sticky header
+      // (clicking the guide switches may have scrolled it)
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+      const { paper, wrapper, dpr } = await boxes(page);
+      const header = await page.evaluate(() => document.querySelector('header')?.getBoundingClientRect().bottom ?? 0);
+      expect(paper.top, 'the paper below the page header').toBeGreaterThan(header);
+      const unit = wrapper.width / 350;
+      // Inside the paper's box, clear of its edge and shadow, which are drawn outside it
+      const clip = {
+        x: Math.ceil(paper.left) + 1, y: Math.ceil(paper.top) + 1,
+        width: Math.floor(paper.right) - 1 - (Math.ceil(paper.left) + 1),
+        height: Math.floor(paper.bottom) - 1 - (Math.ceil(paper.top) + 1),
+      };
+      // The upper card ends 2 units above the boundary at 80 units; the 1 px hairline is centred on it
+      const tierGap = wrapper.top + (78 * unit + (80 * unit - 0.5)) / 2;
+      const midX = wrapper.left + wrapper.width / 2;
+      // [from, to] in CSS px, along x for a row and along y for a column, each across one edge
+      const lines = {
+        left: { along: 'x', at: tierGap, from: clip.x, to: wrapper.left + 8 * unit, edge: wrapper.left },
+        right: { along: 'x', at: tierGap, from: wrapper.right - 8 * unit, to: clip.x + clip.width, edge: wrapper.right },
+        top: { along: 'y', at: midX, from: clip.y, to: wrapper.top + 1 * unit, edge: wrapper.top },
+        bottom: { along: 'y', at: midX, from: wrapper.bottom - 1 * unit, to: clip.y + clip.height, edge: wrapper.bottom },
+      } as const;
+      for (const [name, line] of Object.entries(lines)) {
+        // Each line reaches at least 1.4 CSS px into the padding and into the SVG
+        expect(Math.min(line.edge - line.from, line.to - line.edge), name).toBeGreaterThanOrEqual(1.4);
+      }
+      const png = await page.screenshot({ clip });
+      return page.evaluate(async ({ data, clip, dpr, lines }) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        [canvas.width, canvas.height] = [image.width, image.height];
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image, 0, 0);
+        const pixel = (x: number, y: number) => {
+          const [r, g, b] = context.getImageData(x, y, 1, 1).data;
+          return { r, g, b };
+        };
+        return {
+          scale: image.width / clip.width,
+          dpr,
+          lines: Object.fromEntries(Object.entries(lines).map(([name, l]) => {
+            const origin = l.along === 'x' ? clip.x : clip.y;
+            const across = Math.round(((l.along === 'x' ? l.at - clip.y : l.at - clip.x)) * dpr);
+            const [from, to] = [Math.ceil((l.from - origin) * dpr), Math.floor((l.to - origin) * dpr) - 1];
+            const pixels = [];
+            for (let p = from; p <= to; p++) pixels.push(l.along === 'x' ? pixel(p, across) : pixel(across, p));
+            return [name, pixels];
+          })),
+        };
+      }, { data: png.toString('base64'), clip, dpr, lines });
+    }
+
+    /** Expects every pixel of every line to be the background, composited once over the canvas */
+    function expectSinglePaint(sampled: Awaited<ReturnType<typeof boundaryLines>>, expected: Rgb, what: string) {
+      for (const [name, pixels] of Object.entries(sampled.lines)) {
+        expect(pixels.length, `${what}, ${name}`).toBeGreaterThanOrEqual(4);
+        for (const [i, p] of pixels.entries()) {
+          for (const c of ['r', 'g', 'b'] as const) {
+            // No seam: every pixel, on both sides of the edge, as its neighbour (rounding only)
+            if (i > 0) expect(Math.abs(p[c] - pixels[i - 1][c]), `${what}, ${name}, pixel ${i}: ${JSON.stringify(pixels)}`).toBeLessThanOrEqual(1);
+            // Painted once: a second translucent layer would darken it far beyond rounding
+            expect(Math.abs(p[c] - expected[c]), `${what}, ${name}, pixel ${i}: ${JSON.stringify(p)} vs ${JSON.stringify(expected)}`).toBeLessThanOrEqual(2);
+          }
+        }
+      }
+    }
+
+    for (const [dpr, themes] of [[1.5, ['light', 'dark']], [2, ['light']]] as const) {
+      test.describe(`at ${dpr * 100}% display scaling`, () => {
+        test.use({ deviceScaleFactor: dpr, viewport: { width: 1440, height: 900 } });
+
+        for (const theme of themes) {
+          test(`paints the background once across the padding and the SVG, with no seam, at 150% zoom, guides off and on (${theme})`, async ({ page }) => {
+            for (const [name, background] of [['translucent', TRANSLUCENT], ['opaque white', { r: 255, g: 255, b: 255, a: 1 }]] as const) {
+              await openWith(page, {
+                'mayastack:theme': theme,
+                'mayastack:backgroundColor': JSON.stringify(background),
+                'mayastack:showPlaceTierGuides': 'false',
+                'mayastack:showTierHairlines': 'false',
+              });
+              const viewer = await showNumber(page, FOUR_TIERS);
+              await page.getByRole('button', { name: 'Zoom in' }).click();
+              await expect(zoomLevel(page)).toHaveText('150%');
+              await viewer.scrollIntoViewIfNeeded();
+              // Short enough to be centred, so nothing scrolls
+              expect(await viewer.evaluate((el) => [el.scrollWidth - el.clientWidth, el.scrollHeight - el.clientHeight])).toEqual([0, 0]);
+              const expected = over(background, BACKDROP[theme]);
+
+              const off = await boundaryLines(page);
+              expect(off.dpr).toBe(dpr);
+              expect(off.scale).toBeCloseTo(dpr, 1);
+              // A fractional device-pixel position, where separately painted areas would leave a seam
+              expectSinglePaint(off, expected, `${name}, guides off`);
+
+              await bandsSwitch(page).click();
+              await hairlinesSwitch(page).click();
+              await expect(bands(page)).toHaveCount(4);
+              await expect(hairlines(page)).toHaveCount(3);
+              expectSinglePaint(await boundaryLines(page), expected, `${name}, guides on`);
+              // Reset for the next background (saved preferences, overridden by the next init script)
+              await page.evaluate(() => localStorage.clear());
+            }
+          });
+        }
+      });
+    }
+
+    test('exports neither the paper nor its padding, with the SVG’s own translucent background and size unchanged', async ({ page }) => {
+      await openWith(page, { 'mayastack:backgroundColor': JSON.stringify(TRANSLUCENT) });
+      await showNumber(page, FOUR_TIERS);
+      const svgBefore = await exportFile(page, 'svg');
+      const pngBefore = await exportFile(page, 'png');
+      await page.getByRole('button', { name: '📦 Export' }).click(); // close the menu
+
+      // Zoomed and with both guides, where the paper paints the background on screen
+      await page.getByRole('button', { name: 'Zoom in' }).click();
+      await expect(zoomLevel(page)).toHaveText('150%');
+      await bandsSwitch(page).click();
+      await hairlinesSwitch(page).click();
+      const svgAfter = await exportFile(page, 'svg');
+      const pngAfter = await exportFile(page, 'png');
+      expect(svgAfter.data.equals(svgBefore.data)).toBe(true);
+      expect(pngAfter.data.equals(pngBefore.data)).toBe(true);
+
+      // The SVG's background rectangle keeps its fill in the file; no paper, padding or edge
+      const svg = svgAfter.data.toString('utf-8');
+      expect(svg).toMatch(/^<svg[^>]* width="350" height="320"/);
+      expect(svg).toMatch(/<rect x="0" y="0" width="100%" height="100%" fill="rgba\(20, 40, 90, 0\.35\)"/);
+      expect(svg).not.toMatch(/numeral-paper|ring-|shadow|padding/);
+      // The PNG is the numeral alone, at its own size, its corner the translucent background
+      expect(pngSize(pngAfter.data)).toEqual({ width: 350, height: 320 });
+      const corner = await page.evaluate(async (data) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        [canvas.width, canvas.height] = [image.width, image.height];
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image, 0, 0);
+        const [r, g, b, a] = context.getImageData(1, 1, 1, 1).data;
+        return { r, g, b, a };
+      }, pngAfter.data.toString('base64'));
+      expect(Math.abs(corner.a - Math.round(0.35 * 255))).toBeLessThanOrEqual(1);
+      for (const c of ['r', 'g', 'b'] as const) expect(Math.abs(corner[c] - TRANSLUCENT[c])).toBeLessThanOrEqual(3);
+    });
+  });
 });
