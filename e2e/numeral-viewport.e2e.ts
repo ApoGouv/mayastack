@@ -837,7 +837,7 @@ test.describe('numeral scale and position', () => {
       await page.keyboard.press('Tab');
       await expect(viewer).toBeFocused();
       await page.keyboard.press('+');
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await page.keyboard.press('0');
       await expect(zoomLevel(page)).toHaveText('100%');
       // The percentage and the separator are never focused
@@ -2291,7 +2291,7 @@ test.describe('screen-only tier guides', () => {
    * wrapper, and the exports are the SVG alone.
    */
   test.describe('viewer paper (UI-13)', () => {
-    // 1 × 20³: 4 tiers, 350 × 320 units; at 125%, 437.5 × 400 px, which with both paddings fits
+    // 1 × 20³: 4 tiers, 350 × 320 units; at 150%, 525 × 480 px, which with both paddings fits
     // the 1440 × 900 stage (686 × 620 px), centred, away from its inset shadow and the Export trigger
     const FOUR_TIERS = '8000';
     const TRANSLUCENT = { r: 20, g: 40, b: 90, a: 0.35 };
@@ -2457,7 +2457,7 @@ test.describe('screen-only tier guides', () => {
                 'mayastack:showTierHairlines': 'false',
               });
               const viewer = await showNumber(page, FOUR_TIERS);
-              await page.getByRole('button', { name: 'Zoom in' }).click();
+              for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 125%, 150%
               await expect(zoomLevel(page)).toHaveText('150%');
               await viewer.scrollIntoViewIfNeeded();
               // Short enough to be centred, so nothing scrolls
@@ -2492,7 +2492,7 @@ test.describe('screen-only tier guides', () => {
 
       // Zoomed and with both guides, where the paper paints the background on screen
       await page.getByRole('button', { name: 'Zoom in' }).click();
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await bandsSwitch(page).click();
       await hairlinesSwitch(page).click();
       const svgAfter = await exportFile(page, 'svg');
@@ -3052,9 +3052,9 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
       await expect(zoomLevel(page)).toHaveText('100%');
       expect(await recorded(page)).toEqual([]);
       await page.mouse.up(); // the click
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await page.clock.runFor(3000);
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await settleZoom(page);
       expect(await recorded(page)).toEqual(['finished']);
       expect(errors).toEqual([]);
