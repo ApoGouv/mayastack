@@ -120,8 +120,7 @@ test.describe('bounded numeral viewport', () => {
     const svg = viewer.locator('svg');
     const width = (await svg.boundingBox())!.width;
 
-    await page.getByRole('button', { name: 'Zoom in' }).click();
-    await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 125%, 150%, 200%
     await expect(zoomLevel(page)).toHaveText('200%');
     await settleZoom(page); // the final layout, not the zoom animation's (UI-13, slice 6)
     expect((await svg.boundingBox())!.width / width).toBeCloseTo(2, 2);
@@ -139,7 +138,7 @@ test.describe('bounded numeral viewport', () => {
   test('marks the zoom limits', async ({ page }) => {
     await showNumber(page, FIFTY_DIGITS);
     const zoomIn = page.getByRole('button', { name: 'Zoom in' });
-    for (let i = 0; i < 4; i++) await zoomIn.click(); // 150%, 200%, 300%, 400%
+    for (let i = 0; i < 5; i++) await zoomIn.click(); // 125%, 150%, 200%, 300%, 400%
     await expect(zoomLevel(page)).toHaveText('400% (maximum zoom)');
     await expect(zoomIn).toHaveAttribute('aria-disabled', 'true');
     // Still focused, and Playwright (like assistive technology) treats it as disabled
@@ -151,7 +150,7 @@ test.describe('bounded numeral viewport', () => {
     const viewer = await showNumber(page, FIFTY_DIGITS);
     await viewer.focus();
     await page.keyboard.press('+');
-    await expect(zoomLevel(page)).toHaveText('150%');
+    await expect(zoomLevel(page)).toHaveText('125%');
     await page.keyboard.press('-');
     await page.keyboard.press('-');
     await expect(zoomLevel(page)).toHaveText('75%');
@@ -165,7 +164,7 @@ test.describe('bounded numeral viewport', () => {
     await input.press('End');
     await input.press('0');
     await expect(input).toHaveValue(`${FIFTY_DIGITS}0`);
-    await expect(zoomLevel(page)).toHaveText('150%');
+    await expect(zoomLevel(page)).toHaveText('125%');
   });
 
   test('keeps the stage’s structure: the scroller, a padded, clipping stage content, the paper, then the numeral image', async ({ page }) => {
@@ -235,7 +234,7 @@ test.describe('bounded numeral viewport', () => {
 });
 
 test.describe('numeral scale and position', () => {
-  const LEVELS = ['25%', '50%', '75%', '100%', '150%', '200%', '300%', '400%'];
+  const LEVELS = ['25%', '50%', '75%', '100%', '125%', '150%', '200%', '300%', '400%'];
 
   /**
    * Steps the zoom with its buttons to the given level, e.g. "50%", and waits for its animation
@@ -338,6 +337,49 @@ test.describe('numeral scale and position', () => {
         expect(m.height, `${width}px at ${level}`).toBe(m.units.height * zoom);
         expect(m.pageOverflow, `${width}px at ${level}`).toBe(0);
       }
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+  });
+
+  test('passes through 125% between 100% and 150% both ways, keeping the point at the centre, in Number and Date modes', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    for (const mode of ['number', 'date'] as const) {
+      let viewer;
+      if (mode === 'number') viewer = await showNumber(page, FIFTY_DIGITS);
+      else {
+        await showDate(page);
+        viewer = page.getByRole('group', { name: 'Numeral viewer' });
+      }
+      await page.getByRole('button', { name: 'Reset' }).click();
+      // The middle of the numeral in view, taken as the user's: the scroll event has arrived
+      await viewer.evaluate((el) => el.scrollTo({ top: (el.scrollHeight - el.clientHeight) / 2, behavior: 'instant' }));
+      await viewer.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const start = await measure(page);
+      expect(start.width, mode).toBe(350);
+      for (const level of ['125%', '150%', '125%', '100%']) {
+        await zoomTo(page, level);
+        const m = await measure(page);
+        expect(m.width, `${mode} at ${level}`).toBe(350 * (parseFloat(level) / 100));
+        expectCentre(m, start.centre, 1, `${mode} at ${level}`);
+        expect(m.pageOverflow, `${mode} at ${level}`).toBe(0);
+      }
+    }
+  });
+
+  test('fits the stage at 125% where the stage is wide enough, and scrolls sideways where it is not', async ({ page }) => {
+    // The stage leaves 479 px (1024 px wide) to 647 px (1600 px) for the 437.5 px numeral, and 253 px on a phone
+    for (const [width, height, fits] of [
+      [375, 667, false], [375, 812, false], [768, 1024, true], [1024, 768, true],
+      [1280, 720, true], [1280, 800, true], [1440, 900, true], [1600, 900, true],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await showNumber(page, FIFTY_DIGITS);
+      await zoomTo(page, '125%');
+      const m = await measure(page);
+      expect(m.width, `${width} × ${height}`).toBe(437.5);
+      if (fits) expect(m.sideways, `${width} × ${height}`).toBe(0);
+      else expect(m.sideways, `${width} × ${height}`).toBeGreaterThan(0);
+      expect(m.pageOverflow, `${width} × ${height}`).toBe(0);
       await page.getByRole('button', { name: 'Reset' }).click();
     }
   });
@@ -630,7 +672,7 @@ test.describe('numeral scale and position', () => {
     [1280, MAX_DIGITS, ['25%', '400%', '100%']],
   ] as const) {
     test(`returns to the same position after switching between zoom levels repeatedly, without drift, at ${width}px`, async ({ page }) => {
-      // Five cycles of up to 14 zoom steps each, every step waited for
+      // Five cycles of up to 16 zoom steps each, every step waited for
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       const viewer = await showNumber(page, digits);
@@ -1699,7 +1741,7 @@ test.describe('screen-only tier guides', () => {
     const zoomOut = page.getByRole('button', { name: 'Zoom out' });
     const zoomIn = page.getByRole('button', { name: 'Zoom in' });
 
-    for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['400%', zoomIn, 7]] as const) {
+    for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['400%', zoomIn, 8]] as const) {
       for (let i = 0; i < presses; i++) await button.click();
       await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
       const lines = await checkHairlines(page, [5]);
@@ -1722,7 +1764,7 @@ test.describe('screen-only tier guides', () => {
     const viewer = await showNumber(page, MAX_DIGITS);
     await expect(hairlines(page)).toHaveCount(98);
     await expect(bands(page)).toHaveCount(99);
-    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
     await expect(zoomLevel(page)).toHaveText(/^400%/);
 
     for (const fraction of [0, 0.37, 0.5, 1]) {
@@ -1743,7 +1785,7 @@ test.describe('screen-only tier guides', () => {
       locator.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.groupIndex));
     expect(await groupsOf(hairlines(page))).toEqual(['0', '2', '2']);
     expect(await groupsOf(bands(page))).toEqual(['0', '0', '1', '2', '2', '2']);
-    for (const [level, presses] of [['100%', 0], ['25%', 3], ['400%', 7]] as const) {
+    for (const [level, presses] of [['100%', 0], ['25%', 3], ['400%', 8]] as const) {
       const button = page.getByRole('button', { name: level === '400%' ? 'Zoom in' : 'Zoom out' });
       for (let i = 0; i < presses; i++) await button.click();
       await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
@@ -2136,7 +2178,7 @@ test.describe('screen-only tier guides', () => {
     await expect.poll(hovered).toEqual([]);
 
     // The viewer still scrolls under the pointer, and the hover follows the card now under it
-    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
     await expect(zoomLevel(page)).toHaveText(/^400%/);
     await viewer.evaluate((el) => el.scrollTo(0, 0)); // zooming kept the middle in view
     await viewer.scrollIntoViewIfNeeded();
@@ -2201,7 +2243,7 @@ test.describe('screen-only tier guides', () => {
 
     await viewer.focus();
     await page.keyboard.press('+');
-    await expect(zoomLevel(page)).toHaveText('150%');
+    await expect(zoomLevel(page)).toHaveText('125%');
     await page.keyboard.press('0');
     await expect(zoomLevel(page)).toHaveText('100%');
     // The numeral is still one labelled image, the guides hidden from assistive technology
@@ -2216,7 +2258,7 @@ test.describe('screen-only tier guides', () => {
       await showNumber(page, FIVE_TIERS);
       await bandsSwitch(page).click();
       await hairlinesSwitch(page).click();
-      for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+      for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
       await expect(zoomLevel(page)).toHaveText(/^400%/);
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
@@ -2249,7 +2291,7 @@ test.describe('screen-only tier guides', () => {
    * wrapper, and the exports are the SVG alone.
    */
   test.describe('viewer paper (UI-13)', () => {
-    // 1 × 20³: 4 tiers, 350 × 320 units; at 150%, 525 × 480 px, which with both paddings fits
+    // 1 × 20³: 4 tiers, 350 × 320 units; at 125%, 437.5 × 400 px, which with both paddings fits
     // the 1440 × 900 stage (686 × 620 px), centred, away from its inset shadow and the Export trigger
     const FOUR_TIERS = '8000';
     const TRANSLUCENT = { r: 20, g: 40, b: 90, a: 0.35 };
@@ -2273,7 +2315,7 @@ test.describe('screen-only tier guides', () => {
       const viewer = await showNumber(page, FIVE_TIERS);
       const zoomIn = page.getByRole('button', { name: 'Zoom in' });
       const zoomOut = page.getByRole('button', { name: 'Zoom out' });
-      for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['150%', zoomIn, 4], ['400%', zoomIn, 3]] as const) {
+      for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['125%', zoomIn, 4], ['150%', zoomIn, 1], ['400%', zoomIn, 3]] as const) {
         for (let i = 0; i < presses; i++) await button.click();
         await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
         await viewer.evaluate((el) => el.scrollTo(0, 0));
@@ -2619,7 +2661,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     await showLargeAtMiddle(page);
     const point = await layoutCentre(page);
 
-    for (const [step, from, to] of [['zoom in', 350, 525], ['zoom out', 525, 350], ['zoom out', 350, 262.5]] as const) {
+    for (const [step, from, to] of [['zoom in', 350, 437.5], ['zoom out', 437.5, 350], ['zoom out', 350, 262.5]] as const) {
       const sampled = await sample(page, [{ at: 1, do: step }]);
       const { frames } = sampled;
       // From the frame after the step's, the zoom's first laid out
@@ -2657,8 +2699,8 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     await showLargeAtMiddle(page);
     const point = await layoutCentre(page);
     // With the keyboard shortcuts, each step's animation running to its end
-    const expected = [262.5, 175, 87.5, 175, 262.5, 350, 525, 700, 1050, 1400, 1050, 700, 525, 350];
-    const keys = ['-', '-', '-', '+', '+', '+', '+', '+', '+', '+', '-', '-', '-', '-'] as const;
+    const expected = [262.5, 175, 87.5, 175, 262.5, 350, 437.5, 525, 700, 1050, 1400, 1050, 700, 525, 437.5, 350];
+    const keys = ['-', '-', '-', '+', '+', '+', '+', '+', '+', '+', '+', '-', '-', '-', '-', '-'] as const;
     for (const [i, key] of keys.entries()) {
       const sampled = await sample(page, [{ at: 1, do: `key ${key}` }]);
       const what = `step ${i + 1} (${key}) to ${expected[i]} px`;
@@ -2699,7 +2741,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     expect(await page.locator('[data-numeral-paper]').evaluate((p) => p.getAnimations().length)).toBe(0);
     // At the limit, a further zoom changes nothing and animates nothing (the paper may be new)
     await countAnimations(page);
-    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
     await expect(zoomLevel(page)).toHaveText(/^400%/);
     await settleZoom(page);
     const atLimit = await animationCount(page);
@@ -2716,7 +2758,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     await page.getByRole('gridcell', { name: /^Choose .* 25th, \d{4}$/ }).first().click();
     await expect(page.getByRole('img', { name: /^Mayan numerals for day 25/ })).toBeVisible();
     await page.getByRole('group', { name: 'Numeral viewer' }).scrollIntoViewIfNeeded();
-    // 350 × 240 units: centred in the stage at 100% and at 150%, so the anchor is its middle
+    // 350 × 240 units: centred in the stage at 100% and at 125%, so the anchor is its middle
     const point = await layoutCentre(page);
     expect(point.x).toBeCloseTo(175, 0);
     for (const step of ['zoom in', 'zoom out'] as const) {
@@ -2730,26 +2772,28 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
   test('retargets rapid zooms from where the numeral is drawn, one animation at a time, ending exactly', async ({ page }) => {
     await showLargeAtMiddle(page);
     const point = await layoutCentre(page);
-    // Three zooms in, two frames apart, then two out: each during the previous one's animation
+    // Four zooms in, two frames apart (100% → 125% → 150% → 200% → 300%), then two out (200%,
+    // 150%): each during the previous one's animation
     const sampled = await sample(page, [
       { at: 1, do: 'zoom in' },
       { at: 3, do: 'zoom in' },
-      { at: 5, do: 'key +' },
-      { at: 7, do: 'zoom out' },
-      { at: 9, do: 'key -' },
+      { at: 5, do: 'zoom in' },
+      { at: 7, do: 'key +' },
+      { at: 9, do: 'zoom out' },
+      { at: 11, do: 'key -' },
     ]);
-    expect(sampled.animations).toEqual(['idle', 'idle', 'idle', 'idle', 'finished']);
+    expect(sampled.animations).toEqual(['idle', 'idle', 'idle', 'idle', 'idle', 'finished']);
     for (const f of sampled.frames) expect(f.animations.length).toBeLessThanOrEqual(1);
     // No jump back at a retarget: each new animation continues from where the numeral is drawn,
     // so every frame's drawn width is between the previous frame's and the layout width then in
     // effect (laid out from the frame after each step's), never past either. A restart from
     // either layout would leave that range. Changed deliberately with the slower-starting easing
-    // (2026-11-07): the zoom out at frame 7 can still grow the numeral, drawn short of the 300%
-    // layout, towards 200%'s, so "only shrinks after frame 7" no longer holds; this checks the
+    // (2026-11-07): the zoom out at frame 9 can still grow the numeral, drawn short of the 300%
+    // layout, towards 200%'s, so "only shrinks after frame 9" no longer holds; this checks the
     // same property directly
     const widths = sampled.frames.map((f) => f.image.width);
     const layoutWidth = (frame: number) => {
-      const done = [350, 525, 700, 1050, 700, 525].slice(0, 1 + [1, 3, 5, 7, 9].filter((at) => at < frame).length);
+      const done = [350, 437.5, 525, 700, 1050, 700, 525].slice(0, 1 + [1, 3, 5, 7, 9, 11].filter((at) => at < frame).length);
       return done.at(-1)!;
     };
     for (let i = 1; i < widths.length; i++) {
@@ -2813,7 +2857,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await showLargeAtMiddle(page);
     const point = await layoutCentre(page);
-    // Levels at which the numeral fits the stage's width (150%, 100% and 75% at 1280 px); wider
+    // Levels at which the numeral fits the stage's width (125%, 100% and 75% at 1280 px); wider
     // levels with reduced motion are tested in the click-only group's reduced-motion tests,
     // with the zoom wrapper's own transitions
     const reduced = await sample(page, [{ at: 1, do: 'zoom in' }, { at: 4, do: 'key -' }, { at: 7, do: 'zoom out' }]);
@@ -2822,7 +2866,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     expect(await page.locator('[data-numeral-image]').evaluate((el) => getComputedStyle(el).transitionProperty)).toBe('none');
     for (const f of reduced.frames) expect(f.animations).toEqual([]);
     // Each zoom's final width from its first laid-out frame on, never an intermediate one
-    expect(reduced.frames.map((f) => f.image.width)).toEqual([350, 350, 525, 525, 525, 350, 350, 350, 262.5, 262.5]);
+    expect(reduced.frames.map((f) => f.image.width)).toEqual([350, 350, 437.5, 437.5, 437.5, 350, 350, 350, 262.5, 262.5]);
     expect(Math.max(...drift(reduced, point))).toBeLessThanOrEqual(1);
 
     // A change of preference applies from the next zoom
@@ -2941,8 +2985,8 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
           await showLargeAtMiddle(page);
           const point = await layoutCentre(page);
           expect(point.x).toBeCloseTo(175, 0);
-          // 100% → 150% (still fitting), then 200%, 300% and 400%, each wider than the stage
-          for (const [level, expectedLeft] of [['150%', 0], ['200%', 36], ['300%', 211], ['400%', 386]] as const) {
+          // 100% → 125% and 150% (still fitting), then 200%, 300% and 400%, each wider than the stage
+          for (const [level, expectedLeft] of [['125%', 0], ['150%', 0], ['200%', 36], ['300%', 211], ['400%', 386]] as const) {
             const inspected = await zoomAndInspect(page, how);
             expect(inspected, level).toEqual({ animations: [], transitionProperty: 'none', paper: 0 });
             await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
@@ -2953,7 +2997,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
             const { left, max } = await scrollX(page);
             // The reported positions, at this viewport, where the stage is 684 px wide
             expect(Math.abs(left - expectedLeft), `${level}: scrollLeft ${left}`).toBeLessThanOrEqual(1);
-            if (level !== '150%') expect(left, level).toBeLessThan(max);
+            if (level !== '125%' && level !== '150%') expect(left, level).toBeLessThan(max);
           }
         });
       }
@@ -2961,11 +3005,11 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
       test('keeps the anchor zooming out too, each step instant, with no width transition', async ({ page }) => {
         await showLargeAtMiddle(page);
         const point = await layoutCentre(page);
-        for (const level of ['150%', '200%', '300%', '400%']) {
+        for (const level of ['125%', '150%', '200%', '300%', '400%']) {
           await zoomIn(page).click();
           await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
         }
-        for (const [level, width] of [['300%', 1050], ['200%', 700], ['150%', 525], ['100%', 350]] as const) {
+        for (const [level, width] of [['300%', 1050], ['200%', 700], ['150%', 525], ['125%', 437.5], ['100%', 350]] as const) {
           await zoomOut(page).click();
           await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
           // The final width at once, laid out: no transition on the zoom wrapper
@@ -2988,9 +3032,9 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     test('changes exactly one level for a click, with nothing repeated after it', async ({ page }) => {
       const errors = await setUp(page);
       await zoomIn(page).click();
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await page.clock.runFor(3000);
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await settleZoom(page);
       await zoomOut(page).click();
       await page.clock.runFor(3000);
@@ -3034,22 +3078,22 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
 
     test('stops at the limits, without errors or further animations, and the other button then works', async ({ page }) => {
       const errors = await setUp(page);
-      for (const level of ['150%', '200%', '300%', '400%']) {
+      for (const level of ['125%', '150%', '200%', '300%', '400%']) {
         await zoomIn(page).click();
         await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
         await settleZoom(page);
       }
       await expect(zoomLevel(page)).toHaveText('400% (maximum zoom)');
-      expect(await recorded(page)).toHaveLength(4);
+      expect(await recorded(page)).toHaveLength(5);
       // At the limit, a press and its click do nothing
       await mouseDownOn(page, zoomIn(page));
       await page.clock.runFor(3000);
       await page.mouse.up();
       await expect(zoomLevel(page)).toHaveText('400% (maximum zoom)');
-      expect(await recorded(page)).toHaveLength(4);
+      expect(await recorded(page)).toHaveLength(5);
       expect(await runningOnPaper(page)).toBe(0);
       // The other button, as usual, and down to the minimum
-      for (const level of ['300%', '200%', '150%', '100%', '75%', '50%', '25%']) {
+      for (const level of ['300%', '200%', '150%', '125%', '100%', '75%', '50%', '25%']) {
         await zoomOut(page).click();
         await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
         await settleZoom(page);
@@ -3059,7 +3103,7 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
       await page.clock.runFor(3000);
       await page.mouse.up();
       await expect(zoomLevel(page)).toHaveText('25% (minimum zoom)');
-      expect(await recorded(page)).toHaveLength(11);
+      expect(await recorded(page)).toHaveLength(13);
       expect(errors).toEqual([]);
     });
 
@@ -3067,18 +3111,18 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
       await setUp(page);
       await zoomIn(page).focus();
       await page.keyboard.press('Enter');
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await page.keyboard.press('Space');
-      await expect(zoomLevel(page)).toHaveText('200%');
+      await expect(zoomLevel(page)).toHaveText('150%');
       await page.clock.runFor(3000);
-      await expect(zoomLevel(page)).toHaveText('200%');
+      await expect(zoomLevel(page)).toHaveText('150%');
       await expect(zoomIn(page)).toBeFocused();
       const viewer = page.getByRole('group', { name: 'Numeral viewer' });
       await viewer.focus();
       await page.keyboard.press('+');
-      await expect(zoomLevel(page)).toHaveText('300%');
-      await page.keyboard.press('-');
       await expect(zoomLevel(page)).toHaveText('200%');
+      await page.keyboard.press('-');
+      await expect(zoomLevel(page)).toHaveText('150%');
       await page.keyboard.press('0');
       await expect(zoomLevel(page)).toHaveText('100%');
     });
@@ -3098,14 +3142,14 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
         await page.keyboard.up(key);
       };
       await hold('+');
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await page.clock.runFor(3000);
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       // Released and pressed again: a new key press
       await hold('+');
-      await expect(zoomLevel(page)).toHaveText('200%');
-      await hold('-');
       await expect(zoomLevel(page)).toHaveText('150%');
+      await hold('-');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await hold('-');
       await expect(zoomLevel(page)).toHaveText('100%');
       const keydowns = await page.evaluate(() => (window as unknown as { keydowns: boolean[] }).keydowns);
@@ -3135,9 +3179,9 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
       test('changes exactly one level for a tap, its click included', async ({ page }) => {
         await setUp(page);
         await zoomIn(page).tap();
-        await expect(zoomLevel(page)).toHaveText('150%');
+        await expect(zoomLevel(page)).toHaveText('125%');
         await page.clock.runFor(3000);
-        await expect(zoomLevel(page)).toHaveText('150%');
+        await expect(zoomLevel(page)).toHaveText('125%');
         await settleZoom(page);
         expect(await recorded(page)).toEqual(['finished']);
       });

@@ -9,7 +9,7 @@ import {
 } from '@utils/zoomAnimation';
 
 /** The zoom levels the viewport steps through, smallest to largest */
-const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const;
+const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
 
 const DEFAULT_ZOOM_INDEX = ZOOM_LEVELS.indexOf(1);
 

@@ -415,6 +415,25 @@ describe('HomeView date mode', () => {
     expect(screen.getByRole('group', { name: 'Numeral viewer' }).contains(image)).toBe(true);
   });
 
+  // UI-13: the same zoom levels in both modes; Date mode's three groups are 350 units wide too
+  it('zooms the date numerals through 125% and 150% at exact widths', () => {
+    renderHomeView();
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+
+    const image = screen.getByRole('img', { name: /^Mayan numerals for day 15, month \d{1,2} and year \d{4}$/ });
+    const zoomText = () => screen.getByRole('group', { name: 'Zoom controls' }).textContent;
+    expect([zoomText(), image.style.width]).toEqual(['−100%+Reset', '350px']);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect([zoomText(), image.style.width]).toEqual(['−125%+Reset', '437.5px']);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect([zoomText(), image.style.width]).toEqual(['−150%+Reset', '525px']);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect([zoomText(), image.style.width]).toEqual(['−100%+Reset', '350px']);
+  });
+
   it('shows the base-20 representation of the day, month and year', () => {
     renderHomeView();
     fireEvent.click(screen.getByRole('radio', { name: 'Date' }));

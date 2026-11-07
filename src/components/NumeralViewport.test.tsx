@@ -52,11 +52,13 @@ describe('NumeralViewport', () => {
     const { zoomIn, zoomOut, image, zoomText } = renderViewport();
 
     fireEvent.click(zoomIn);
+    expect(zoomText()).toBe('125%');
+    expect(image.style.width).toBe('437.5px');
+    fireEvent.click(zoomIn);
     expect(zoomText()).toBe('150%');
     expect(image.style.width).toBe('525px');
 
-    fireEvent.click(zoomOut);
-    fireEvent.click(zoomOut);
+    for (let i = 0; i < 3; i++) fireEvent.click(zoomOut);
     expect(zoomText()).toBe('75%');
     expect(image.style.width).toBe('262.5px');
 
@@ -75,12 +77,12 @@ describe('NumeralViewport', () => {
     expect(image.parentElement!.className.split(' ')).toEqual(expect.arrayContaining(['m-auto', 'shrink-0']));
     for (let i = 0; i < 3; i++) fireEvent.click(zoomOut);
     const widths: Record<string, string> = {};
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 9; i++) {
       widths[zoomText().split(' ')[0]] = image.style.width;
       fireEvent.click(zoomIn);
     }
     expect(widths).toEqual({
-      '25%': '87.5px', '50%': '175px', '75%': '262.5px', '100%': '350px',
+      '25%': '87.5px', '50%': '175px', '75%': '262.5px', '100%': '350px', '125%': '437.5px',
       '150%': '525px', '200%': '700px', '300%': '1050px', '400%': '1400px',
     });
   });
@@ -105,14 +107,14 @@ describe('NumeralViewport', () => {
     expect(zoomStatus.getAttribute('aria-live')).toBe('polite');
     expect(zoomText()).toBe('100%');
     fireEvent.click(zoomIn);
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
   });
 
   it('keeps focus on a zoom button that reaches its limit, and ignores it there', () => {
     const { zoomIn, zoomText } = renderViewport();
 
     zoomIn.focus();
-    for (let i = 0; i < 4; i++) fireEvent.click(zoomIn);
+    for (let i = 0; i < 5; i++) fireEvent.click(zoomIn);
     expect(zoomText()).toBe('400% (maximum zoom)');
     expect(document.activeElement).toBe(zoomIn);
     expect(zoomIn.hasAttribute('disabled')).toBe(false);
@@ -142,11 +144,11 @@ describe('NumeralViewport', () => {
     const { viewer, zoomText } = renderViewport();
 
     fireEvent.keyDown(viewer, { key: '+' });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     fireEvent.keyDown(viewer, { key: '=' });
-    expect(zoomText()).toBe('200%');
-    fireEvent.keyDown(viewer, { key: '-' });
     expect(zoomText()).toBe('150%');
+    fireEvent.keyDown(viewer, { key: '-' });
+    expect(zoomText()).toBe('125%');
     fireEvent.keyDown(viewer, { key: '0' });
     expect(zoomText()).toBe('100%');
   });
@@ -180,7 +182,7 @@ describe('NumeralViewport', () => {
 
     // It zooms with the numeral
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
-    expect(image.style.width).toBe('525px');
+    expect(image.style.width).toBe('437.5px');
     expect(image.contains(screen.getByTestId('overlay'))).toBe(true);
   });
 
@@ -197,7 +199,7 @@ describe('NumeralViewport', () => {
       screen.getByTestId('overlay'),
     ]);
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
-    expect(image.style.width).toBe('525px');
+    expect(image.style.width).toBe('437.5px');
   });
 
   it('sets a scroller ref it is given to the viewer, and still scrolls through it', () => {
@@ -280,7 +282,7 @@ describe('NumeralViewport', () => {
     expect(image.style.width).toBe('350px');
 
     // The padding does not zoom: only the wrapper's width changes
-    for (const [button, width] of [[zoomIn, '525px'], [zoomOut, '350px'], [zoomOut, '262.5px']] as const) {
+    for (const [button, width] of [[zoomIn, '437.5px'], [zoomOut, '350px'], [zoomOut, '262.5px']] as const) {
       fireEvent.click(button);
       expect(image.style.width).toBe(width);
       expect(image.parentElement).toBe(paper);
@@ -338,7 +340,7 @@ describe('NumeralViewport', () => {
       expect((container.firstElementChild as HTMLElement).firstElementChild).toBe(controls.parentElement);
       expect(screen.queryByRole('heading')).toBeNull();
       fireEvent.click(zoomIn);
-      expect(zoomText()).toBe('150%');
+      expect(zoomText()).toBe('125%');
     });
 
     it('orders the controls Zoom out, the percentage, Zoom in, a decorative separator, then Reset', () => {
@@ -541,7 +543,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
 
   it('keeps the point at the centre, both ways, through resizes of the viewer', () => {
     const v = renderLaidOut({ width: 300, height: 200 });
-    for (let i = 0; i < 4; i++) fireEvent.click(v.zoomIn); // 400%: 1,400 × 640 px
+    for (let i = 0; i < 5; i++) fireEvent.click(v.zoomIn); // 400%: 1,400 × 640 px
     v.userScroll(500, 200);
     const point = v.centre();
 
@@ -573,8 +575,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
 
   it('makes the user’s scrolling the view to keep, also after a correction', () => {
     const v = renderLaidOut({ width: 300, height: 200 });
-    fireEvent.click(v.zoomIn);
-    fireEvent.click(v.zoomIn); // 200%
+    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomIn); // 200%
     v.userScroll(100, 100);
     v.resize(280, 180);
     v.report();
@@ -611,7 +612,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
 
   it('keeps the intended point through clamping, and returns to it when the viewer allows', () => {
     const v = renderLaidOut({ width: 300, height: 200 });
-    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomIn); // 300%: 1,050 × 480 px
+    for (let i = 0; i < 4; i++) fireEvent.click(v.zoomIn); // 300%: 1,050 × 480 px
     v.userScroll(10_000, 10_000); // the bottom-right corner
     const point = v.centre();
 
@@ -632,7 +633,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
 
   it('zooms around the point it shows, also where a resize clamped the intended one, which the zoom then replaces', () => {
     const v = renderLaidOut({ width: 300, height: 200 });
-    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomIn); // 300%
+    for (let i = 0; i < 4; i++) fireEvent.click(v.zoomIn); // 300%
     // The point (230, 100) at the centre: 28 px of padding (the stage's 16 and the paper's 12)
     // + 230 × 3 − 150 px, and likewise down
     v.userScroll(568, 228);
@@ -660,7 +661,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
 
   it('counts a scroll whose event has not arrived yet when zooming', () => {
     const v = renderLaidOut({ width: 300, height: 200 });
-    fireEvent.click(v.zoomIn); // 150%
+    fireEvent.click(v.zoomIn); // 125%
     v.state.left = 200;
     v.state.top = 60;
     const point = v.centre();
@@ -707,7 +708,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
   it('takes a position the browser rounds after the viewer’s own scroll as the viewer’s, not the user’s', () => {
     // At 150% display scaling, rounded to thirds of a CSS px only by the time of the event
     const v = renderLaidOut({ width: 301, height: 199, pixelRatio: 1.5, roundsLater: true });
-    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomIn); // 300%
+    for (let i = 0; i < 4; i++) fireEvent.click(v.zoomIn); // 300%
     v.userScroll(556, 160);
     const point = v.centre();
 
@@ -727,7 +728,7 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
 
   it('keeps the point without drift at fractional scroll positions (150% display scaling)', () => {
     const v = renderLaidOut({ width: 301, height: 199, pixelRatio: 1.5 });
-    for (let i = 0; i < 4; i++) fireEvent.click(v.zoomIn); // 400%
+    for (let i = 0; i < 5; i++) fireEvent.click(v.zoomIn); // 400%
     v.userScroll(333.3, 211.1);
     expect(v.viewer.scrollLeft % 1).not.toBe(0); // a fractional position, as at 150%
     const point = v.centre();
@@ -888,9 +889,9 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
       expect(animation.keyframes.at(-1)).toEqual({ transformOrigin: '0 0', transform: 'none' });
       expect(animation.keyframes[0].transformOrigin).toBe('0 0');
     }
-    // Zooming in starts smaller, zooming out larger: from the earlier size, 100% and then 150%
-    expect(v.animations[0].start.scale).toBeCloseTo(1 / 1.5, 12);
-    expect(v.animations[1].start.scale).toBeCloseTo(1.5, 12);
+    // Zooming in starts smaller, zooming out larger: from the earlier size, 100% and then 125%
+    expect(v.animations[0].start.scale).toBeCloseTo(1 / 1.25, 12);
+    expect(v.animations[1].start.scale).toBeCloseTo(1.25, 12);
     // No style is left on the paper: the animation's effect is all there is
     expect(v.paper.style.transform).toBe('');
   });
@@ -903,7 +904,7 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
     v.log.length = 0;
     fireEvent.click(v.zoomIn);
     // The zoom is laid out and anchored at once: the final width, the point kept at the centre
-    expect(v.image.style.width).toBe('525px');
+    expect(v.image.style.width).toBe('437.5px');
     expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
     // At its start, the animation draws the numeral exactly where it was
     const first = v.image.getBoundingClientRect();
@@ -914,7 +915,7 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
 
   it('animates nothing for a zoom past either limit', () => {
     const v = renderAnimated();
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       fireEvent.click(v.zoomIn);
       v.running()?.finish();
     }
@@ -923,7 +924,7 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
     fireEvent.click(v.zoomIn);
     fireEvent.keyDown(v.viewer, { key: '+' });
     expect(v.animations).toHaveLength(count);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       fireEvent.click(v.zoomOut);
       v.running()?.finish();
     }
@@ -939,8 +940,8 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
     const point = v.centre();
     fireEvent.click(v.zoomIn);
     fireEvent.keyDown(v.viewer, { key: '+' });
-    expect(v.zoomText()).toBe('200%');
-    expect(v.image.style.width).toBe('700px');
+    expect(v.zoomText()).toBe('150%');
+    expect(v.image.style.width).toBe('525px');
     // Within the whole-pixel rounding of the two zooms' scroll positions
     expect(v.offBy(point)).toBeLessThanOrEqual(1);
     expect(v.animations).toEqual([]);
@@ -965,7 +966,7 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
     const drawnNow = v.image.getBoundingClientRect();
     v.log.length = 0;
 
-    fireEvent.keyDown(v.viewer, { key: '+' }); // 200%, during the first animation
+    fireEvent.keyDown(v.viewer, { key: '+' }); // 150%, during the first animation
     // The drawn box is read first, then the first animation cancelled, before any other measurement
     expect(v.log.slice(0, 3)).toEqual(['measure', 'cancel', 'measure']);
     expect(first.playState).toBe('idle');
@@ -975,7 +976,7 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
     const start = v.image.getBoundingClientRect();
     for (const side of ['left', 'top', 'width'] as const) expect(start[side], side).toBeCloseTo(drawnNow[side], 9);
     // The anchor comes from the layout, not the transform: the same point at the centre
-    expect(v.image.style.width).toBe('700px');
+    expect(v.image.style.width).toBe('525px');
     expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
     // Once finished, the final layout is all that is drawn
     second.finish();
@@ -1060,7 +1061,7 @@ describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
   it('leaves the accessible image, its label and the zoom announcement as before', () => {
     const v = renderAnimated();
     fireEvent.click(v.zoomIn);
-    expect(v.zoomText()).toBe('150%');
+    expect(v.zoomText()).toBe('125%');
     expect(v.image.getAttribute('role')).toBe('img');
     expect(v.image.getAttribute('aria-label')).toBe(LABEL);
     expect(v.paper.getAttribute('aria-hidden')).toBeNull();
@@ -1090,9 +1091,9 @@ describe('NumeralViewport: click-only zoom buttons', () => {
     // One level in, one level out
     expect(zoomText()).toBe('100%');
     fireEvent.click(zoomIn, { detail: 1 });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     act(() => vi.advanceTimersByTime(5000));
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -1118,14 +1119,14 @@ describe('NumeralViewport: click-only zoom buttons', () => {
     const { zoomIn, zoomOut, zoomText } = renderViewport();
     zoomIn.focus();
     fireEvent.click(zoomIn, { detail: 0 }); // Enter or Space on the button
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     // Right after a pointer press that released outside the button and sent no click
     fireEvent.pointerDown(zoomIn, MOUSE);
     fireEvent.pointerUp(document.body, MOUSE);
     fireEvent.click(zoomIn, { detail: 0 }); // a script or assistive technology
-    expect(zoomText()).toBe('200%');
-    fireEvent.click(zoomOut, { detail: 1 });
     expect(zoomText()).toBe('150%');
+    fireEvent.click(zoomOut, { detail: 1 });
+    expect(zoomText()).toBe('125%');
     expect(document.activeElement).toBe(zoomIn);
   });
 
@@ -1148,18 +1149,18 @@ describe('NumeralViewport: click-only zoom buttons', () => {
   it('zooms one level for + or - on the viewer, and ignores the key repeating while it is held', () => {
     const { viewer, zoomText } = renderViewport();
     fireEvent.keyDown(viewer, { key: '+' });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     for (let i = 0; i < 5; i++) fireEvent.keyDown(viewer, { key: '+', repeat: true });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     fireEvent.keyDown(viewer, { key: '=', repeat: true });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     // Released and pressed again: a new key press
     fireEvent.keyDown(viewer, { key: '=' });
-    expect(zoomText()).toBe('200%');
+    expect(zoomText()).toBe('150%');
     fireEvent.keyDown(viewer, { key: '-' });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     for (let i = 0; i < 5; i++) fireEvent.keyDown(viewer, { key: '-', repeat: true });
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     fireEvent.keyDown(viewer, { key: '-' });
     expect(zoomText()).toBe('100%');
     // The key is still the viewer's own: a repeat is not left to the browser (fireEvent returns
@@ -1171,7 +1172,7 @@ describe('NumeralViewport: click-only zoom buttons', () => {
     const { viewer, zoomText } = renderViewport();
     fireEvent.keyDown(viewer, { key: '+' });
     fireEvent.keyDown(viewer, { key: '+' });
-    expect(zoomText()).toBe('200%');
+    expect(zoomText()).toBe('150%');
     fireEvent.keyDown(viewer, { key: '0' });
     expect(zoomText()).toBe('100%');
     // Ctrl/⌘ + and other keys are not the viewer's
@@ -1191,7 +1192,7 @@ describe('NumeralViewport: click-only zoom buttons', () => {
     // Native activation: the browser's own click, which a user's Enter or Space produces
     zoomIn.focus();
     act(() => zoomIn.click());
-    expect(zoomText()).toBe('150%');
+    expect(zoomText()).toBe('125%');
     expect(document.activeElement).toBe(zoomIn);
   });
 
@@ -1217,8 +1218,120 @@ describe('NumeralViewport: click-only zoom buttons', () => {
     const v = renderAnimated({ reduce: true });
     fireEvent.click(v.zoomIn, { detail: 1 });
     fireEvent.click(v.zoomIn, { detail: 1 });
-    expect(v.zoomText()).toBe('200%');
-    expect(v.image.style.width).toBe('700px');
+    expect(v.zoomText()).toBe('150%');
+    expect(v.image.style.width).toBe('525px');
+    expect(v.animations).toEqual([]);
+    expect(v.paper.style.transform).toBe('');
+  });
+});
+
+describe('NumeralViewport: the 125% zoom level (UI-13)', () => {
+  it('steps from 100% through 125% to 150% and back, with the buttons and with the keys, at exact widths', () => {
+    const { zoomIn, zoomOut, viewer, image, zoomText } = renderViewport();
+    const at = () => [zoomText(), image.style.width];
+
+    expect(at()).toEqual(['100%', '350px']);
+    fireEvent.click(zoomIn);
+    expect(at()).toEqual(['125%', '437.5px']);
+    fireEvent.click(zoomIn);
+    expect(at()).toEqual(['150%', '525px']);
+    fireEvent.click(zoomOut);
+    expect(at()).toEqual(['125%', '437.5px']);
+    fireEvent.click(zoomOut);
+    expect(at()).toEqual(['100%', '350px']);
+
+    fireEvent.keyDown(viewer, { key: '+' });
+    expect(at()).toEqual(['125%', '437.5px']);
+    fireEvent.keyDown(viewer, { key: '+' });
+    expect(at()).toEqual(['150%', '525px']);
+    fireEvent.keyDown(viewer, { key: '-' });
+    expect(at()).toEqual(['125%', '437.5px']);
+    fireEvent.keyDown(viewer, { key: '-' });
+    expect(at()).toEqual(['100%', '350px']);
+  });
+
+  it('reaches the maximum in exactly five steps from 100% and the minimum in exactly three, and no sooner', () => {
+    const { zoomIn, zoomOut, viewer, zoomText } = renderViewport();
+
+    for (let i = 0; i < 4; i++) fireEvent.click(zoomIn);
+    expect(zoomText()).toBe('300%');
+    expect(zoomIn.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(zoomIn);
+    expect(zoomText()).toBe('400% (maximum zoom)');
+    expect(zoomIn.getAttribute('aria-disabled')).toBe('true');
+    // At the maximum both ways of zooming in do nothing, and the shortcut is still the viewer's own
+    fireEvent.click(zoomIn);
+    expect(fireEvent.keyDown(viewer, { key: '+' })).toBe(false);
+    expect(zoomText()).toBe('400% (maximum zoom)');
+
+    for (let i = 0; i < 7; i++) fireEvent.click(zoomOut);
+    expect(zoomText()).toBe('50%');
+    expect(zoomOut.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(zoomOut);
+    expect(zoomText()).toBe('25% (minimum zoom)');
+    expect(zoomOut.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(zoomOut);
+    expect(fireEvent.keyDown(viewer, { key: '-' })).toBe(false);
+    expect(zoomText()).toBe('25% (minimum zoom)');
+  });
+
+  it('keeps the point at the centre through 100% → 125% → 150% and back', () => {
+    const v = renderLaidOut({ width: 300, height: 200 });
+    // The numeral's middle (175, 80), within the scrollable area at each of the three levels
+    v.userScroll(53, 8);
+    const point = v.centre();
+    expect(point.x).toBeCloseTo(175, 0);
+    expect(point.y).toBeCloseTo(80, 0);
+
+    // Within the whole-pixel rounding of the browser's scroll positions
+    for (const [button, level] of [
+      [v.zoomIn, '125%'],
+      [v.zoomIn, '150%'],
+      [v.zoomOut, '125%'],
+      [v.zoomOut, '100%'],
+    ] as const) {
+      fireEvent.click(button);
+      expect(v.zoomText()).toBe(level);
+      expect(v.offBy(point), level).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('resets from 125% to 100% and the start of the numeral, with the button and with 0', () => {
+    for (const resetBy of ['button', 'key'] as const) {
+      const v = renderLaidOut({ width: 300, height: 200 });
+      fireEvent.click(v.zoomIn);
+      expect(v.zoomText()).toBe('125%');
+      v.userScroll(150, 40);
+      if (resetBy === 'button') fireEvent.click(v.reset);
+      else fireEvent.keyDown(v.viewer, { key: '0' });
+      expect(v.zoomText(), resetBy).toBe('100%');
+      expect(v.image.style.width, resetBy).toBe('350px');
+      expect(v.viewer.scrollTop, resetBy).toBe(0);
+      expect(v.centre().x, resetBy).toBeCloseTo(175, 5);
+      cleanup();
+    }
+  });
+
+  it('animates 100% → 125% → 150% from where the numeral was drawn, one animation each', () => {
+    const v = renderAnimated();
+    fireEvent.click(v.zoomIn);
+    v.animations[0].finish();
+    fireEvent.click(v.zoomIn);
+    expect(v.animations).toHaveLength(2);
+    expect(v.animations[0].start.scale).toBeCloseTo(350 / 437.5, 12);
+    expect(v.animations[1].start.scale).toBeCloseTo(437.5 / 525, 12);
+  });
+
+  it('zooms to 125% and 150% at once when reduced motion is preferred, with no animation or transform', () => {
+    const v = renderAnimated({ reduce: true });
+    const point = v.centre();
+    fireEvent.click(v.zoomIn);
+    expect(v.zoomText()).toBe('125%');
+    expect(v.image.style.width).toBe('437.5px');
+    fireEvent.click(v.zoomIn);
+    expect(v.zoomText()).toBe('150%');
+    expect(v.image.style.width).toBe('525px');
+    expect(v.offBy(point)).toBeLessThanOrEqual(1);
     expect(v.animations).toEqual([]);
     expect(v.paper.style.transform).toBe('');
   });
