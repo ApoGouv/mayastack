@@ -218,6 +218,17 @@
   fill: transparent;
 }
 
+/* The viewer's numeral image (the zoom wrapper, UI-13): with reduced motion, the global rule
+   above gives every element a 0.01 ms transition, and, `transition-property` being `all` by
+   default, the wrapper's zoomed width would become one, kept at the previous level's until the
+   next frame. The zoom's anchored scroll position is measured in the same frame, so it must see
+   the final width: the wrapper has no transitions. Only this element; the rule is unchanged. */
+@media (prefers-reduced-motion: reduce) {
+  [data-numeral-image] {
+    transition-property: none;
+  }
+}
+
 /* Screen-only Place Tier Guides (UI-09): while their layer precedes the numeral's SVG in the
    viewer, the SVG is lifted above it, so the glyphs and the grid are drawn over the cards. */
 [data-numeral-underlay] ~ svg.mep-svg {

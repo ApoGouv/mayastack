@@ -1,4 +1,12 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import {
+  getZoomAnimationStart,
+  prefersReducedMotion,
+  ZOOM_ANIMATION_DURATION,
+  ZOOM_ANIMATION_EASING,
+  zoomAnimationKeyframes,
+  type ScreenBox,
+} from '@utils/zoomAnimation';
 
 /** The zoom levels the viewport steps through, smallest to largest */
 const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const;
@@ -112,14 +120,23 @@ function showView(scroller: HTMLElement, numeral: HTMLElement, zoom: number, anc
 /**
  * Makes the user's scrolling the intended view: the numeral point now at the viewer's centre.
  * Ignores the viewer's own scrolling (the scroller is where a view was shown) and scrolling while
- * a resize is not yet corrected (see Anchor).
+ * a resize is not yet corrected (see Anchor). `beforeMeasuring` runs only for the user's
+ * scrolling, just before the numeral is measured: it ends a zoom animation, whose transform the
+ * measurement must not include, while the viewer's own scrolling leaves the animation running.
  */
-function followUserScroll(scroller: HTMLElement, numeral: HTMLElement, zoom: number, anchor: Anchor) {
+function followUserScroll(
+  scroller: HTMLElement,
+  numeral: HTMLElement,
+  zoom: number,
+  anchor: Anchor,
+  beforeMeasuring: () => void
+) {
   const { at, size } = anchor;
   if (size && (scroller.clientWidth !== size.width || scroller.clientHeight !== size.height)) return;
   const left = scroller.scrollLeft;
   const top = scroller.scrollTop;
   if (at && Math.abs(left - at.left) <= SCROLL_TOLERANCE && Math.abs(top - at.top) <= SCROLL_TOLERANCE) return;
+  beforeMeasuring();
   anchor.view = centrePoint(scroller, numeral, zoom);
   anchor.at = { left, top };
 }
@@ -216,6 +233,13 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const scrollerRef = givenScrollerRef ?? ownScrollerRef;
   // The zoom wrapper, the numeral's box that scroll positions are measured against
   const numeralRef = useRef<HTMLDivElement>(null);
+  // The paper, which the zoom animation draws transformed (UI-13, slice 6)
+  const paperRef = useRef<HTMLDivElement>(null);
+  // The zoom animation running on the paper, if any
+  const zoomAnimation = useRef<Animation | null>(null);
+  // For the zoom level being laid out, its animation: where the numeral image was drawn before.
+  // Null for none (Reset, reduced motion, or no zoom pending)
+  const pendingAnimation = useRef<ScreenBox | null>(null);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   // Where to scroll once the next zoom level is laid out: the numeral point to keep at the
   // viewer's centre, or the numeral's start
@@ -230,19 +254,40 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const atMin = zoomIndex === 0;
   const atMax = zoomIndex === ZOOM_LEVELS.length - 1;
 
+  /**
+   * Ends any zoom animation at once, leaving the paper at its final layout, untransformed. Every
+   * measurement of the numeral's position first calls this, since an element's box on screen
+   * includes the transforms animated on it and on its ancestors.
+   */
+  const settleZoomAnimation = () => {
+    zoomAnimation.current?.cancel();
+    zoomAnimation.current = null;
+  };
+
   const zoomTo = (index: number) => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
     if (index < 0 || index >= ZOOM_LEVELS.length || index === zoomIndex) return;
-    // Around the point the user sees at the centre, also where a resize clamped the intended
-    // view: it then becomes the view to keep
-    if (scroller && numeral) pendingScroll.current = centrePoint(scroller, numeral, zoom);
+    if (scroller && numeral) {
+      // Where the numeral is drawn now, part-way through an earlier zoom's animation included:
+      // the next animation starts from there, so a quick succession of zooms never jumps
+      const { left, top, width } = numeral.getBoundingClientRect();
+      settleZoomAnimation();
+      // Read at each zoom, so a change of preference applies from the next one
+      pendingAnimation.current = prefersReducedMotion() ? null : { left, top, width };
+      // Around the point the user sees at the centre, also where a resize clamped the intended
+      // view: it then becomes the view to keep. Measured untransformed, once settled
+      pendingScroll.current = centrePoint(scroller, numeral, zoom);
+    }
     setZoomIndex(index);
   };
 
+  // Instant, never animated: a jump to the start, not a change of scale
   const reset = () => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
+    settleZoomAnimation();
+    pendingAnimation.current = null;
     if (zoomIndex !== DEFAULT_ZOOM_INDEX) {
       pendingScroll.current = 'start';
       setZoomIndex(DEFAULT_ZOOM_INDEX);
@@ -255,23 +300,51 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
     zoomRef.current = zoom;
   }, [zoom]);
 
-  // Once the zoomed numeral is laid out, keep the same point at the centre (or go to its start)
+  // Once the zoomed numeral is laid out, keep the same point at the centre (or go to its start).
+  // Then, for a zoom (not Reset, nor with reduced motion), animate the paper from where the
+  // numeral was drawn before to its final layout: a transform only, started once the layout and
+  // the scroll position are final, all before paint
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
     const target = pendingScroll.current;
+    const pending = pendingAnimation.current;
     pendingScroll.current = null;
+    pendingAnimation.current = null;
     if (!scroller || !numeral || !target) return;
     showView(scroller, numeral, zoom, anchor.current, target);
+
+    const paper = paperRef.current;
+    if (!pending || !paper || typeof paper.animate !== 'function') return;
+    const start = getZoomAnimationStart(pending, numeral.getBoundingClientRect(), paper.getBoundingClientRect());
+    if (!start) return;
+    const animation = paper.animate(zoomAnimationKeyframes(start), {
+      duration: ZOOM_ANIMATION_DURATION,
+      easing: ZOOM_ANIMATION_EASING,
+    });
+    zoomAnimation.current = animation;
+    // Without a fill, its effect ends with it: the paper is left untransformed. Settling cancels
+    // it, which rejects `finished`: expected, so handled
+    animation.finished.then(
+      () => {
+        if (zoomAnimation.current === animation) zoomAnimation.current = null;
+      },
+      () => {}
+    );
   }, [zoom, scrollerRef]);
 
   // A new numeral shows its start: its highest place value, centred horizontally. Before paint,
-  // so it is never shown at the previous numeral's scroll position
+  // so it is never shown at the previous numeral's scroll position. Never animated
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
+    zoomAnimation.current?.cancel();
+    zoomAnimation.current = null;
     if (scroller && numeral) showView(scroller, numeral, zoomRef.current, anchor.current, 'start');
   }, [resetKey, scrollerRef]);
+
+  // A zoom animation does not outlive the viewer
+  useEffect(() => () => zoomAnimation.current?.cancel(), []);
 
   // When the scroller's size changes (the window, the layout, or a classic scrollbar appearing or
   // going), show the intended view again, so the point at the centre stays in place. The
@@ -284,6 +357,9 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
       const numeral = numeralRef.current;
       const { size } = anchor.current;
       if (!numeral || (size && scroller.clientWidth === size.width && scroller.clientHeight === size.height)) return;
+      // Measured untransformed: a resize during a zoom animation ends it first
+      zoomAnimation.current?.cancel();
+      zoomAnimation.current = null;
       showView(scroller, numeral, zoomRef.current, anchor.current, anchor.current.view);
     });
     observer.observe(scroller);
@@ -293,16 +369,19 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const handleScroll = () => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
-    if (scroller && numeral) followUserScroll(scroller, numeral, zoom, anchor.current);
+    if (scroller && numeral) followUserScroll(scroller, numeral, zoom, anchor.current, settleZoomAnimation);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // Only when the viewport itself has focus, and never for browser shortcuts such as Ctrl/⌘ +
     if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return;
 
-    if (e.key === '+' || e.key === '=') zoomTo(zoomIndex + 1);
-    else if (e.key === '-') zoomTo(zoomIndex - 1);
-    else if (e.key === '0') reset();
+    if (e.key === '+' || e.key === '=') {
+      // One step per key press: holding the key (auto-repeat) does not keep zooming
+      if (!e.repeat) zoomTo(zoomIndex + 1);
+    } else if (e.key === '-') {
+      if (!e.repeat) zoomTo(zoomIndex - 1);
+    } else if (e.key === '0') reset();
     else return;
 
     e.preventDefault();
@@ -386,6 +465,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
               stage content's padding instead of overflowing out of reach; it is never shrunk. Its
               padding does not zoom, and is never exported */}
           <div
+            ref={paperRef}
             data-numeral-paper
             className="m-auto shrink-0 p-3 shadow-sm ring-1 ring-line"
             style={{ backgroundColor: background }}

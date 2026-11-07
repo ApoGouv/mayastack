@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 import { createRef, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NumeralViewport from './NumeralViewport';
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const LABEL = 'Mayan numeral for 123: 2 stacked base-20 digits, highest place value at the top';
@@ -743,5 +744,482 @@ describe('NumeralViewport: keeping the view when the viewer is resized', () => {
       positions.push([v.viewer.scrollLeft, v.viewer.scrollTop]);
     }
     expect(positions.slice(1)).toEqual(Array(9).fill(positions[0]));
+  });
+});
+
+/**
+ * A Web Animations API animation as the zoom animation uses it, run by the test: it is "running"
+ * from its creation until the test finishes it or the viewport cancels it, and `progress` (0 to 1)
+ * is how far it has eased, which sets where it draws the paper meanwhile
+ */
+class FakeAnimation {
+  playState: 'running' | 'finished' | 'idle' = 'running';
+  progress = 0;
+  finished: Promise<FakeAnimation>;
+  readonly target: Element;
+  readonly keyframes: Keyframe[];
+  readonly options: KeyframeAnimationOptions;
+  private readonly log: string[];
+  private settle!: { resolve: (a: FakeAnimation) => void; reject: (e: Error) => void };
+  constructor(target: Element, keyframes: Keyframe[], options: KeyframeAnimationOptions, log: string[]) {
+    this.target = target;
+    this.keyframes = keyframes;
+    this.options = options;
+    this.log = log;
+    this.finished = new Promise((resolve, reject) => (this.settle = { resolve, reject }));
+    log.push('animate');
+  }
+  cancel() {
+    if (this.playState !== 'running') return;
+    this.playState = 'idle';
+    this.log.push('cancel');
+    this.settle.reject(new DOMException('The animation was canceled.', 'AbortError'));
+  }
+  finish() {
+    this.playState = 'finished';
+    this.settle.resolve(this);
+  }
+  /** The starting transform, from its first keyframe: translate(x px, y px) scale(s) */
+  get start() {
+    const [x, y, scale] = (this.keyframes[0].transform as string).match(/-?[\d.e+-]+(?=px|\))/g)!.map(Number);
+    return { x, y, scale };
+  }
+}
+
+/** The paper's 12 px padding, around the numeral image */
+const PAPER_PADDING = 12;
+
+/**
+ * The laid-out viewport (renderLaidOut) with a fake `Element.animate`, the user's motion
+ * preference (read through `matchMedia`), and the boxes a browser reports for the paper and the
+ * numeral image: their layout, and, while a zoom animation runs, where its transform draws them,
+ * at its `progress`. `log` records the animations' creation and cancellation and every
+ * measurement of the numeral image, in order.
+ */
+function renderAnimated({ reduce = false, width = 300, height = 200 } = {}) {
+  const log: string[] = [];
+  const animations: FakeAnimation[] = [];
+  const preference = { reduce };
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) => ({ matches: preference.reduce && query === '(prefers-reduced-motion: reduce)', media: query }) as MediaQueryList
+  );
+  vi.spyOn(Element.prototype, 'animate').mockImplementation(function (this: Element, keyframes, options) {
+    const animation = new FakeAnimation(this, keyframes as Keyframe[], options as KeyframeAnimationOptions, log);
+    animations.push(animation);
+    return animation as unknown as Animation;
+  });
+
+  const v = renderLaidOut({ width, height });
+  const paper = v.image.parentElement!;
+  const layoutBox = v.image.getBoundingClientRect.bind(v.image);
+  const running = () => animations.find((a) => a.playState === 'running');
+  /** A layout box as the running animation's transform, about the paper's corner, draws it */
+  const drawn = (box: DOMRect) => {
+    const a = running();
+    if (!a) return box;
+    const { x, y, scale } = a.start;
+    // Linearly eased from the start (progress 0) to none (progress 1)
+    const s = 1 + (scale - 1) * (1 - a.progress);
+    const [tx, ty] = [x * (1 - a.progress), y * (1 - a.progress)];
+    const corner = paperLayout();
+    return new DOMRect(corner.left + tx + s * (box.left - corner.left), corner.top + ty + s * (box.top - corner.top), s * box.width, s * box.height);
+  };
+  const paperLayout = () => {
+    const r = layoutBox();
+    return new DOMRect(r.left - PAPER_PADDING, r.top - PAPER_PADDING, r.width + 2 * PAPER_PADDING, r.height + 2 * PAPER_PADDING);
+  };
+  v.image.getBoundingClientRect = () => {
+    log.push('measure');
+    return drawn(layoutBox());
+  };
+  paper.getBoundingClientRect = () => drawn(paperLayout());
+  log.length = 0;
+  /** The numeral point at the viewer's centre in the layout, whatever an animation draws, in SVG units */
+  const centre = () => {
+    const r = layoutBox();
+    const zoom = r.width / 350;
+    return { x: (v.state.width / 2 - r.left) / zoom, y: (v.state.height / 2 - r.top) / zoom };
+  };
+  return {
+    ...v,
+    centre,
+    /** How far the layout's centre is from a point, in CSS px at the current zoom level */
+    offBy: (point: { x: number; y: number }) => {
+      const c = centre();
+      return Math.max(Math.abs(c.x - point.x), Math.abs(c.y - point.y)) * (layoutBox().width / 350);
+    },
+    paper,
+    log,
+    animations,
+    preference,
+    running,
+    /** The numeral image's untransformed layout box */
+    layoutBox,
+  };
+}
+
+describe('NumeralViewport: zoom animation (UI-13, slice 6)', () => {
+  it('animates nothing when first shown, for a new numeral, or for a new mode', () => {
+    const v = renderAnimated();
+    expect(v.animations).toEqual([]);
+    // A new numeral, and Date mode's numeral (a new key and new content, at the same zoom)
+    for (const [key, width] of [['b', 350], ['date', 350], ['c', 350]] as const) {
+      v.rerender(
+        <NumeralViewport numeralWidth={width} background={BACKGROUND} label={LABEL} resetKey={key}>
+          <svg width={width} height={240} viewBox={`0 0 ${width} 240`} data-testid="numeral" />
+        </NumeralViewport>
+      );
+    }
+    expect(v.animations).toEqual([]);
+    // Only a zoom animates
+    fireEvent.click(v.zoomIn);
+    expect(v.animations).toHaveLength(1);
+  });
+
+  it('animates the paper, once per zoom in or out, for 200 ms, a gentle ease-in-out, to no transform', () => {
+    const v = renderAnimated();
+    fireEvent.click(v.zoomIn);
+    v.animations[0].finish();
+    fireEvent.click(v.zoomOut);
+    expect(v.animations).toHaveLength(2);
+    for (const animation of v.animations) {
+      expect(animation.target).toBe(v.paper);
+      expect(animation.options).toEqual({ duration: 200, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
+      expect(animation.keyframes.at(-1)).toEqual({ transformOrigin: '0 0', transform: 'none' });
+      expect(animation.keyframes[0].transformOrigin).toBe('0 0');
+    }
+    // Zooming in starts smaller, zooming out larger: from the earlier size, 100% and then 150%
+    expect(v.animations[0].start.scale).toBeCloseTo(1 / 1.5, 12);
+    expect(v.animations[1].start.scale).toBeCloseTo(1.5, 12);
+    // No style is left on the paper: the animation's effect is all there is
+    expect(v.paper.style.transform).toBe('');
+  });
+
+  it('starts by drawing the numeral where it was, after the layout and the scroll position are final', () => {
+    const v = renderAnimated();
+    v.userScroll(10, 50);
+    const before = v.image.getBoundingClientRect();
+    const point = v.centre();
+    v.log.length = 0;
+    fireEvent.click(v.zoomIn);
+    // The zoom is laid out and anchored at once: the final width, the point kept at the centre
+    expect(v.image.style.width).toBe('525px');
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    // At its start, the animation draws the numeral exactly where it was
+    const first = v.image.getBoundingClientRect();
+    for (const side of ['left', 'top', 'width', 'height'] as const) expect(first[side], side).toBeCloseTo(before[side], 9);
+    // The animation starts last: after the measurements for the anchor and the layout
+    expect(v.log.at(-2)).toBe('animate');
+  });
+
+  it('animates nothing for a zoom past either limit', () => {
+    const v = renderAnimated();
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(v.zoomIn);
+      v.running()?.finish();
+    }
+    expect(v.zoomText()).toMatch(/^400%/);
+    const count = v.animations.length;
+    fireEvent.click(v.zoomIn);
+    fireEvent.keyDown(v.viewer, { key: '+' });
+    expect(v.animations).toHaveLength(count);
+    for (let i = 0; i < 7; i++) {
+      fireEvent.click(v.zoomOut);
+      v.running()?.finish();
+    }
+    expect(v.zoomText()).toMatch(/^25%/);
+    const atMin = v.animations.length;
+    fireEvent.click(v.zoomOut);
+    fireEvent.keyDown(v.viewer, { key: '-' });
+    expect(v.animations).toHaveLength(atMin);
+  });
+
+  it('zooms at once, with no animation or transform, when reduced motion is preferred, read at each zoom', () => {
+    const v = renderAnimated({ reduce: true });
+    const point = v.centre();
+    fireEvent.click(v.zoomIn);
+    fireEvent.keyDown(v.viewer, { key: '+' });
+    expect(v.zoomText()).toBe('200%');
+    expect(v.image.style.width).toBe('700px');
+    // Within the whole-pixel rounding of the two zooms' scroll positions
+    expect(v.offBy(point)).toBeLessThanOrEqual(1);
+    expect(v.animations).toEqual([]);
+    expect(v.paper.style.transform).toBe('');
+    // A change of preference applies from the next zoom, both ways
+    v.preference.reduce = false;
+    fireEvent.click(v.zoomOut);
+    expect(v.animations).toHaveLength(1);
+    v.preference.reduce = true;
+    fireEvent.click(v.zoomOut);
+    expect(v.animations).toHaveLength(1);
+    expect(v.animations[0].playState).toBe('idle'); // the second zoom ended the first's animation
+  });
+
+  it('retargets a quick second zoom from where the first animation draws the numeral, anchored on the untransformed layout', () => {
+    const v = renderAnimated();
+    v.userScroll(10, 50);
+    const point = v.centre();
+    fireEvent.click(v.zoomIn);
+    const [first] = v.animations;
+    first.progress = 0.4;
+    const drawnNow = v.image.getBoundingClientRect();
+    v.log.length = 0;
+
+    fireEvent.keyDown(v.viewer, { key: '+' }); // 200%, during the first animation
+    // The drawn box is read first, then the first animation cancelled, before any other measurement
+    expect(v.log.slice(0, 3)).toEqual(['measure', 'cancel', 'measure']);
+    expect(first.playState).toBe('idle');
+    const [, second] = v.animations;
+    expect(v.running()).toBe(second);
+    // The second starts exactly where the first had drawn the numeral
+    const start = v.image.getBoundingClientRect();
+    for (const side of ['left', 'top', 'width'] as const) expect(start[side], side).toBeCloseTo(drawnNow[side], 9);
+    // The anchor comes from the layout, not the transform: the same point at the centre
+    expect(v.image.style.width).toBe('700px');
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    // Once finished, the final layout is all that is drawn
+    second.finish();
+    expect(v.running()).toBeUndefined();
+    expect(v.image.getBoundingClientRect()).toEqual(v.layoutBox());
+  });
+
+  it('ends a running animation at Reset, which stays instant, with the button and with 0', () => {
+    const v = renderAnimated();
+    for (const resetBy of ['button', 'key'] as const) {
+      fireEvent.click(v.zoomIn);
+      const animation = v.running()!;
+      animation.progress = 0.5;
+      const count = v.animations.length;
+      if (resetBy === 'button') fireEvent.click(v.reset);
+      else fireEvent.keyDown(v.viewer, { key: '0' });
+      expect(animation.playState, resetBy).toBe('idle');
+      expect(v.animations, resetBy).toHaveLength(count);
+      expect(v.zoomText(), resetBy).toBe('100%');
+      expect(v.viewer.scrollTop, resetBy).toBe(0);
+      expect(v.centre().x, resetBy).toBeCloseTo(175, 5);
+    }
+    // Also at 100%, where Reset only scrolls back to the start
+    fireEvent.click(v.zoomIn);
+    v.running()!.finish();
+    fireEvent.click(v.zoomOut);
+    const animation = v.running()!;
+    fireEvent.click(v.reset);
+    expect(animation.playState).toBe('idle');
+  });
+
+  it('ends the animation for the user’s scrolling, but not for the viewer’s own', () => {
+    const v = renderAnimated();
+    v.userScroll(10, 50);
+    fireEvent.click(v.zoomIn);
+    const animation = v.running()!;
+    animation.progress = 0.3;
+    // The anchored scroll's own event arrives after the animation has started
+    v.scrollEvent();
+    v.scrollEvent();
+    expect(animation.playState).toBe('running');
+
+    v.log.length = 0;
+    v.userScroll(200, 120);
+    expect(animation.playState).toBe('idle');
+    // Ended before the user's view was measured, which is then taken from the layout
+    expect(v.log).toEqual(['cancel', 'measure']);
+    const point = v.centre();
+    v.resize(260, 160);
+    v.report();
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('ends the animation before correcting for a resize, measuring the layout', () => {
+    const v = renderAnimated();
+    v.userScroll(10, 50);
+    fireEvent.click(v.zoomIn);
+    v.scrollEvent();
+    const point = v.centre(); // the point kept by the zoom, from the layout
+    const animation = v.running()!;
+    animation.progress = 0.5;
+
+    v.log.length = 0;
+    v.resize(260, 160);
+    v.report();
+    expect(animation.playState).toBe('idle');
+    expect(v.log[0]).toBe('cancel');
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    // A report at the size already shown changes nothing, and starts nothing
+    v.report();
+    expect(v.animations).toHaveLength(1);
+  });
+
+  it('ends a running animation when removed', () => {
+    const v = renderAnimated();
+    fireEvent.click(v.zoomIn);
+    const animation = v.running()!;
+    v.unmount();
+    expect(animation.playState).toBe('idle');
+  });
+
+  it('leaves the accessible image, its label and the zoom announcement as before', () => {
+    const v = renderAnimated();
+    fireEvent.click(v.zoomIn);
+    expect(v.zoomText()).toBe('150%');
+    expect(v.image.getAttribute('role')).toBe('img');
+    expect(v.image.getAttribute('aria-label')).toBe(LABEL);
+    expect(v.paper.getAttribute('aria-hidden')).toBeNull();
+    expect(v.paper.getAttribute('role')).toBeNull();
+  });
+});
+
+describe('NumeralViewport: click-only zoom buttons', () => {
+  const MOUSE = { pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0 } as const;
+  const TOUCH = { pointerId: 3, pointerType: 'touch', isPrimary: true, button: 0 } as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('changes exactly one level for a click, with nothing repeated after it', () => {
+    const { zoomIn, zoomOut, zoomText } = renderViewport();
+    // A press as a browser sends it: pointerdown, pointerup, then the click
+    for (const [button, pointer] of [[zoomIn, MOUSE], [zoomOut, TOUCH]] as const) {
+      fireEvent.pointerDown(button, pointer);
+      fireEvent.pointerUp(button, pointer);
+      fireEvent.click(button, { detail: 1 });
+    }
+    // One level in, one level out
+    expect(zoomText()).toBe('100%');
+    fireEvent.click(zoomIn, { detail: 1 });
+    expect(zoomText()).toBe('150%');
+    act(() => vi.advanceTimersByTime(5000));
+    expect(zoomText()).toBe('150%');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not zoom on pointerdown, however long the pointer is held, moved or cancelled', () => {
+    const { zoomIn, zoomOut, zoomText } = renderViewport();
+    fireEvent.pointerDown(zoomIn, MOUSE);
+    expect(zoomText()).toBe('100%');
+    act(() => vi.advanceTimersByTime(5000));
+    expect(zoomText()).toBe('100%');
+    fireEvent.pointerMove(document.body, MOUSE);
+    fireEvent.pointerUp(document.body, MOUSE); // released outside the button: no click comes
+    expect(zoomText()).toBe('100%');
+    // A touch the browser takes over to scroll: pointercancel, and no click
+    fireEvent.pointerDown(zoomOut, TOUCH);
+    fireEvent.pointerCancel(zoomOut, TOUCH);
+    fireEvent.lostPointerCapture(zoomOut, TOUCH);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(zoomText()).toBe('100%');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('never swallows an activation: keyboard and assistive-technology clicks always step', () => {
+    const { zoomIn, zoomOut, zoomText } = renderViewport();
+    zoomIn.focus();
+    fireEvent.click(zoomIn, { detail: 0 }); // Enter or Space on the button
+    expect(zoomText()).toBe('150%');
+    // Right after a pointer press that released outside the button and sent no click
+    fireEvent.pointerDown(zoomIn, MOUSE);
+    fireEvent.pointerUp(document.body, MOUSE);
+    fireEvent.click(zoomIn, { detail: 0 }); // a script or assistive technology
+    expect(zoomText()).toBe('200%');
+    fireEvent.click(zoomOut, { detail: 1 });
+    expect(zoomText()).toBe('150%');
+    expect(document.activeElement).toBe(zoomIn);
+  });
+
+  it('stops at either limit, where the button is aria-disabled and a click does nothing', () => {
+    const v = renderAnimated();
+    for (let i = 0; i < 5; i++) fireEvent.click(v.zoomIn);
+    expect(v.zoomText()).toBe('400% (maximum zoom)');
+    expect(v.zoomIn.getAttribute('aria-disabled')).toBe('true');
+    const animations = v.animations.length;
+    fireEvent.click(v.zoomIn);
+    expect(v.zoomText()).toBe('400% (maximum zoom)');
+    expect(v.animations).toHaveLength(animations);
+    for (let i = 0; i < 8; i++) fireEvent.click(v.zoomOut);
+    expect(v.zoomText()).toBe('25% (minimum zoom)');
+    expect(v.zoomOut.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(v.zoomOut);
+    expect(v.zoomText()).toBe('25% (minimum zoom)');
+  });
+
+  it('zooms one level for + or - on the viewer, and ignores the key repeating while it is held', () => {
+    const { viewer, zoomText } = renderViewport();
+    fireEvent.keyDown(viewer, { key: '+' });
+    expect(zoomText()).toBe('150%');
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(viewer, { key: '+', repeat: true });
+    expect(zoomText()).toBe('150%');
+    fireEvent.keyDown(viewer, { key: '=', repeat: true });
+    expect(zoomText()).toBe('150%');
+    // Released and pressed again: a new key press
+    fireEvent.keyDown(viewer, { key: '=' });
+    expect(zoomText()).toBe('200%');
+    fireEvent.keyDown(viewer, { key: '-' });
+    expect(zoomText()).toBe('150%');
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(viewer, { key: '-', repeat: true });
+    expect(zoomText()).toBe('150%');
+    fireEvent.keyDown(viewer, { key: '-' });
+    expect(zoomText()).toBe('100%');
+    // The key is still the viewer's own: a repeat is not left to the browser (fireEvent returns
+    // false for a prevented event)
+    expect(fireEvent.keyDown(viewer, { key: '+', repeat: true })).toBe(false);
+  });
+
+  it('leaves Reset, its shortcut and the other keys as they were', () => {
+    const { viewer, zoomText } = renderViewport();
+    fireEvent.keyDown(viewer, { key: '+' });
+    fireEvent.keyDown(viewer, { key: '+' });
+    expect(zoomText()).toBe('200%');
+    fireEvent.keyDown(viewer, { key: '0' });
+    expect(zoomText()).toBe('100%');
+    // Ctrl/⌘ + and other keys are not the viewer's
+    fireEvent.keyDown(viewer, { key: '+', ctrlKey: true });
+    fireEvent.keyDown(viewer, { key: 'ArrowDown' });
+    expect(zoomText()).toBe('100%');
+  });
+
+  it('keeps the buttons’ names, states and type, native activation included', () => {
+    const { zoomIn, zoomOut, zoomText } = renderViewport();
+    for (const button of [zoomIn, zoomOut]) {
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.getAttribute('type')).toBe('button');
+      expect(button.hasAttribute('disabled')).toBe(false);
+    }
+    expect(zoomIn.getAttribute('aria-disabled')).toBe('false');
+    // Native activation: the browser's own click, which a user's Enter or Space produces
+    zoomIn.focus();
+    act(() => zoomIn.click());
+    expect(zoomText()).toBe('150%');
+    expect(document.activeElement).toBe(zoomIn);
+  });
+
+  it('animates a click, and only a click, for 200 ms with the approved easing, one animation at a time', () => {
+    const v = renderAnimated();
+    fireEvent.pointerDown(v.zoomIn, MOUSE);
+    act(() => vi.advanceTimersByTime(2000));
+    expect(v.animations).toHaveLength(0);
+    fireEvent.pointerUp(v.zoomIn, MOUSE);
+    fireEvent.click(v.zoomIn, { detail: 1 });
+    expect(v.animations).toHaveLength(1);
+    expect(v.animations[0].options).toEqual({ duration: 200, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
+    // A rapid second click retargets from where the numeral is drawn, with the same timing
+    fireEvent.click(v.zoomIn, { detail: 1 });
+    expect(v.animations.map((a) => a.playState)).toEqual(['idle', 'running']);
+    expect(v.animations[1].options).toEqual({ duration: 200, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
+    // A repeating key adds none
+    fireEvent.keyDown(v.viewer, { key: '+', repeat: true });
+    expect(v.animations).toHaveLength(2);
+  });
+
+  it('zooms at once, with no animation and no transform, for a click when reduced motion is preferred', () => {
+    const v = renderAnimated({ reduce: true });
+    fireEvent.click(v.zoomIn, { detail: 1 });
+    fireEvent.click(v.zoomIn, { detail: 1 });
+    expect(v.zoomText()).toBe('200%');
+    expect(v.image.style.width).toBe('700px');
+    expect(v.animations).toEqual([]);
+    expect(v.paper.style.transform).toBe('');
   });
 });
