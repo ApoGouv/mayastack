@@ -9,7 +9,7 @@
  * A zoom step's timing (a click, a tap or a key): short, from rest to rest, with a gentle start
  * and a long deceleration (an asymmetric ease-in-out), and no overshoot
  */
-export const ZOOM_ANIMATION_DURATION = 300;
+export const ZOOM_ANIMATION_DURATION = 200;
 export const ZOOM_ANIMATION_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
 /** A box on screen, in CSS px: its left and top edges, from the viewport, and its width */
