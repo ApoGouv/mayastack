@@ -17,6 +17,7 @@ const BACKGROUND_COLOR_KEY = 'mayastack:backgroundColor';
 const GLYPH_COLOR_KEY = 'mayastack:glyphColor';
 const SHOW_PLACE_TIER_GUIDES_KEY = 'mayastack:showPlaceTierGuides';
 const SHOW_TIER_HAIRLINES_KEY = 'mayastack:showTierHairlines';
+const SHOW_TIER_ANNOTATIONS_KEY = 'mayastack:showTierAnnotations';
 
 const DEFAULT_BACKGROUND: RgbaColor = { r: 255, g: 255, b: 255, a: 1 };
 const DEFAULT_GLYPH: RgbaColor = { r: 0, g: 0, b: 0, a: 1 };
@@ -168,6 +169,7 @@ describe('DisplaySettingsProvider with working storage', () => {
     expect(settings().showGrid).toBe(false);
     expect(settings().showPlaceTierGuides).toBe(false);
     expect(settings().showTierHairlines).toBe(false);
+    expect(settings().showTierAnnotations).toBe(false);
     unmount();
     expect(writes.all()).toEqual([]);
     expect(localStorage.length).toBe(0);
@@ -178,6 +180,7 @@ describe('DisplaySettingsProvider with working storage', () => {
     localStorage.setItem(SHOW_GRID_KEY, 'true');
     localStorage.setItem(SHOW_PLACE_TIER_GUIDES_KEY, 'true');
     localStorage.setItem(SHOW_TIER_HAIRLINES_KEY, 'true');
+    localStorage.setItem(SHOW_TIER_ANNOTATIONS_KEY, 'true');
     localStorage.setItem(BACKGROUND_COLOR_KEY, '{"r":10,"g":20,"b":30,"a":0.4}');
     localStorage.setItem(GLYPH_COLOR_KEY, '{"r":200,"g":100,"b":0,"a":0}');
     const writes = watchWrites();
@@ -187,6 +190,7 @@ describe('DisplaySettingsProvider with working storage', () => {
     expect(settings().showGrid).toBe(true);
     expect(settings().showPlaceTierGuides).toBe(true);
     expect(settings().showTierHairlines).toBe(true);
+    expect(settings().showTierAnnotations).toBe(true);
     unmount();
     expect(writes.all()).toEqual([]);
   });
@@ -240,6 +244,9 @@ describe('DisplaySettingsProvider with working storage', () => {
     act(() => settings().setShowTierHairlines(true));
     act(() => settings().setShowPlaceTierGuides(false));
     act(() => settings().setShowTierHairlines(false));
+    act(() => settings().setShowTierAnnotations(true));
+    act(() => settings().setShowTierAnnotations(true)); // unchanged: not saved again
+    act(() => settings().setShowTierAnnotations(false));
     expect(writes.all()).toEqual([
       [THEME_KEY, 'dark'],
       [THEME_KEY, null],
@@ -248,6 +255,8 @@ describe('DisplaySettingsProvider with working storage', () => {
       [SHOW_TIER_HAIRLINES_KEY, 'true'],
       [SHOW_PLACE_TIER_GUIDES_KEY, 'false'],
       [SHOW_TIER_HAIRLINES_KEY, 'false'],
+      [SHOW_TIER_ANNOTATIONS_KEY, 'true'],
+      [SHOW_TIER_ANNOTATIONS_KEY, 'false'],
     ]);
   });
 
@@ -530,6 +539,104 @@ describe('DisplaySettingsProvider tier guides together', () => {
     const { settings } = renderProbe();
     expect(settings().showPlaceTierGuides).toBe(false);
     expect(settings().showTierHairlines).toBe(false);
+  });
+});
+
+describe('DisplaySettingsProvider tier annotations visibility', () => {
+  it('is off by default, with nothing saved', () => {
+    const writes = watchWrites();
+    const { settings, unmount } = renderProbe();
+    expect(settings().showTierAnnotations).toBe(false);
+    unmount();
+    expect(writes(SHOW_TIER_ANNOTATIONS_KEY)).toEqual([]);
+  });
+
+  it('restores a saved true and a saved false', () => {
+    localStorage.setItem(SHOW_TIER_ANNOTATIONS_KEY, 'true');
+    expect(renderProbe().settings().showTierAnnotations).toBe(true);
+    cleanup();
+
+    localStorage.setItem(SHOW_TIER_ANNOTATIONS_KEY, 'false');
+    expect(renderProbe().settings().showTierAnnotations).toBe(false);
+  });
+
+  it.each(['on', 'TRUE', '1', '', 'null'])('ignores an invalid saved value (%j)', (value) => {
+    localStorage.setItem(SHOW_TIER_ANNOTATIONS_KEY, value);
+    expect(renderProbe().settings().showTierAnnotations).toBe(false);
+  });
+
+  it('saves changes as strings under its own key, independently of the other settings', () => {
+    const writes = watchWrites();
+    const { settings } = renderProbe();
+
+    act(() => settings().setShowTierAnnotations(true));
+    expect(settings().showTierAnnotations).toBe(true);
+    expect(stored(SHOW_TIER_ANNOTATIONS_KEY)).toBe('true');
+    expect(settings().showGrid).toBe(false);
+    expect(settings().showPlaceTierGuides).toBe(false);
+    expect(settings().showTierHairlines).toBe(false);
+    expect(settings().theme).toBe('system');
+
+    act(() => settings().setShowTierAnnotations(false));
+    expect(stored(SHOW_TIER_ANNOTATIONS_KEY)).toBe('false');
+    expect(writes.all()).toEqual([
+      [SHOW_TIER_ANNOTATIONS_KEY, 'true'],
+      [SHOW_TIER_ANNOTATIONS_KEY, 'false'],
+    ]);
+  });
+
+  it('is not changed by, and does not change, the other settings', () => {
+    localStorage.setItem(SHOW_TIER_ANNOTATIONS_KEY, 'true');
+    const { settings } = renderProbe();
+
+    act(() => settings().setShowGrid(true));
+    act(() => settings().setShowPlaceTierGuides(true));
+    act(() => settings().setShowTierHairlines(true));
+    act(() => settings().setTheme('dark'));
+    expect(settings().showTierAnnotations).toBe(true);
+    expect(stored(SHOW_TIER_ANNOTATIONS_KEY)).toBe('true');
+    cleanup();
+
+    // The other settings restore alongside it, and turning it off leaves them on
+    const second = renderProbe();
+    expect(second.settings().showTierAnnotations).toBe(true);
+    act(() => second.settings().setShowTierAnnotations(false));
+    expect(second.settings().showGrid).toBe(true);
+    expect(second.settings().showPlaceTierGuides).toBe(true);
+    expect(second.settings().showTierHairlines).toBe(true);
+    expect(stored(SHOW_GRID_KEY)).toBe('true');
+  });
+
+  it('ignores the same key without the prefix', () => {
+    localStorage.setItem('showTierAnnotations', 'true');
+    expect(renderProbe().settings().showTierAnnotations).toBe(false);
+  });
+
+  it('uses the default when the storage is blocked or cannot be read, and still changes', () => {
+    localStorage.setItem(SHOW_TIER_ANNOTATIONS_KEY, 'true');
+    failStorage('getItem');
+    const { settings } = renderProbe();
+    expect(settings().showTierAnnotations).toBe(false);
+    act(() => settings().setShowTierAnnotations(true));
+    expect(settings().showTierAnnotations).toBe(true);
+  });
+
+  it('keeps the change for the visit when the storage itself is blocked', () => {
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(blocked);
+    const { settings } = renderProbe();
+    act(() => settings().setShowTierAnnotations(true));
+    expect(settings().showTierAnnotations).toBe(true);
+  });
+
+  it('keeps the change for the visit, unsaved, when it cannot be written', () => {
+    const setItem = failStorage('setItem', () => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    const { settings } = renderProbe();
+    act(() => settings().setShowTierAnnotations(true));
+    expect(settings().showTierAnnotations).toBe(true);
+    expect(setItem).toHaveBeenCalledWith(SHOW_TIER_ANNOTATIONS_KEY, 'true');
+    expect(stored(SHOW_TIER_ANNOTATIONS_KEY)).toBeNull();
   });
 });
 

@@ -27,4 +27,8 @@ export interface DisplaySettingsContextType {
   setShowPlaceTierGuides: (show: boolean) => void;
   showTierHairlines: boolean;
   setShowTierHairlines: (show: boolean) => void;
+
+  // Screen-only tier annotations visibility, off by default
+  showTierAnnotations: boolean;
+  setShowTierAnnotations: (show: boolean) => void;
 }
