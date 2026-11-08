@@ -15,7 +15,18 @@ const LABEL = 'Mayan numeral for 123: 2 stacked base-20 digits, highest place va
 const BACKGROUND = 'rgba(20, 40, 90, 0.5)';
 
 /** Renders the viewport around a stand-in numeral and returns its parts */
-function renderViewport(props: { resetKey?: string; header?: ReactNode; footer?: ReactNode } = {}) {
+function renderViewport(
+  props: {
+    resetKey?: string;
+    header?: ReactNode;
+    footer?: ReactNode;
+    numeralHeight?: number;
+    annotationsStart?: ReactNode;
+    annotationsEnd?: ReactNode;
+    underlay?: ReactNode;
+    overlay?: ReactNode;
+  } = {}
+) {
   const result = render(
     <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} {...props}>
       <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
@@ -243,8 +254,12 @@ describe('NumeralViewport', () => {
       expect.arrayContaining(['flex', 'w-max', 'min-w-full', 'min-h-full', 'p-4', 'overflow-clip'])
     );
     // Changed deliberately in UI-13: the paper between the stage content and the numeral image
-    const paper = content.firstElementChild as HTMLElement;
-    expect([...content.children]).toEqual([paper]);
+    // (UI-10, slice 2.1: through the centred group, always present, that holds the paper)
+    const group = content.firstElementChild as HTMLElement;
+    expect([...content.children]).toEqual([group]);
+    expect(group.hasAttribute('data-numeral-group')).toBe(true);
+    const paper = group.firstElementChild as HTMLElement;
+    expect([...group.children]).toEqual([paper]);
     expect(paper.hasAttribute('data-numeral-paper')).toBe(true);
     expect([...paper.children]).toEqual([image]);
     expect(document.querySelectorAll('[data-numeral-paper]')).toHaveLength(1);
@@ -408,6 +423,8 @@ describe('NumeralViewport', () => {
 
 /** The zoom wrapper's distance from the stage box's edge: its 16 px padding and the paper's 12 px */
 const SLAB_INSET = 16 + 12;
+/** An annotation gutter's width (`w-10.5`), at each side of the paper when there are gutters */
+const GUTTER_WIDTH = 42;
 
 /** A ResizeObserver whose reports the test sends, as happy-dom's never reports */
 class FakeResizeObserver {
@@ -446,16 +463,19 @@ function renderLaidOut({
   height,
   pixelRatio = 1,
   roundsLater = false,
+  viewport = {},
 }: {
   width: number;
   height: number;
   pixelRatio?: number;
+  /** More props for the viewport, e.g. annotations */
+  viewport?: Parameters<typeof renderViewport>[0];
   /** Rounds to device pixels only by the time of the scroll event, not as soon as it scrolls */
   roundsLater?: boolean;
 }) {
   FakeResizeObserver.instances = [];
   vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-  const parts = renderViewport({ resetKey: 'a' });
+  const parts = renderViewport({ resetKey: 'a', ...viewport });
   const { viewer, image } = parts;
   const s = { width, height, left: 0, top: 0, scrollToCalls: 0 };
 
@@ -463,7 +483,12 @@ function renderLaidOut({
     const w = parseFloat(image.style.width);
     return { w, h: (w * 160) / 350, zoom: w / 350 };
   };
-  const content = () => ({ w: Math.max(s.width, slab().w + 2 * SLAB_INSET), h: Math.max(s.height, slab().h + 2 * SLAB_INSET) });
+  // The annotation gutters, if rendered, widen the group symmetrically: the paper is as centred as before
+  const gutters = () => viewer.querySelectorAll('[data-numeral-annotations]').length * GUTTER_WIDTH;
+  const content = () => ({
+    w: Math.max(s.width, slab().w + 2 * SLAB_INSET + gutters()),
+    h: Math.max(s.height, slab().h + 2 * SLAB_INSET),
+  });
   const round = (value: number) => Math.round(value * pixelRatio) / pixelRatio;
   const clamp = (value: number, max: number) => {
     const clamped = Math.min(Math.max(value, 0), Math.max(max, 0));
@@ -479,14 +504,35 @@ function renderLaidOut({
     s.top = clamp(s.top, content().h - s.height);
   };
 
+  // Showing or hiding the gutters changes the content's size: the browser clamps the scroll
+  // position at its layout, before anything reads it (only then, to leave the other tests' fake as it was)
+  let guttersLaidOut = gutters();
+  const layOutGutters = () => {
+    if (gutters() === guttersLaidOut) return;
+    guttersLaidOut = gutters();
+    clampAll();
+  };
+
   Object.defineProperties(viewer, {
     clientWidth: { configurable: true, get: () => s.width },
     clientHeight: { configurable: true, get: () => s.height },
-    scrollLeft: { configurable: true, get: () => s.left, set: (v: number) => { s.left = clamp(v, content().w - s.width); } },
-    scrollTop: { configurable: true, get: () => s.top, set: (v: number) => { s.top = clamp(v, content().h - s.height); } },
+    // The scrollable area: the content, at least as large as the stage
+    scrollWidth: { configurable: true, get: () => content().w },
+    scrollHeight: { configurable: true, get: () => content().h },
+    scrollLeft: {
+      configurable: true,
+      get: () => (layOutGutters(), s.left),
+      set: (v: number) => { s.left = clamp(v, content().w - s.width); },
+    },
+    scrollTop: {
+      configurable: true,
+      get: () => (layOutGutters(), s.top),
+      set: (v: number) => { s.top = clamp(v, content().h - s.height); },
+    },
   });
   viewer.getBoundingClientRect = () => new DOMRect(0, 0, s.width, s.height);
   image.getBoundingClientRect = () => {
+    layOutGutters();
     const { w, h } = slab();
     const c = content();
     return new DOMRect((c.w - w) / 2 - s.left, (c.h - h) / 2 - s.top, w, h);
@@ -797,7 +843,12 @@ const PAPER_PADDING = 12;
  * at its `progress`. `log` records the animations' creation and cancellation and every
  * measurement of the numeral image, in order.
  */
-function renderAnimated({ reduce = false, width = 300, height = 200 } = {}) {
+function renderAnimated({
+  reduce = false,
+  width = 300,
+  height = 200,
+  viewport,
+}: { reduce?: boolean; width?: number; height?: number; viewport?: Parameters<typeof renderViewport>[0] } = {}) {
   const log: string[] = [];
   const animations: FakeAnimation[] = [];
   const preference = { reduce };
@@ -810,7 +861,7 @@ function renderAnimated({ reduce = false, width = 300, height = 200 } = {}) {
     return animation as unknown as Animation;
   });
 
-  const v = renderLaidOut({ width, height });
+  const v = renderLaidOut({ width, height, viewport });
   const paper = v.image.parentElement!;
   const layoutBox = v.image.getBoundingClientRect.bind(v.image);
   const running = () => animations.find((a) => a.playState === 'running');
@@ -1334,5 +1385,755 @@ describe('NumeralViewport: the 125% zoom level (UI-13)', () => {
     expect(v.offBy(point)).toBeLessThanOrEqual(1);
     expect(v.animations).toEqual([]);
     expect(v.paper.style.transform).toBe('');
+  });
+});
+
+
+/*
+ * The annotation gutters (UI-10, slice 2). happy-dom does no layout: these tests check the
+ * structure, identity, classes and inline sizes. That the gutters stick, centre like the paper,
+ * match the image's box to the pixel, and appear from a stage width of 31rem are browser
+ * behaviours, outstanding for the browser tests (slice 5).
+ */
+describe('NumeralViewport: annotation gutters (UI-10, slice 2)', () => {
+  const NUMERAL_HEIGHT = 160;
+
+  type GutterProps = { annotationsStart?: ReactNode; annotationsEnd?: ReactNode; numeralHeight?: number };
+
+  function renderGutters(props: GutterProps = {}) {
+    const element = (p: GutterProps) => (
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} {...p}>
+        <svg width={350} height={NUMERAL_HEIGHT} viewBox="0 0 350 160" data-testid="numeral" />
+      </NumeralViewport>
+    );
+    const result = render(element(props));
+    const parts = () => {
+      const viewer = screen.getByRole('group', { name: 'Numeral viewer' });
+      const content = viewer.querySelector<HTMLElement>('[data-numeral-stage-content]')!;
+      return {
+        viewer,
+        content,
+        group: content.querySelector<HTMLElement>('[data-numeral-group]')!,
+        paper: viewer.querySelector<HTMLElement>('[data-numeral-paper]')!,
+        image: screen.getByRole('img', { name: LABEL }),
+        start: content.querySelector<HTMLElement>('[data-numeral-annotations="start"]'),
+        end: content.querySelector<HTMLElement>('[data-numeral-annotations="end"]'),
+      };
+    };
+    return { ...result, parts, change: (p: GutterProps) => result.rerender(element(p)) };
+  }
+
+  const box = (gutter: HTMLElement) => gutter.querySelector<HTMLElement>('[data-numeral-annotations-box]')!;
+  const classesOf = (el: HTMLElement) => el.className.split(' ');
+
+  it('without slots: the centred group holds the paper alone, and there is no container', () => {
+    const { parts } = renderGutters();
+    const { viewer, content, group, paper } = parts();
+    expect([...content.children]).toEqual([group]);
+    expect([...group.children]).toEqual([paper]);
+    expect(content.querySelector('[data-numeral-annotations]')).toBeNull();
+    expect(classesOf(viewer)).not.toContain('@container');
+    expect(content.className).toBe('flex w-max min-w-full min-h-full p-4 overflow-clip');
+  });
+
+  it('adds no gutters from a height alone, nor slots without a usable height', () => {
+    const unusable: GutterProps[] = [
+      { numeralHeight: NUMERAL_HEIGHT },
+      { annotationsStart: <b>x</b> },
+      { annotationsStart: <b>x</b>, numeralHeight: 0 },
+      { annotationsStart: <b>x</b>, numeralHeight: -80 },
+      { annotationsStart: <b>x</b>, numeralHeight: Number.NaN },
+      { annotationsStart: <b>x</b>, numeralHeight: Number.POSITIVE_INFINITY },
+      { annotationsStart: false, annotationsEnd: null, numeralHeight: NUMERAL_HEIGHT },
+    ];
+    for (const props of unusable) {
+      const { parts, unmount } = renderGutters(props);
+      expect(parts().group.children).toHaveLength(1);
+      expect(classesOf(parts().viewer)).not.toContain('@container');
+      unmount();
+    }
+  });
+
+  it('puts the start gutter before the paper and the end gutter after it, each with its slot', () => {
+    const { parts } = renderGutters({
+      annotationsStart: <i data-testid="start-slot" />,
+      annotationsEnd: <i data-testid="end-slot" />,
+      numeralHeight: NUMERAL_HEIGHT,
+    });
+    const { content, group, paper, start, end } = parts();
+    expect([...content.children]).toEqual([group]);
+    expect([...group.children]).toEqual([start, paper, end]);
+    expect(box(start!).contains(screen.getByTestId('start-slot'))).toBe(true);
+    expect(box(end!).contains(screen.getByTestId('end-slot'))).toBe(true);
+    // Neither gutter is inside the paper, nor in the numeral image or its SVG
+    expect(paper.contains(start)).toBe(false);
+    expect(paper.contains(end)).toBe(false);
+    expect(screen.getByTestId('numeral').closest('[data-numeral-annotations]')).toBeNull();
+  });
+
+  it('lays out both gutters when only one has content, so the numeral stays centred', () => {
+    const { parts } = renderGutters({ annotationsStart: <i data-testid="only" />, numeralHeight: NUMERAL_HEIGHT });
+    const { content, group, paper, start, end } = parts();
+    expect([...content.children]).toEqual([group]);
+    expect([...group.children]).toEqual([start, paper, end]);
+    expect(box(end!).childNodes).toHaveLength(0);
+    expect(classesOf(start!)).toContain('w-10.5');
+    expect(classesOf(end!)).toContain('w-10.5');
+  });
+
+  it('keeps the viewer, paper and image elements when gutters appear and disappear', () => {
+    const { parts, change } = renderGutters();
+    const before = parts();
+
+    change({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const during = parts();
+    expect(during.start).not.toBeNull();
+    expect(during.viewer).toBe(before.viewer);
+    expect(during.content).toBe(before.content);
+    expect(during.paper).toBe(before.paper);
+    expect(during.image).toBe(before.image);
+    expect(during.image.contains(screen.getByTestId('numeral'))).toBe(true);
+
+    change({});
+    const after = parts();
+    expect(after.start).toBeNull();
+    expect(after.paper).toBe(before.paper);
+    expect(after.image).toBe(before.image);
+    expect(classesOf(after.viewer)).not.toContain('@container');
+  });
+
+  it('keeps its single scroller observer and its zoom through slot changes', () => {
+    FakeResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    const { parts, change } = renderGutters();
+    const { viewer } = parts();
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(parts().image.style.width).toBe('437.5px');
+
+    change({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    change({});
+    expect(FakeResizeObserver.instances).toHaveLength(1);
+    expect(FakeResizeObserver.instances[0].observed).toEqual([viewer]);
+    expect(parts().image.style.width).toBe('437.5px');
+  });
+
+  it('makes the viewer a container for the width query only while there are gutters', () => {
+    const { parts, change } = renderGutters({ annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    expect(classesOf(parts().viewer)).toContain('@container');
+    change({});
+    expect(classesOf(parts().viewer)).not.toContain('@container');
+  });
+
+  it('gives each gutter its place, layer and look: sticky, above the numeral, opaque, and no pointer', () => {
+    const { parts } = renderGutters({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const { start, end, content } = parts();
+    for (const gutter of [start!, end!]) {
+      expect(classesOf(gutter)).toEqual(
+        expect.arrayContaining(['sticky', 'z-10', 'bg-canvas', 'pointer-events-none', 'shrink-0'])
+      );
+      expect(gutter.getAttribute('aria-hidden')).toBe('true');
+      expect(gutter.tabIndex).toBe(-1);
+      // Hidden by default; shown by the stage's width (a browser test checks the threshold)
+      expect(classesOf(gutter)).toContain('hidden');
+      expect(classesOf(gutter)).toContain('@min-[31rem]:flex');
+    }
+    // Pinned to the scroller's edges, so no strip beside a gutter shows the scrolling paper; the
+    // stage content's padding (p-4) keeps them in the flow at the ends, so nothing jumps
+    expect(classesOf(start!)).toContain('left-0');
+    expect(classesOf(end!)).toContain('right-0');
+    for (const gutter of [start!, end!]) {
+      expect(classesOf(gutter)).not.toContain('left-4');
+      expect(classesOf(gutter)).not.toContain('right-4');
+    }
+    expect(classesOf(content)).toContain('p-4');
+  });
+
+  it('mirrors the image: as tall as the numeral at each zoom level, with the paper’s vertical layout', () => {
+    const { parts } = renderGutters({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const zoomIn = screen.getByRole('button', { name: 'Zoom in' });
+
+    // 100%, then 125%, 150%
+    for (const [width, height] of [
+      ['350px', '160px'],
+      ['437.5px', '200px'],
+      ['525px', '240px'],
+    ]) {
+      const { image, start, end } = parts();
+      expect(image.style.width).toBe(width);
+      expect(box(start!).style.height).toBe(height);
+      expect(box(end!).style.height).toBe(height);
+      fireEvent.click(zoomIn);
+    }
+
+    // The same automatic margins and vertical padding as the paper (m-auto, p-3); no horizontal
+    // padding, which would narrow the labels
+    const { paper, start } = parts();
+    const inner = start!.firstElementChild as HTMLElement;
+    expect(classesOf(paper)).toEqual(expect.arrayContaining(['m-auto', 'p-3']));
+    expect(classesOf(inner)).toEqual(expect.arrayContaining(['m-auto', 'py-3']));
+    expect(classesOf(inner)).not.toContain('p-3');
+    expect(inner.firstElementChild).toBe(box(start!));
+    expect(classesOf(box(start!))).toContain('relative');
+  });
+
+  it('centres a real group: a flex box with automatic margins that is never shrunk', () => {
+    const { parts } = renderGutters({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const { content, group } = parts();
+    expect(group.parentElement).toBe(content);
+    expect(classesOf(group)).toEqual(expect.arrayContaining(['m-auto', 'flex', 'shrink-0']));
+    // A real layout box, not display: contents, and it has no padding of its own
+    expect(classesOf(group)).not.toContain('contents');
+    expect(group.style.display).toBe('');
+    expect(classesOf(group).filter((c) => /^p[xytrblse]?-/.test(c))).toEqual([]);
+    // The group is the stage content's only item, so the page gets no overflow of its own
+    expect(content.children).toHaveLength(1);
+    expect(classesOf(content)).toContain('overflow-clip');
+  });
+
+  it('keeps the group, paper and image the same elements through gutters appearing and disappearing', () => {
+    const { parts, change } = renderGutters();
+    const before = parts();
+    change({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const during = parts();
+    expect(during.group).toBe(before.group);
+    expect(during.paper).toBe(before.paper);
+    expect(during.image).toBe(before.image);
+    change({});
+    expect(parts().group).toBe(before.group);
+    expect(parts().paper).toBe(before.paper);
+    expect(document.querySelectorAll('[data-numeral-group]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-numeral-paper]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-numeral-image]')).toHaveLength(1);
+  });
+
+  it('gives the paper the same neighbours whatever the slots hold, so Date mode cannot shift it', () => {
+    const shape = (p: GutterProps) => {
+      const { parts, unmount } = renderGutters(p);
+      const { group, start, end } = parts();
+      const result = {
+        order: [...group.children].map((c) => c.getAttribute('data-numeral-annotations') ?? 'paper'),
+        classes: [start, end].map((g) => (g ? g.className : null)).map((c) => c?.replace(/left-0|right-0/, '')),
+        boxes: [start, end].map((g) => (g ? box(g).style.height : null)),
+      };
+      unmount();
+      return result;
+    };
+    const both = shape({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const startOnly = shape({ annotationsStart: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const endOnly = shape({ annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    expect(both.order).toEqual(['start', 'paper', 'end']);
+    expect(startOnly).toEqual(both);
+    expect(endOnly).toEqual(both);
+  });
+
+  it('keeps the gutter width, the 31rem threshold and the zoom wrapper as they were', () => {
+    const { parts } = renderGutters({ annotationsStart: <i />, annotationsEnd: <i />, numeralHeight: NUMERAL_HEIGHT });
+    const { start, end, image } = parts();
+    for (const gutter of [start!, end!]) {
+      expect(classesOf(gutter)).toEqual(expect.arrayContaining(['w-10.5', 'hidden', '@min-[31rem]:flex']));
+    }
+    expect(image.style.width).toBe('350px');
+  });
+});
+
+describe('NumeralViewport: annotations during the zoom animation (UI-10, slice 3.1)', () => {
+  const annotated = (extra: Record<string, unknown> = {}) => ({
+    numeralHeight: 160,
+    annotationsStart: <span data-testid="start-label">20</span>,
+    annotationsEnd: <span data-testid="end-label">1</span>,
+    underlay: <div data-testid="underlay-guide" />,
+    overlay: <div data-testid="overlay-hairline" />,
+    ...extra,
+  });
+  const setup = (opts: { reduce?: boolean } = {}) => renderAnimated({ ...opts, viewport: annotated() });
+  const zooming = (v: { viewer: HTMLElement }) => v.viewer.hasAttribute('data-zooming');
+  /** Lets the animations' `finished` handlers run: promise callbacks only, no timers */
+  const flush = () => act(async () => {});
+
+  it('marks the stage, and only the stage, while a zoom animation runs, and not before', () => {
+    const v = setup();
+    expect(zooming(v)).toBe(false);
+    fireEvent.click(v.zoomIn);
+    expect(v.running()).toBeDefined();
+    expect(zooming(v)).toBe(true);
+    expect(v.viewer.hasAttribute('data-numeral-stage')).toBe(true);
+    expect(document.querySelectorAll('[data-zooming]')).toHaveLength(1);
+  });
+
+  it('hides the labels by the mark, and clears the gutters’ background only where it fits, keeping their layout, the guides, hairlines and paper', () => {
+    const v = setup();
+    // The labels' boxes are hidden throughout the animation
+    const boxes = [...v.viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')];
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) expect(box.className.split(' ')).toContain('in-data-[zooming]:invisible');
+    // ...and transparent, fading back in over 150 ms once the mark goes, only where motion is
+    // not reduced: every transition class is behind `motion-safe:`, so with reduced motion they
+    // reappear at once
+    for (const box of boxes) {
+      const classes = box.className.split(' ');
+      expect(classes).toEqual(
+        expect.arrayContaining(['in-data-[zooming]:opacity-0', 'motion-safe:transition-opacity', 'motion-safe:duration-150'])
+      );
+      const timing = classes.filter((c) => /(^|:)(transition|duration|ease|delay)/.test(c));
+      expect(timing).toEqual(['motion-safe:transition-opacity', 'motion-safe:duration-150']);
+    }
+    // The fade is the labels' only: the gutters, their background and layout, have no transition
+    for (const gutter of v.viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations]')) {
+      expect(gutter.className).not.toMatch(/transition|duration|opacity/);
+    }
+    // Changed deliberately in UI-10: the gutters themselves stay visible, and their background is
+    // transparent only where the zoomed layout does not scroll sideways (`data-zooming="fit"`):
+    // zooming out, the paper is drawn larger than its final box, and shows through them
+    const gutters = [...v.viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+    expect(gutters).toHaveLength(2);
+    for (const gutter of gutters) {
+      expect(gutter.className.split(' ')).toContain('in-data-[zooming=fit]:bg-transparent');
+      expect(gutter.className).not.toContain('invisible');
+      expect(gutter.className).not.toContain('opacity');
+      // Its layout, layer and look are unchanged
+      expect(gutter.className.split(' ')).toEqual(
+        expect.arrayContaining(['w-10.5', 'sticky', 'z-10', 'bg-canvas', 'hidden', '@min-[31rem]:flex'])
+      );
+    }
+
+    // Nothing else is given a zooming class: not the guides, the hairlines, the paper or the image
+    const marked = [...v.viewer.querySelectorAll('[class]')].filter((el) =>
+      el.className.toString().split(' ').some((name) => name.includes('[zooming'))
+    );
+    // In document order: each gutter, then its box
+    expect(marked).toEqual([gutters[0], boxes[0], gutters[1], boxes[1]]);
+    for (const id of ['underlay-guide', 'overlay-hairline']) {
+      expect(v.image.contains(screen.getByTestId(id))).toBe(true);
+      expect(screen.getByTestId(id).className).toBe('');
+    }
+    expect(v.paper.className).not.toContain('invisible');
+    expect(v.image.className).not.toContain('invisible');
+    fireEvent.click(v.zoomIn);
+    expect(v.paper.hasAttribute('data-zooming')).toBe(false);
+    expect(v.image.hasAttribute('data-zooming')).toBe(false);
+  });
+
+  it('marks a zoom whose layout fits the stage sideways as `fit`, and one that scrolls sideways as empty', async () => {
+    // 600 px wide: at 125% the numeral, the paper's and stage's padding and the gutters need
+    // 437.5 + 56 + 84 = 577.5 px and fit; at 150%, 525 + 140 = 665 px, and scroll sideways
+    const v = renderAnimated({ width: 600, viewport: annotated() });
+    const mark = () => v.viewer.getAttribute('data-zooming');
+    const settle = async () => {
+      v.running()!.finish();
+      await flush();
+      expect(mark()).toBeNull();
+    };
+    fireEvent.click(v.zoomIn); // 125%: fits
+    expect(mark()).toBe('fit');
+    await settle();
+    fireEvent.click(v.zoomIn); // 150%: scrolls sideways
+    expect(mark()).toBe('');
+    await settle();
+    fireEvent.click(v.zoomOut); // back to 125%: fits again, judged by the zoomed layout
+    expect(mark()).toBe('fit');
+    await settle();
+    fireEvent.click(v.zoomOut); // 100%
+    expect(mark()).toBe('fit');
+    // A new zoom replacing a running one is marked for its own layout
+    fireEvent.click(v.zoomIn);
+    fireEvent.click(v.zoomIn); // 150% while 125%'s animation ran
+    expect(mark()).toBe('');
+    expect(document.querySelectorAll('[data-zooming]')).toHaveLength(1);
+    await settle();
+  });
+
+  it('removes the mark when the animation finishes', async () => {
+    const v = setup();
+    fireEvent.click(v.zoomIn);
+    v.running()!.finish();
+    await flush();
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('removes the mark when the animation is cancelled from outside', async () => {
+    const v = setup();
+    fireEvent.click(v.zoomIn);
+    v.running()!.cancel();
+    await flush();
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('keeps the mark for a replacement animation, whatever the replaced one does afterwards', async () => {
+    const v = setup();
+    fireEvent.click(v.zoomIn);
+    const [first] = v.animations;
+    fireEvent.click(v.zoomIn); // cancels the first, starts the second
+    const second = v.running()!;
+    expect(second).not.toBe(first);
+    expect(zooming(v)).toBe(true);
+
+    await flush(); // the first's rejection settles: a stale handler
+    expect(zooming(v)).toBe(true);
+    expect(v.running()).toBe(second);
+
+    first.finish(); // a late fulfilment of the stale one changes nothing either
+    await flush();
+    expect(zooming(v)).toBe(true);
+
+    second.finish();
+    await flush();
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('keeps the mark through rapid repeated zooms, until the last animation ends', async () => {
+    const v = setup();
+    fireEvent.click(v.zoomIn);
+    fireEvent.keyDown(v.viewer, { key: '+' });
+    fireEvent.click(v.zoomIn);
+    fireEvent.keyDown(v.viewer, { key: '-' });
+    expect(v.animations).toHaveLength(4);
+    expect(v.animations.filter((a) => a.playState === 'running')).toHaveLength(1);
+    expect(zooming(v)).toBe(true);
+
+    await flush();
+    expect(zooming(v)).toBe(true);
+    v.running()!.finish();
+    await flush();
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('removes the mark at once when a resize ends the animation', () => {
+    const v = setup();
+    v.userScroll(10, 50);
+    fireEvent.click(v.zoomIn);
+    expect(zooming(v)).toBe(true);
+    v.resize(260, 160);
+    v.report();
+    expect(v.animations[0].playState).toBe('idle');
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('removes the mark at once at Reset, with the button and with 0', () => {
+    const v = setup();
+    for (const resetBy of ['button', 'key'] as const) {
+      fireEvent.click(v.zoomIn);
+      expect(zooming(v), resetBy).toBe(true);
+      if (resetBy === 'button') fireEvent.click(v.reset);
+      else fireEvent.keyDown(v.viewer, { key: '0' });
+      expect(zooming(v), resetBy).toBe(false);
+    }
+  });
+
+  it('removes the mark at once when the user scrolls, but not for the viewer’s own scrolling', () => {
+    const v = setup();
+    v.userScroll(10, 50);
+    fireEvent.click(v.zoomIn);
+    v.scrollEvent(); // the anchored scroll's own event
+    expect(zooming(v)).toBe(true);
+    v.userScroll(200, 120);
+    expect(v.animations[0].playState).toBe('idle');
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('removes the mark at once for a new numeral', () => {
+    const v = setup();
+    fireEvent.click(v.zoomIn);
+    expect(zooming(v)).toBe(true);
+    v.rerender(
+      <NumeralViewport numeralWidth={350} background={BACKGROUND} label={LABEL} resetKey="b" {...annotated()}>
+        <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
+      </NumeralViewport>
+    );
+    expect(v.animations[0].playState).toBe('idle');
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('never marks the stage with reduced motion', async () => {
+    const v = setup({ reduce: true });
+    fireEvent.click(v.zoomIn);
+    fireEvent.click(v.zoomIn);
+    expect(v.animations).toHaveLength(0);
+    expect(zooming(v)).toBe(false);
+    await flush();
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('leaves no mark when the animation cannot be created', () => {
+    const v = setup();
+    (Element.prototype.animate as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('animate failed');
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      fireEvent.click(v.zoomIn);
+    } catch {
+      // The error may propagate from the layout effect; the stage must not be marked either way
+    }
+    error.mockRestore();
+    expect(zooming(v)).toBe(false);
+  });
+
+  it('ends the animation and the mark when removed, and a late settling is harmless', async () => {
+    const v = setup();
+    fireEvent.click(v.zoomIn);
+    const animation = v.running()!;
+    const stage = v.viewer;
+    v.unmount();
+    expect(animation.playState).toBe('idle');
+    expect(stage.hasAttribute('data-zooming')).toBe(false);
+    animation.finish();
+    await flush();
+    expect(stage.hasAttribute('data-zooming')).toBe(false);
+  });
+});
+
+describe('NumeralViewport: keeping the view when the annotation gutters are toggled (UI-10, slice 3.2)', () => {
+  const annotations = {
+    numeralHeight: 160,
+    annotationsStart: <span>20</span>,
+    annotationsEnd: <span>1</span>,
+  };
+  /** The viewport as renderViewport renders it, with or without the annotation gutters */
+  const element = (on: boolean, { resetKey = 'a', label = LABEL } = {}) => (
+    <NumeralViewport numeralWidth={350} background={BACKGROUND} label={label} resetKey={resetKey} {...(on ? annotations : {})}>
+      <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
+    </NumeralViewport>
+  );
+  const gutterCount = (v: { viewer: HTMLElement }) => v.viewer.querySelectorAll('[data-numeral-annotations]').length;
+
+  it('keeps the point at the centre when the gutters appear while the numeral overflows and is scrolled', () => {
+    const v = renderLaidOut({ width: 300, height: 200 });
+    v.userScroll(50, 20);
+    const point = v.centre();
+    v.rerender(element(true));
+    expect(gutterCount(v)).toBe(2);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    // The scroll position moved with the paper
+    expect(v.viewer.scrollLeft).not.toBe(50);
+  });
+
+  it('keeps the point at the centre when the gutters go while the numeral overflows', () => {
+    const v = renderLaidOut({ width: 300, height: 200, viewport: annotations });
+    expect(gutterCount(v)).toBe(2);
+    v.userScroll(80, 20);
+    const point = v.centre();
+    v.rerender(element(false));
+    expect(gutterCount(v)).toBe(0);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    expect(v.viewer.scrollLeft).not.toBe(80);
+  });
+
+  it('moves nothing when the numeral fits with and without the gutters', () => {
+    const v = renderLaidOut({ width: 600, height: 400 });
+    const scrolls = v.state.scrollToCalls;
+    const point = v.centre();
+    v.rerender(element(true));
+    expect([v.viewer.scrollLeft, v.viewer.scrollTop]).toEqual([0, 0]);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    v.rerender(element(false));
+    expect([v.viewer.scrollLeft, v.viewer.scrollTop]).toEqual([0, 0]);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    expect(v.state.scrollToCalls).toBe(scrolls);
+  });
+
+  it('keeps the point at the centre when the gutters make a numeral that fitted overflow (125%)', () => {
+    // 437.5 + 24 + 32 = 493.5 px fits the 520 px stage; with the gutters, 577.5 px does not
+    const v = renderLaidOut({ width: 520, height: 600 });
+    fireEvent.click(v.zoomIn);
+    expect(v.zoomText()).toBe('125%');
+    expect(v.viewer.scrollLeft).toBe(0);
+    const point = v.centre();
+    v.rerender(element(true));
+    expect(v.viewer.scrollLeft).toBeGreaterThan(0);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    v.rerender(element(false));
+    expect(v.viewer.scrollLeft).toBe(0);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+  });
+
+  it.each([
+    ['25%', 0, 3, 0],
+    ['100%', 0, 0, 40],
+    ['400%', 5, 0, 500],
+  ])('keeps the point at the centre at %s, both ways', (zoomText, ins, outs, scrollLeft) => {
+    const v = renderLaidOut({ width: 300, height: 200 });
+    for (let i = 0; i < ins; i++) fireEvent.click(v.zoomIn);
+    for (let i = 0; i < outs; i++) fireEvent.click(v.zoomOut);
+    expect(v.zoomText().startsWith(zoomText)).toBe(true); // the limits add a screen-reader suffix
+    v.userScroll(scrollLeft, 30);
+    const point = v.centre();
+    v.rerender(element(true));
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    v.rerender(element(false));
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('does not drift through rapid toggling', () => {
+    const v = renderLaidOut({ width: 300, height: 200 });
+    v.userScroll(50, 20);
+    const [left, top] = [v.viewer.scrollLeft, v.viewer.scrollTop]; // the vertical position is clamped
+    const point = v.centre();
+    for (let i = 0; i < 5; i++) {
+      v.rerender(element(true));
+      expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+      v.rerender(element(false));
+      expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+    }
+    expect(Math.abs(v.viewer.scrollLeft - left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(v.viewer.scrollTop - top)).toBeLessThanOrEqual(1);
+  });
+
+  it('ends a running zoom animation before measuring, and keeps the view', () => {
+    const v = renderAnimated({ width: 300, height: 200 });
+    v.userScroll(10, 50);
+    fireEvent.click(v.zoomIn);
+    v.scrollEvent();
+    const animation = v.running()!;
+    animation.progress = 0.5;
+    expect(v.viewer.hasAttribute('data-zooming')).toBe(true);
+    const point = v.centre();
+
+    v.log.length = 0;
+    v.rerender(element(true));
+    expect(animation.playState).toBe('idle');
+    expect(v.log[0]).toBe('cancel');
+    expect(v.log).toContain('measure');
+    expect(v.viewer.hasAttribute('data-zooming')).toBe(false);
+    expect(v.animations).toHaveLength(1);
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('does not re-anchor on the first render with the gutters, which shows the start', () => {
+    const v = renderLaidOut({ width: 300, height: 200, viewport: annotations });
+    // Content 406 + 84 = 490 px wide: the start centres the paper, (490 − 300) / 2 px in
+    expect(v.viewer.scrollLeft).toBe(95);
+    expect(v.state.scrollToCalls).toBe(1);
+    expect(v.centre().x).toBeCloseTo(175, 5);
+  });
+
+  it('still keeps the view through a resize after a toggle', () => {
+    const v = renderLaidOut({ width: 300, height: 200 });
+    v.userScroll(50, 20);
+    v.rerender(element(true));
+    const point = v.centre();
+    v.resize(260, 160);
+    v.report();
+    expect(v.offBy(point)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('still shows the start for a new numeral while the gutters stay', () => {
+    const v = renderLaidOut({ width: 300, height: 200, viewport: annotations });
+    v.userScroll(10, 50);
+    v.rerender(element(true, { resetKey: 'b' }));
+    expect(v.viewer.scrollTop).toBe(0);
+    expect(v.centre().x).toBeCloseTo(175, 5);
+  });
+
+  it('does not scroll for ordinary rerenders', () => {
+    const v = renderLaidOut({ width: 300, height: 200, viewport: annotations });
+    v.userScroll(60, 30);
+    const [scrolls, left, top] = [v.state.scrollToCalls, v.viewer.scrollLeft, v.viewer.scrollTop];
+    v.rerender(element(true, { label: 'Another label' }));
+    v.rerender(element(true, { label: 'Yet another label' }));
+    expect(v.state.scrollToCalls).toBe(scrolls);
+    expect([v.viewer.scrollLeft, v.viewer.scrollTop]).toEqual([left, top]);
+  });
+});
+
+describe('NumeralViewport: compact annotation labels at the smallest zoom (UI-10, slice 4b)', () => {
+  const COMPACT = '[&_[data-tier-annotation]]:text-[10px]';
+  const annotated = {
+    numeralHeight: 160,
+    annotationsStart: (
+      <div data-tier-annotations="power">
+        <div data-tier-annotation>20</div>
+      </div>
+    ),
+    annotationsEnd: (
+      <div data-tier-annotations="digit">
+        <div data-tier-annotation>1</div>
+      </div>
+    ),
+  };
+  const boxes = (viewer: HTMLElement) => [...viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')];
+  const compactBoxes = (viewer: HTMLElement) => boxes(viewer).filter((box) => box.className.split(' ').includes(COMPACT));
+
+  it('uses the compact labels at 25% only, in both gutters, labels still present', () => {
+    const v = renderViewport(annotated);
+    expect(boxes(v.viewer)).toHaveLength(2);
+    expect(compactBoxes(v.viewer)).toHaveLength(0); // 100%
+
+    for (const expected of [
+      ['75%', 0],
+      ['50%', 0],
+      ['25%', 2],
+    ] as const) {
+      fireEvent.click(v.zoomOut);
+      expect(v.zoomText().startsWith(expected[0])).toBe(true);
+      expect(compactBoxes(v.viewer), expected[0]).toHaveLength(expected[1]);
+    }
+    // At 25%: the power and the digit labels are there, in the compacted boxes
+    const [start, end] = boxes(v.viewer);
+    expect(start.querySelector('[data-tier-annotations="power"] [data-tier-annotation]')).not.toBeNull();
+    expect(end.querySelector('[data-tier-annotations="digit"] [data-tier-annotation]')).not.toBeNull();
+    expect(v.viewer.hasAttribute('data-zooming')).toBe(false);
+  });
+
+  it('keeps the default labels at 50%, 75%, 100% and 400%, and returns to them from 25%', () => {
+    const v = renderViewport(annotated);
+    for (let i = 0; i < 5; i++) fireEvent.click(v.zoomIn); // 400%
+    expect(v.zoomText().startsWith('400%')).toBe(true);
+    expect(compactBoxes(v.viewer)).toHaveLength(0);
+
+    fireEvent.click(v.reset);
+    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomOut);
+    expect(compactBoxes(v.viewer)).toHaveLength(2);
+    fireEvent.click(v.zoomIn); // 50%
+    expect(v.zoomText().startsWith('50%')).toBe(true);
+    expect(compactBoxes(v.viewer)).toHaveLength(0);
+    fireEvent.click(v.zoomOut);
+    expect(compactBoxes(v.viewer)).toHaveLength(2);
+    fireEvent.click(v.reset);
+    expect(compactBoxes(v.viewer)).toHaveLength(0);
+  });
+
+  it('changes only the labels’ font size: the gutters and boxes keep their classes and size', () => {
+    const v = renderViewport(annotated);
+    const classesOf = (el: HTMLElement) => el.className.split(' ').filter((name) => name !== COMPACT);
+    const gutters = () => [...v.viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+    const before = [gutters().map((g) => g.className), boxes(v.viewer).map(classesOf)];
+    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomOut);
+    expect(compactBoxes(v.viewer)).toHaveLength(2);
+    expect([gutters().map((g) => g.className), boxes(v.viewer).map(classesOf)]).toEqual(before);
+    expect(gutters().every((g) => g.className.includes('w-10.5'))).toBe(true);
+    // The boxes keep following the zoom as before: 160 units × 25 %
+    expect(boxes(v.viewer).map((box) => box.style.height)).toEqual(['40px', '40px']);
+  });
+
+  it('has no gutters, so no compact styling, without annotations', () => {
+    const v = renderViewport();
+    for (let i = 0; i < 3; i++) fireEvent.click(v.zoomOut);
+    expect(v.zoomText().startsWith('25%')).toBe(true);
+    expect(v.viewer.querySelectorAll('[data-numeral-annotations]')).toHaveLength(0);
+    expect(v.viewer.innerHTML).not.toContain('text-[10px]');
+  });
+
+  it('still hides the labels during a zoom animation, compact or not, and shows them afterwards', async () => {
+    const v = renderAnimated({ viewport: annotated });
+    const hidden = () => v.viewer.hasAttribute('data-zooming');
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(v.zoomOut); // 75%, 50%, 25%
+      expect(hidden()).toBe(true);
+      v.running()!.finish();
+      await act(async () => {});
+      expect(hidden()).toBe(false);
+    }
+    expect(compactBoxes(v.viewer)).toHaveLength(2);
+    // The hiding rule stays on the same boxes, compact or not, and the gutters' on the gutters
+    for (const box of boxes(v.viewer)) expect(box.className.split(' ')).toContain('in-data-[zooming]:invisible');
+    const gutters = [...v.viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+    expect(gutters).toHaveLength(2);
+    for (const gutter of gutters) {
+      expect(gutter.className.split(' ')).toContain('in-data-[zooming=fit]:bg-transparent');
+      expect(gutter.className).not.toContain('invisible');
+    }
+    fireEvent.click(v.zoomIn);
+    expect(hidden()).toBe(true);
+    expect(compactBoxes(v.viewer)).toHaveLength(0);
   });
 });

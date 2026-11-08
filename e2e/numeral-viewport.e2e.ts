@@ -183,8 +183,10 @@ test.describe('bounded numeral viewport', () => {
         const style = getComputedStyle(content);
         const s = content.getBoundingClientRect();
         // Changed deliberately in UI-13: the paper, with its 12 px padding, between the stage content and the numeral image
-        const paper = content.firstElementChild as HTMLElement;
-        const image = paper.firstElementChild as HTMLElement;
+        // Changed deliberately in UI-13: the numeral group, the stage content's only item, holds the paper
+        const group = content.querySelector('[data-numeral-group]') as HTMLElement;
+        const paper = group.querySelector('[data-numeral-paper]') as HTMLElement;
+        const image = paper.querySelector('[data-numeral-image]') as HTMLElement;
         const svg = image.querySelector('svg.mep-svg')!;
         return {
           // Changed deliberately in UI-13: the scroller is the stage, and its child the stage content
@@ -198,6 +200,10 @@ test.describe('bounded numeral viewport', () => {
           covers: s.width === scroller.scrollWidth && s.height === scroller.scrollHeight
             && s.width >= scroller.clientWidth && s.height >= scroller.clientHeight,
           contentChildren: content.children.length,
+          group: group.parentElement === content,
+          groupChildren: group.children.length,
+          paperInGroup: paper.parentElement === group,
+          imageInPaper: image.parentElement === paper,
           paper: paper.hasAttribute('data-numeral-paper'),
           paperPadding: getComputedStyle(paper).padding,
           paperChildren: paper.children.length,
@@ -211,7 +217,7 @@ test.describe('bounded numeral viewport', () => {
       });
       expect(structure, `${width}px`).toEqual({
         stage: true, viewerCard: true, children: 1, content: true, overflow: 'clip', padding: '16px', covers: true,
-        contentChildren: 1, paper: true, paperPadding: '12px', paperChildren: 1, image: true, wrapper: 'img',
+        contentChildren: 1, group: true, groupChildren: 1, paperInGroup: true, imageInPaper: true, paper: true, paperPadding: '12px', paperChildren: 1, image: true, wrapper: 'img',
         svgParent: true, svgMarked: false, scrollers: 0,
       });
     }
@@ -2883,6 +2889,116 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
     expect(sampled.animations).toEqual(['idle', 'finished']);
     const after = await exportFile(page, 'svg');
     expect(after.data.equals(before.data)).toBe(true);
+  });
+
+  /*
+   * UI-10: zooming out, the paper is drawn larger than its final box for the animation, and would
+   * be cut by the opaque annotation gutters, which take their final place at once. So while it
+   * runs the labels are hidden, and where the zoomed layout does not scroll sideways the gutters'
+   * background is transparent; where it does, the gutters stay opaque, stuck over the scrolling
+   * paper as before and after, so they never vanish and cover its edges again at the end. The
+   * gutters themselves stay visible, keeping their layout. Not asserted: whether the drawn paper
+   * meets the gutters' boxes, which it may.
+   */
+  test('clears the annotation gutters’ background while zooming out to a layout that fits, keeps it where it scrolls, and keeps the layout', async ({ page }) => {
+    // The stage leaves 647 px for the numeral here: up to 150% it and its gutters fit (525 + 84
+    // px), its group centred; at 200% (700 + 84 px) and above they do not, at any screen size, and
+    // the stage scrolls sideways under the sticky gutters
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.reload();
+    const viewer = await showNumber(page, '3047620');
+    await viewer.scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+
+    // Whether the layout fits the stage sideways before the zoom, and at its level
+    for (const [from, to, clicksIn, fitsBefore, fitsAfter] of [
+      ['125%', '100%', 1, true, true],
+      ['150%', '125%', 2, true, true],
+      ['200%', '150%', 2, false, true],
+      ['300%', '200%', 2, false, false],
+    ] as const) {
+      for (let i = 0; i < clicksIn; i++) await zoomIn.click();
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${from}`));
+      await settleZoom(page);
+      // The viewer clears its mark in the animation's own end handler
+      await expect(viewer).not.toHaveAttribute('data-zooming');
+
+      const result = await page.evaluate(async () => {
+        const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+        const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+        const gutters = [...document.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+        const boxes = [...document.querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')];
+        const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        // The gutters, their labels and the paper's untransformed layout (offsets ignore
+        // transforms), and the scroll
+        const snapshot = () => ({
+          visibility: gutters.map((g) => getComputedStyle(g).visibility),
+          opacity: gutters.map((g) => getComputedStyle(g).opacity),
+          background: gutters.map((g) => getComputedStyle(g).backgroundColor),
+          labels: boxes.map((b) => getComputedStyle(b).visibility),
+          display: gutters.map((g) => getComputedStyle(g).display),
+          gutters: gutters.map((g) => {
+            const r = g.getBoundingClientRect();
+            return [r.left, r.top, r.width, r.height];
+          }),
+          paper: [paper.offsetLeft, paper.offsetTop, paper.offsetWidth, paper.offsetHeight],
+          scroll: [stage.scrollLeft, stage.scrollTop],
+          fits: stage.scrollWidth <= stage.clientWidth,
+        });
+        const settledBefore = snapshot();
+        // The real control. React renders the click's update in a microtask, and the animation
+        // starts in its layout effect: sampled once that has run, well within the 200 ms (checked
+        // below by the animation still running)
+        document.querySelector<HTMLButtonElement>('button[aria-label="Zoom out"]')!.click();
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        const running = paper.getAnimations().length;
+        const zooming = stage.getAttribute('data-zooming');
+        const during = snapshot();
+        // Waits on the animation itself, then a frame for the viewer's own end handler
+        for (let a = paper.getAnimations(); a.length > 0; a = paper.getAnimations()) {
+          await Promise.all(a.map((x) => x.finished.catch(() => undefined)));
+        }
+        await nextFrame();
+        return { settledBefore, running, zooming, during, after: snapshot(), stillZooming: stage.hasAttribute('data-zooming') };
+      });
+
+      const label = `${from} → ${to}`;
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${to}`));
+      const settled = result.settledBefore;
+      // Before the zoom: gutters and labels shown, opaque; the layout fits the stage, or not, as intended
+      expect(settled.visibility, label).toEqual(['visible', 'visible']);
+      expect(settled.labels, label).toEqual(['visible', 'visible']);
+      expect(settled.opacity, label).toEqual(['1', '1']);
+      expect(settled.display, label).toEqual(['flex', 'flex']);
+      expect(settled.background[0], label).not.toBe('rgba(0, 0, 0, 0)');
+      expect(settled.background[1], label).toBe(settled.background[0]);
+      expect(settled.fits, label).toBe(fitsBefore);
+      expect(result.after.fits, label).toBe(fitsAfter);
+      // During the animation, marked for the zoomed layout: the labels hidden; the gutters still
+      // visible and laid out, transparent where it fits, opaque where it scrolls sideways
+      expect([result.running, result.zooming], label).toEqual([1, fitsAfter ? 'fit' : '']);
+      expect(result.during.labels, label).toEqual(['hidden', 'hidden']);
+      expect(result.during.visibility, label).toEqual(['visible', 'visible']);
+      expect(result.during.opacity, label).toEqual(['1', '1']);
+      expect(result.during.display, label).toEqual(['flex', 'flex']);
+      expect(result.during.background, label).toEqual(
+        fitsAfter ? ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'] : settled.background
+      );
+      // Afterwards: as before the zoom
+      expect(result.stillZooming, label).toBe(false);
+      expect(result.after.labels, label).toEqual(['visible', 'visible']);
+      expect(result.after.visibility, label).toEqual(['visible', 'visible']);
+      expect(result.after.background, label).toEqual(settled.background);
+      // The change of background and labels moves no layout and no scroll position: the gutters'
+      // boxes (never transformed), the paper's untransformed layout and the scroll are the same
+      // during and after
+      expect(result.during.gutters, label).toEqual(result.after.gutters);
+      expect(result.during.paper, label).toEqual(result.after.paper);
+      expect(result.during.scroll, label).toEqual(result.after.scroll);
+      for (const r of result.after.gutters) expect(r[2], label).toBeCloseTo(42, 1);
+    }
   });
 
   /*

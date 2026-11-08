@@ -16,10 +16,12 @@ import NumeralViewport from '@components/NumeralViewport';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
 import { PlaceTierGuides, TierHairlines } from '@components/TierGuides';
+import TierAnnotations from '@components/TierAnnotations';
 import TierOrientation from '@components/TierOrientation';
 import GlyphKey from '@components/GlyphKey';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { getNumeralSize, getTierCount, type NumeralLayout } from '@utils/tierGuides';
+import { getTierAnnotationRows } from '@utils/tierAnnotations';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 import { rgbaToCss } from '@utils/colors';
 
@@ -59,7 +61,8 @@ export default function HomeView() {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   // The numeral viewer's scroller, which the place tier guides follow while it scrolls
   const viewerScrollerRef = useRef<HTMLDivElement>(null);
-  const { showPlaceTierGuides, showTierHairlines, backgroundColor, resolvedTheme } = useDisplaySettings();
+  const { showPlaceTierGuides, showTierHairlines, showTierAnnotations, backgroundColor, resolvedTheme } =
+    useDisplaySettings();
 
   // Derived values: the exact bigint value, or null while the input is empty or invalid
   // (NumberInput shows the validation message from the same validateNumberInput)
@@ -111,8 +114,13 @@ export default function HomeView() {
     [backgroundColor, resolvedTheme]
   );
   const digitGroups = useMemo(() => mayanData?.digitGroups.map((g) => g.digits) ?? [], [mayanData]);
-  // The numeral's width in SVG units, shown at 1 CSS px per unit at 100% zoom
-  const numeralWidth = getNumeralSize(digitGroups, numeralLayout).width;
+  // The numeral's size in SVG units, shown at 1 CSS px per unit at 100% zoom
+  const numeralSize = getNumeralSize(digitGroups, numeralLayout);
+  // The tier annotation rows, shared by both gutters; not calculated while the annotations are off
+  const annotationRows = useMemo(
+    () => (showTierAnnotations ? getTierAnnotationRows(digitGroups, numeralLayout) : []),
+    [showTierAnnotations, digitGroups, numeralLayout]
+  );
 
   // What the viewer and the base-20 card say while there is no result to show
   const emptyMessages: { viewer: string; base20: string } =
@@ -183,7 +191,8 @@ export default function HomeView() {
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) =>
                 <NumeralViewport
-                  numeralWidth={numeralWidth}
+                  numeralWidth={numeralSize.width}
+                  numeralHeight={numeralSize.height}
                   // The numeral's background, as MayanRenderer fills it: the viewer's paper
                   // paints it on screen, once, around and behind the numeral
                   background={rgbaToCss(backgroundColor)}
@@ -213,6 +222,14 @@ export default function HomeView() {
                         scrollerRef={viewerScrollerRef}
                       />
                     )
+                  }
+                  // Screen-only tier annotations (UI-10), in gutters beside the paper, outside the
+                  // SVG. Powers of 20 at the start; at the end, Number mode's digit of each tier.
+                  // Date mode has none: its end slot stays empty, but the gutter is still laid out
+                  // (the start slot is given), so the paper stays centred
+                  annotationsStart={showTierAnnotations && <TierAnnotations rows={annotationRows} kind="power" />}
+                  annotationsEnd={
+                    showTierAnnotations && mode === 'number' && <TierAnnotations rows={annotationRows} kind="digit" />
                   }
                   overlay={
                     showTierHairlines && (

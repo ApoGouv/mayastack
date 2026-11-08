@@ -141,6 +141,38 @@ function followUserScroll(
   anchor.at = { left, top };
 }
 
+/**
+ * The stage carries this attribute while a zoom animation runs, so that the screen-only
+ * annotations, which sit outside the animated paper, can be hidden meanwhile (see
+ * AnnotationGutter). Its value is `fit` while the zoomed layout does not scroll sideways, and
+ * empty while it does. It is set only where the animation starts, and only the two functions
+ * below remove it, together with the ref that holds the running animation, so the two never
+ * disagree.
+ */
+const ZOOMING_ATTRIBUTE = 'data-zooming';
+
+/**
+ * Ends the zoom animation held in `running`, if any, at once, and clears it and the stage's
+ * zooming attribute. For every cancellation: a new zoom, Reset, the user's scrolling, a new
+ * numeral, a resize and unmounting.
+ */
+function settleZoomAnimation(running: { current: Animation | null }, stage: HTMLElement | null) {
+  running.current?.cancel();
+  running.current = null;
+  stage?.removeAttribute(ZOOMING_ATTRIBUTE);
+}
+
+/**
+ * Clears the zoom animation `finished` (completed, or ended by something else) and the stage's
+ * attribute, but only if it is still the running one: a stale animation, whose promise settles
+ * after a newer one has started, changes nothing, and nothing is cancelled here.
+ */
+function completeZoomAnimation(running: { current: Animation | null }, stage: HTMLElement | null, finished: Animation) {
+  if (running.current !== finished) return;
+  running.current = null;
+  stage?.removeAttribute(ZOOMING_ATTRIBUTE);
+}
+
 interface NumeralViewportProps {
   /** The numeral, usually a MayanRenderer SVG */
   children: React.ReactNode;
@@ -186,7 +218,101 @@ interface NumeralViewportProps {
    * scrolls or zooms with the numeral
    */
   footer?: React.ReactNode;
+  /**
+   * Screen-only annotations in a gutter before the numeral (at its start side) and after it (at
+   * its end side), e.g. tier annotations: decorative, so hidden from assistive technology. Each
+   * is placed in a box as tall as the numeral image and as wide as the gutter, which is
+   * positioned as a layer's containing block (`relative`), so a layer filling it with
+   * percentages follows the numeral's tiers. The gutters sit beside the paper, in a group centred
+   * with it, and stay at the stage's edges while the numeral scrolls under them. They are not
+   * shown where the stage is narrower than 31rem (see AnnotationGutter). If either is given,
+   * both gutters are laid out, an empty one keeping the numeral centred. They need `numeralHeight`.
+   */
+  annotationsStart?: React.ReactNode;
+  annotationsEnd?: React.ReactNode;
+  /**
+   * The numeral's logical height in SVG units (its SVG's height), at one CSS px per unit at 100%
+   * zoom, like `numeralWidth`: the viewport does not know the numeral's aspect ratio, which the
+   * image's height follows from. Only the annotation gutters use it. Without a positive, finite
+   * value, there are no gutters.
+   */
+  numeralHeight?: number;
 }
+
+/**
+ * One annotation gutter (see `annotationsStart`), a flex item beside the paper in its group,
+ * laid out like the paper so that its box mirrors the numeral image's:
+ * - It stretches to the group's height, which is the paper's, and its inner box has the same
+ *   automatic margins and the paper's vertical padding (12 px, `p-3`), so the two are the same
+ *   height and line up; the group is centred in the stage content while the numeral is
+ *   shorter than the stage, and starts at its padding where it is not.
+ * - The mirror is as tall as the image: the image's width, `numeralWidth × zoom`, is the SVG's
+ *   width, and its height follows from the SVG's own aspect ratio (a block, so no line-box gap),
+ *   i.e. `numeralHeight × zoom`.
+ * - It sticks to the scroller's edge (`left-0` / `right-0`), so nothing of the scrolling paper
+ *   shows beside it. It is a flex item of the group, whose box spans the whole scrollable width
+ *   whenever the stage scrolls sideways, so it can follow the scroller across all of it. At the
+ *   scroll start or end it is in the flow at least as far in as the edge (the stage content's
+ *   padding), so it does not jump when it begins or stops sticking. `overflow-clip` on the
+ *   stage content, unlike `overflow: hidden`, does not make it the scroller sticky positioning
+ *   looks to, so the scroller itself is.
+ * - Opaque `canvas`, above the numeral (`z-10`), so the numeral scrolls under it. It is hidden
+ *   (`display: none`) below a stage width of 31rem (496 px at the default font size), as a
+ *   container query against the scroller, which is a container while there are gutters. The
+ *   width queried is the scroller's content box: its client width, without its 1 px borders and
+ *   any classic scrollbar. At 100% zoom the numeral needs 350 (its width) + 24 (the paper's
+ *   padding) + 84 (two gutters) + 32 (the stage content's padding) = 490 px in both modes, so
+ *   from 31rem the whole numeral and its gutters fit. The class must be written out in full for
+ *   Tailwind to find it.
+ * - While a zoom animation runs (the stage has `data-zooming`), the gutters take their final size
+ *   and place at once, while the paper animates. So:
+ *   - Its inner box (the labels) is `visibility: hidden`: they would not line up with the numeral.
+ *     It is also transparent then, and fades back in over 150 ms once the mark is removed (the
+ *     animation ended or cancelled): visibility, which is not transitioned, hides it at once and
+ *     shows it again at once, while its opacity eases back to 1. Without a transition where
+ *     reduced motion is preferred (`motion-safe:`), so the labels then reappear at once.
+ *   - Where the zoomed layout does not scroll sideways (`data-zooming="fit"`), its background is
+ *     transparent: zooming out, the paper is drawn larger than its final box, and would be cut by
+ *     the opaque gutters. Nothing scrolls under them there, and their background is the stage's
+ *     colour, so the change is not seen otherwise.
+ *   - Where it scrolls sideways, the background stays opaque: the gutters are stuck over the
+ *     scrolling paper before and after the zoom, and stay so throughout, rather than vanishing
+ *     and covering the paper's edges again at the end.
+ *   The gutter itself stays visible, and its layout, size and place never change.
+ * - At the smallest zoom level (`compact`) the labels are 10 px instead of `text-xs`'s 12 px: a
+ *   tier's row is then 20 px tall (80 × 25%), and 12 px labels would be as tall as the glyphs.
+ *   Only the font size changes, so rows, alignment and the gutter's width stay as they were. The
+ *   rule is on the box and selects the labels' rows (`[data-tier-annotation]`, TierAnnotations'),
+ *   whose selector is more specific than `text-xs`'s, so it wins. Written out in full for
+ *   Tailwind to find it.
+ */
+const AnnotationGutter: React.FC<{
+  side: 'start' | 'end';
+  height: number;
+  /** Whether the numeral is at the smallest zoom level: smaller labels */
+  compact: boolean;
+  children?: React.ReactNode;
+}> = ({ side, height, compact, children }) => (
+  <div
+    aria-hidden="true"
+    data-numeral-annotations={side}
+    className={`hidden @min-[31rem]:flex sticky z-10 w-10.5 shrink-0 bg-canvas pointer-events-none select-none in-data-[zooming=fit]:bg-transparent ${
+      side === 'start' ? 'left-0' : 'right-0'
+    }`}
+  >
+    <div className="m-auto w-full py-3">
+      <div
+        data-numeral-annotations-box
+        className={`relative w-full in-data-[zooming]:invisible in-data-[zooming]:opacity-0 motion-safe:transition-opacity motion-safe:duration-150${
+          compact ? ' [&_[data-tier-annotation]]:text-[10px]' : ''
+        }`}
+        style={{ height: `${height}px` }}
+      >
+        {children}
+      </div>
+    </div>
+  </div>
+);
 
 /**
  * A bounded, natively scrolling viewport for a numeral.
@@ -228,6 +354,9 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   scrollerRef: givenScrollerRef,
   header,
   footer,
+  annotationsStart,
+  annotationsEnd,
+  numeralHeight,
 }) => {
   const ownScrollerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = givenScrollerRef ?? ownScrollerRef;
@@ -253,16 +382,22 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const zoom = ZOOM_LEVELS[zoomIndex];
   const atMin = zoomIndex === 0;
   const atMax = zoomIndex === ZOOM_LEVELS.length - 1;
+  // The gutters' mirror height at this zoom, or null for no gutters: they need a slot to show and
+  // the numeral's height to mirror
+  const gutterHeight =
+    (annotationsStart || annotationsEnd) && numeralHeight !== undefined && Number.isFinite(numeralHeight) && numeralHeight > 0
+      ? numeralHeight * zoom
+      : null;
+  const hasAnnotations = gutterHeight !== null;
+  // Below 50%, i.e. at 25%, where a tier's row is 20 px tall: smaller annotation labels
+  const compactAnnotations = zoom < 0.5;
 
   /**
    * Ends any zoom animation at once, leaving the paper at its final layout, untransformed. Every
    * measurement of the numeral's position first calls this, since an element's box on screen
    * includes the transforms animated on it and on its ancestors.
    */
-  const settleZoomAnimation = () => {
-    zoomAnimation.current?.cancel();
-    zoomAnimation.current = null;
-  };
+  const endZoomAnimation = () => settleZoomAnimation(zoomAnimation, scrollerRef.current);
 
   const zoomTo = (index: number) => {
     const scroller = scrollerRef.current;
@@ -272,7 +407,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
       // Where the numeral is drawn now, part-way through an earlier zoom's animation included:
       // the next animation starts from there, so a quick succession of zooms never jumps
       const { left, top, width } = numeral.getBoundingClientRect();
-      settleZoomAnimation();
+      endZoomAnimation();
       // Read at each zoom, so a change of preference applies from the next one
       pendingAnimation.current = prefersReducedMotion() ? null : { left, top, width };
       // Around the point the user sees at the centre, also where a resize clamped the intended
@@ -286,7 +421,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const reset = () => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
-    settleZoomAnimation();
+    endZoomAnimation();
     pendingAnimation.current = null;
     if (zoomIndex !== DEFAULT_ZOOM_INDEX) {
       pendingScroll.current = 'start';
@@ -322,15 +457,17 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
       duration: ZOOM_ANIMATION_DURATION,
       easing: ZOOM_ANIMATION_EASING,
     });
-    zoomAnimation.current = animation;
     // Without a fill, its effect ends with it: the paper is left untransformed. Settling cancels
-    // it, which rejects `finished`: expected, so handled
-    animation.finished.then(
-      () => {
-        if (zoomAnimation.current === animation) zoomAnimation.current = null;
-      },
-      () => {}
-    );
+    // it, which rejects `finished`: expected. Either way, only the running animation's end
+    // changes anything (see completeZoomAnimation)
+    const onEnd = () => completeZoomAnimation(zoomAnimation, scroller, animation);
+    animation.finished.then(onEnd, onEnd);
+    // Marked last, once the animation exists and is being followed, so that nothing before it
+    // can leave the stage marked without a running animation
+    zoomAnimation.current = animation;
+    // `fit` where the zoomed layout does not scroll sideways: the gutters are then never stuck
+    // over the paper, and can let it show through (see AnnotationGutter)
+    scroller.setAttribute(ZOOMING_ATTRIBUTE, scroller.scrollWidth > scroller.clientWidth ? '' : 'fit');
   }, [zoom, scrollerRef]);
 
   // A new numeral shows its start: its highest place value, centred horizontally. Before paint,
@@ -338,13 +475,33 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
-    zoomAnimation.current?.cancel();
-    zoomAnimation.current = null;
+    settleZoomAnimation(zoomAnimation, scroller);
     if (scroller && numeral) showView(scroller, numeral, zoomRef.current, anchor.current, 'start');
   }, [resetKey, scrollerRef]);
 
+  // Showing or hiding the annotation gutters changes the width of the group around the paper, and
+  // so where the paper is in the scrollable area (from the stage's padding where it overflows,
+  // centred where it fits), but not the scroll position: the same position would then show another
+  // part of the numeral. Show the intended view again, before paint. A transition only: not the
+  // first render, whose gutters, if any, are laid out with the numeral's start, nor an ordinary
+  // rerender. After the effects above, so that a new numeral's start is the intended view here.
+  // The animation ends first: its transform is part of what is measured
+  const hadAnnotations = useRef(hasAnnotations);
+  useLayoutEffect(() => {
+    if (hadAnnotations.current === hasAnnotations) return;
+    hadAnnotations.current = hasAnnotations;
+    const scroller = scrollerRef.current;
+    const numeral = numeralRef.current;
+    if (!scroller || !numeral) return;
+    settleZoomAnimation(zoomAnimation, scroller);
+    showView(scroller, numeral, zoomRef.current, anchor.current, anchor.current.view);
+  }, [hasAnnotations, scrollerRef]);
+
   // A zoom animation does not outlive the viewer
-  useEffect(() => () => zoomAnimation.current?.cancel(), []);
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    return () => settleZoomAnimation(zoomAnimation, scroller);
+  }, [scrollerRef]);
 
   // When the scroller's size changes (the window, the layout, or a classic scrollbar appearing or
   // going), show the intended view again, so the point at the centre stays in place. The
@@ -358,8 +515,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
       const { size } = anchor.current;
       if (!numeral || (size && scroller.clientWidth === size.width && scroller.clientHeight === size.height)) return;
       // Measured untransformed: a resize during a zoom animation ends it first
-      zoomAnimation.current?.cancel();
-      zoomAnimation.current = null;
+      settleZoomAnimation(zoomAnimation, scroller);
       showView(scroller, numeral, zoomRef.current, anchor.current, anchor.current.view);
     });
     observer.observe(scroller);
@@ -369,7 +525,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const handleScroll = () => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
-    if (scroller && numeral) followUserScroll(scroller, numeral, zoom, anchor.current, settleZoomAnimation);
+    if (scroller && numeral) followUserScroll(scroller, numeral, zoom, anchor.current, endZoomAnimation);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -451,40 +607,60 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
         // numeral's, so it stays the same at every zoom level
         data-numeral-stage
         data-numeral-backdrop
-        className="numeral-stage-height overflow-auto rounded-md border border-line bg-canvas shadow-inner scrollbar-themed focus-ring"
+        // A container for the annotation gutters' width query, only while there are gutters
+        className={`numeral-stage-height overflow-auto rounded-md border border-line bg-canvas shadow-inner scrollbar-themed focus-ring${
+          hasAnnotations ? ' @container' : ''
+        }`}
       >
         {/* The stage content: a flex box at least as large as the stage and as large as the
             paper and its padding, so the stage's scrollable area always includes the whole
-            paper. It is not a scroll container; it clips only what is drawn outside it */}
+            paper. It is not a scroll container; it clips only what is drawn outside it. The
+            group (`data-numeral-group`, always present, a real flex box) is its only item: it is
+            centred both ways by automatic margins while it fits, and starts at the stage
+            content's padding where it does not, so it is never out of reach. It is as wide as
+            the paper and its annotation gutters, if any, which are its first and last items:
+            as conditional siblings they leave the paper's place in the group, and so its
+            identity, unchanged. */}
         <div data-numeral-stage-content className="flex w-max min-w-full min-h-full p-4 overflow-clip">
-          {/* The paper, the visible surface around the numeral image: the numeral's background,
-              painted once across its fixed 12 px padding and the numeral (a screen-only rule in
-              `src/index.css` makes the SVG's own background rectangle transparent inside it), and
-              its edge and shadow, the page's, never part of the SVG. Automatic margins centre it
-              both ways while it fits, and become 0 where it does not, so it then starts at the
-              stage content's padding instead of overflowing out of reach; it is never shrunk. Its
-              padding does not zoom, and is never exported */}
-          <div
-            ref={paperRef}
-            data-numeral-paper
-            className="m-auto shrink-0 p-3 shadow-sm ring-1 ring-line"
-            style={{ backgroundColor: background }}
-          >
-            {/* The numeral image, the zoom wrapper: one image for assistive technology instead of
-                thousands of glyph shapes, and the positioning context of the underlay and
-                overlay. Its width is the numeral's in CSS px at this zoom, never shrunk */}
+          <div data-numeral-group className="m-auto flex shrink-0">
+            {gutterHeight !== null && (
+              <AnnotationGutter side="start" height={gutterHeight} compact={compactAnnotations}>
+                {annotationsStart}
+              </AnnotationGutter>
+            )}
+            {/* The paper, the visible surface around the numeral image: the numeral's background,
+                painted once across its fixed 12 px padding and the numeral (a screen-only rule in
+                `src/index.css` makes the SVG's own background rectangle transparent inside it), and
+                its edge and shadow, the page's, never part of the SVG. Its group centres it
+                (both ways while it fits, from the stage content's padding where it does not); it is
+                never shrunk. Its padding does not zoom, and is never exported */}
             <div
-              ref={numeralRef}
-              data-numeral-image
-              role="img"
-              aria-label={label}
-              className="relative"
-              style={{ width: `${numeralWidth * zoom}px` }}
+              ref={paperRef}
+              data-numeral-paper
+              className="m-auto shrink-0 p-3 shadow-sm ring-1 ring-line"
+              style={{ backgroundColor: background }}
             >
-              {underlay}
-              {children}
-              {overlay}
+              {/* The numeral image, the zoom wrapper: one image for assistive technology instead of
+                  thousands of glyph shapes, and the positioning context of the underlay and
+                  overlay. Its width is the numeral's in CSS px at this zoom, never shrunk */}
+              <div
+                ref={numeralRef}
+                data-numeral-image
+                role="img"
+                aria-label={label}
+                className="relative"
+                style={{ width: `${numeralWidth * zoom}px` }}
+              >
+                {underlay}
+                {children}
+                {overlay}
+              </div>
             </div>
+            {gutterHeight !== null && (
+              <AnnotationGutter side="end" height={gutterHeight} compact={compactAnnotations}>
+                {annotationsEnd}
+              </AnnotationGutter>
+            )}
           </div>
         </div>
       </div>

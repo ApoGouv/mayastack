@@ -939,6 +939,7 @@ describe('HomeView tier guides', () => {
 
   const bandsSwitch = () => screen.getByRole('switch', { name: 'Show Place Tier Guides:' });
   const hairlinesSwitch = () => screen.getByRole('switch', { name: 'Show Dividing Hairlines:' });
+  const annotationsSwitch = () => screen.getByRole('switch', { name: 'Show Tier Annotations:' });
   const gridSwitch = () => screen.getByRole('switch', { name: 'Show Grid:' });
   const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
   const cardLayer = () => viewer().querySelector<HTMLElement>('[data-place-tier-guides]');
@@ -946,7 +947,7 @@ describe('HomeView tier guides', () => {
   const hairlines = () => [...viewer().querySelectorAll<HTMLElement>('[data-tier-hairline]')];
   const bands = () => [...viewer().querySelectorAll<HTMLElement>('[data-place-tier-band]')];
 
-  it('offers both guides in the settings panel, under Viewer guides, off by default, with no guides shown', () => {
+  it('offers the guides and the tier annotations in the settings panel, under Viewer guides, off by default, with none shown', () => {
     renderHomeView();
     const panel = screen.getByRole('group', { name: 'Stela Material & Glyph Settings' });
     const exported = within(panel).getByRole('group', { name: 'Exported appearance' });
@@ -959,24 +960,28 @@ describe('HomeView tier guides', () => {
     expect(exported.contains(screen.getByText('Background color:'))).toBe(true);
     expect(exported.contains(screen.getByText('Glyph color:'))).toBe(true);
     expect(within(exported).getAllByRole('switch')).toEqual([gridSwitch()]);
-    expect(within(guides).getAllByRole('switch')).toEqual([bandsSwitch(), hairlinesSwitch()]);
+    expect(within(guides).getAllByRole('switch')).toEqual([bandsSwitch(), hairlinesSwitch(), annotationsSwitch()]);
 
-    // The hint says they are not exported, and describes the group
-    const hint = within(guides).getByText('Shown on screen only, not included in exports.');
+    // The hint says they are not exported, and that the annotations are hidden when narrow; it describes the group
+    const hint = within(guides).getByText(
+      'Shown on screen only, not included in exports. Tier annotations are hidden on narrow viewer widths.'
+    );
     expect(guides.getAttribute('aria-describedby')).toBe(hint.id);
 
     // Off by default, and no longer in the viewer
     expect(bandsSwitch().getAttribute('aria-checked')).toBe('false');
     expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(viewer().querySelector('[data-numeral-annotations], [data-tier-annotations]')).toBeNull();
     expect(card('Mayan Numeral Stack').querySelectorAll('[role="switch"]')).toHaveLength(0);
     expect(screen.queryByRole('switch', { name: /^Show Tier Guides/ })).toBeNull();
     expect(cardLayer()).toBeNull();
     expect(lineLayer()).toBeNull();
   });
 
-  it('follows the grid in the panel’s focus order: grid, place tier guides, then hairlines', () => {
+  it('follows the grid in the panel’s focus order: grid, place tier guides, hairlines, then tier annotations', () => {
     renderHomeView();
-    const order = [gridSwitch(), bandsSwitch(), hairlinesSwitch()];
+    const order = [gridSwitch(), bandsSwitch(), hairlinesSwitch(), annotationsSwitch()];
     const inDocument = [...document.querySelectorAll<HTMLElement>('[role="switch"]')].filter((el) => order.includes(el));
     expect(inDocument).toEqual(order);
     order.forEach((toggle) => expect(toggle.tagName).toBe('BUTTON'));
@@ -1031,12 +1036,17 @@ describe('HomeView tier guides', () => {
     enter('8000'); // 1 × 20³: 4 tiers, 350 × 320 units
     fireEvent.click(bandsSwitch());
     const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
-    // The numeral image sits in the paper, in the stage content (UI-13), not directly in the viewer
+    // The numeral image sits in the paper, in the centred group (UI-10, slice 2.1), in the stage
+    // content (UI-13), not directly in the viewer
     expect(image.hasAttribute('data-numeral-image')).toBe(true);
-    expect(image.parentElement!.hasAttribute('data-numeral-paper')).toBe(true);
-    expect(image.parentElement!.parentElement!.hasAttribute('data-numeral-stage-content')).toBe(true);
+    const paper = image.parentElement!;
+    expect(paper.hasAttribute('data-numeral-paper')).toBe(true);
+    const group = paper.parentElement!;
+    expect(group.hasAttribute('data-numeral-group')).toBe(true);
+    const content = group.parentElement!;
+    expect(content.hasAttribute('data-numeral-stage-content')).toBe(true);
     expect(viewer().hasAttribute('data-numeral-stage')).toBe(true);
-    expect(image.parentElement!.parentElement!.parentElement).toBe(viewer());
+    expect(content.parentElement).toBe(viewer());
 
     // happy-dom lays nothing out: the wrapper is 350 × 320 px at (0, top)
     let top = 0;
@@ -1256,5 +1266,216 @@ describe('HomeView tier guides', () => {
       { group: 2, exponent: 2, y: [2, 78], x: [250, 350] },
     ]);
     expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
+  });
+});
+
+describe('HomeView tier annotations (UI-10)', () => {
+  // Switching a setting saves it, and later tests start from the defaults
+  afterEach(() => localStorage.clear());
+
+  const annotationsSwitch = () => screen.getByRole('switch', { name: 'Show Tier Annotations:' });
+  const bandsSwitch = () => screen.getByRole('switch', { name: 'Show Place Tier Guides:' });
+  const hairlinesSwitch = () => screen.getByRole('switch', { name: 'Show Dividing Hairlines:' });
+  const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+  const gutter = (side: 'start' | 'end') => viewer().querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`);
+  const gutters = () => viewer().querySelectorAll('[data-numeral-annotations]');
+  /** The labels of a gutter, bottom tier first (the order of the rows): a power reads as "20" and its exponent */
+  const labels = (side: 'start' | 'end') =>
+    [...(gutter(side)?.querySelectorAll<HTMLElement>('[data-tier-annotation]') ?? [])].map((el) => el.textContent);
+  const chooseDate = () => {
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+  };
+
+  it('is off by default: no gutters and no annotation layers', () => {
+    const { enter } = renderHomeView();
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(gutters()).toHaveLength(0);
+    enter('8000');
+    expect(gutters()).toHaveLength(0);
+    expect(viewer().querySelector('[data-tier-annotations]')).toBeNull();
+  });
+
+  it('is in the Viewer guides group, as the last of its three switches', () => {
+    renderHomeView();
+    const guides = within(screen.getByRole('group', { name: 'Stela Material & Glyph Settings' })).getByRole('group', {
+      name: 'Viewer guides',
+    });
+    expect(guides.contains(annotationsSwitch())).toBe(true);
+    expect(within(guides).getAllByRole('switch').at(-1)).toBe(annotationsSwitch());
+  });
+
+  it('shows powers at the start and digits at the end in Number mode, bottom tier first', () => {
+    const { enter } = renderHomeView();
+    enter('8000'); // 1 × 20³: digits 1, 0, 0, 0
+    fireEvent.click(annotationsSwitch());
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(gutters()).toHaveLength(2);
+    expect(gutter('start')!.querySelector('[data-tier-annotations="power"]')).not.toBeNull();
+    expect(gutter('end')!.querySelector('[data-tier-annotations="digit"]')).not.toBeNull();
+    expect(labels('start')).toEqual(['200', '201', '202', '203']);
+    expect(labels('end')).toEqual(['0', '0', '0', '1']);
+  });
+
+  it('shows the digits of a number, zero digits as 0', () => {
+    const { enter } = renderHomeView();
+    enter('7219'); // 18 × 20² + 0 × 20 + 19
+    expect(toBase20(7219n)).toEqual([18, 0, 19]);
+    fireEvent.click(annotationsSwitch());
+    expect(labels('end')).toEqual(['19', '0', '18']);
+    expect(labels('start')).toEqual(['200', '201', '202']);
+  });
+
+  it('shows the zero glyph’s single tier for the initial 0', () => {
+    renderHomeView();
+    fireEvent.click(annotationsSwitch());
+    expect(labels('start')).toEqual(['200']);
+    expect(labels('end')).toEqual(['0']);
+  });
+
+  it('shows powers only in Date mode, keeping an empty end gutter', () => {
+    renderHomeView();
+    chooseDate();
+    fireEvent.click(annotationsSwitch());
+    expect(gutters()).toHaveLength(2);
+    expect(gutter('start')!.querySelector('[data-tier-annotations="power"]')).not.toBeNull();
+    expect(labels('start')[0]).toBe('200');
+    expect(gutter('end')!.querySelector('[data-tier-annotation], [data-tier-annotations]')).toBeNull();
+    expect(gutter('end')!.textContent).toBe('');
+  });
+
+  it('updates the end gutter when the mode changes, keeping the preference', () => {
+    const { enter } = renderHomeView();
+    enter('400');
+    fireEvent.click(annotationsSwitch());
+    expect(labels('end')).toEqual(['0', '0', '1']);
+
+    chooseDate();
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(gutters()).toHaveLength(2);
+    expect(gutter('end')!.querySelector('[data-tier-annotation]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Number (Decimal)' }));
+    expect(labels('end')).toEqual(['0', '0', '1']);
+  });
+
+  it('saves the preference without changing the other display settings', () => {
+    renderHomeView();
+    fireEvent.click(annotationsSwitch());
+    expect(localStorage.getItem('mayastack:showTierAnnotations')).toBe('true');
+    expect(localStorage.getItem('mayastack:showPlaceTierGuides')).toBeNull();
+    expect(localStorage.getItem('mayastack:showTierHairlines')).toBeNull();
+    expect(localStorage.getItem('mayastack:showGrid')).toBeNull();
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(annotationsSwitch());
+    expect(localStorage.getItem('mayastack:showTierAnnotations')).toBe('false');
+    expect(gutters()).toHaveLength(0);
+  });
+
+  it('starts from a saved preference, shown on the initial numeral', () => {
+    localStorage.setItem('mayastack:showTierAnnotations', 'true');
+    const { enter } = renderHomeView();
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(labels('start')).toEqual(['200']);
+    enter('400');
+    expect(labels('start')).toEqual(['200', '201', '202']);
+  });
+
+  it('is independent of the place tier guides and the dividing hairlines', () => {
+    const { enter } = renderHomeView();
+    enter('8000');
+    const guideLayers = () => viewer().querySelectorAll('[data-place-tier-guides], [data-tier-hairlines]').length;
+
+    fireEvent.click(annotationsSwitch());
+    expect(guideLayers()).toBe(0);
+
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect(guideLayers()).toBe(2);
+    expect(gutters()).toHaveLength(2);
+
+    fireEvent.click(annotationsSwitch());
+    expect(gutters()).toHaveLength(0);
+    expect(guideLayers()).toBe(2);
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(annotationsSwitch());
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect(guideLayers()).toBe(0);
+    expect(gutters()).toHaveLength(2);
+  });
+
+  it('keeps the annotations outside the SVG, and exports the same SVG with them on or off', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000');
+    const off = exportedMarkup(numeralSvg());
+    fireEvent.click(annotationsSwitch());
+
+    const layers = viewer().querySelectorAll('[data-tier-annotations]');
+    expect(layers).toHaveLength(2);
+    // Not in the numeral image either: they sit beside the paper
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    layers.forEach((layer) => {
+      expect(numeralSvg().contains(layer)).toBe(false);
+      expect(image.contains(layer)).toBe(false);
+    });
+    expect(viewer().querySelectorAll('svg')).toHaveLength(1);
+
+    const on = exportedMarkup(numeralSvg());
+    expect(on).toBe(off);
+    expect(on).not.toMatch(/annotation/);
+  });
+
+  it('uses the compact labels at 25% in both modes, with the labels still shown, and the default ones from 50% (slice 4b)', () => {
+    const { enter } = renderHomeView();
+    enter('8000');
+    fireEvent.click(annotationsSwitch());
+    const compact = () =>
+      [...viewer().querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')].filter((box) =>
+        box.className.split(' ').includes('[&_[data-tier-annotation]]:text-[10px]')
+      ).length;
+    const zoomOut = () => fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(compact()).toBe(0);
+    for (let i = 0; i < 3; i++) zoomOut();
+    expect(compact()).toBe(2);
+    expect(labels('start')).toEqual(['200', '201', '202', '203']);
+    expect(labels('end')).toEqual(['0', '0', '0', '1']);
+
+    // Date mode: its viewer starts at 100% (the Number viewer is gone until a date is chosen), then the
+    // same at 25%: powers at the start, the empty end gutter, both compact
+    chooseDate();
+    expect(compact()).toBe(0);
+    for (let i = 0; i < 3; i++) zoomOut();
+    expect(compact()).toBe(2);
+    expect(labels('start').length).toBeGreaterThan(0);
+    expect(gutter('end')!.querySelector('[data-tier-annotation]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(compact()).toBe(0);
+  });
+
+  it('leaves the zoom and the numeral image’s width as they are, and mirrors the numeral’s height in the gutters', () => {
+    const { enter } = renderHomeView();
+    enter('8000'); // 4 tiers: 350 × 320 units
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    const zoomText = () => screen.getByRole('group', { name: 'Zoom controls' }).textContent;
+    const boxHeight = (side: 'start' | 'end') =>
+      gutter(side)!.querySelector<HTMLElement>('[data-numeral-annotations-box]')!.style.height;
+
+    fireEvent.click(annotationsSwitch());
+    expect([zoomText(), image.style.width]).toEqual(['−100%+Reset', '350px']);
+    expect([boxHeight('start'), boxHeight('end')]).toEqual(['320px', '320px']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect([zoomText(), image.style.width]).toEqual(['−125%+Reset', '437.5px']);
+    expect([boxHeight('start'), boxHeight('end')]).toEqual(['400px', '400px']);
+
+    fireEvent.click(annotationsSwitch());
+    expect(image.style.width).toBe('437.5px');
   });
 });
