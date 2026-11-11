@@ -153,16 +153,16 @@ describe('TierAnnotations', () => {
       expect(rowElements.map((el) => el.textContent)).toEqual(given.map((_, d) => `[${d}]`));
     });
 
-    it('colours the brackets with the subtle token, and leaves the digit in the row’s gold', () => {
+    it('leaves the brackets and the digit with no colour of their own, so all take the row’s gold', () => {
       const { rowElements } = renderAnnotations(rows, 'digit');
       for (const row of rowElements) {
         const { brackets, label } = parts(row);
         expect(brackets).toHaveLength(2);
         for (const bracket of brackets) {
-          expect(bracket.className.split(' ')).toContain('text-fg-subtle');
-          expect(bracket.className.split(' ').filter((c) => c.startsWith('text-'))).toEqual(['text-fg-subtle']);
+          // No text colour class: the bracket inherits the row's text-accent-fg
+          expect(bracket.className.split(' ').filter((c) => c.startsWith('text-'))).toEqual([]);
         }
-        // The digit itself has no colour of its own: it is the row's text-accent-fg
+        // The digit itself has no colour of its own either: it is the row's text-accent-fg
         expect(label.className).toBe('');
         expect(row.className.split(' ')).toContain('text-accent-fg');
       }

@@ -51,16 +51,16 @@ export const TierAnnotations: React.FC<TierAnnotationsProps> = ({ rows, kind }) 
               20<sup>{exponent}</sup>
             </span>
           ) : (
-            // In brackets (UI-13), real elements in the quieter subtle colour, the digit in the
-            // row's gold, each bracket 2 px from the digit by a margin, not a space; nothing at
-            // all, brackets included, where the digit is missing
+            // In brackets (UI-13), real elements with no colour of their own: the brackets and the
+            // digit all take the row's gold. Each bracket is 2 px from the digit by a margin, not a
+            // space; nothing at all, brackets included, where the digit is missing
             digit !== null && (
               <span>
-                <span className="mr-0.5 text-fg-subtle" data-tier-annotation-bracket>
+                <span className="mr-0.5" data-tier-annotation-bracket>
                   [
                 </span>
                 {digit}
-                <span className="ml-0.5 text-fg-subtle" data-tier-annotation-bracket>
+                <span className="ml-0.5" data-tier-annotation-bracket>
                   ]
                 </span>
               </span>
