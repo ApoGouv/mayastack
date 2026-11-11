@@ -222,9 +222,13 @@
    above gives every element a 0.01 ms transition, and, `transition-property` being `all` by
    default, the wrapper's zoomed width would become one, kept at the previous level's until the
    next frame. The zoom's anchored scroll position is measured in the same frame, so it must see
-   the final width: the wrapper has no transitions. Only this element; the rule is unchanged. */
+   the final width: the wrapper has no transitions. Only this element; the rule is unchanged.
+   Likewise the annotation gutters' label box (UI-13): its inline height, the numeral's at this
+   zoom, sets the gutters' and so the centred group's height, which the anchored scroll position
+   is measured against. Its fade back in is `motion-safe:` only, so nothing else is lost. */
 @media (prefers-reduced-motion: reduce) {
-  [data-numeral-image] {
+  [data-numeral-image],
+  [data-numeral-annotations-box] {
     transition-property: none;
   }
 }

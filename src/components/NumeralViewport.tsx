@@ -1,11 +1,16 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
+  drawnRect,
+  fitsSideways,
+  getGutterAnimationStart,
   getZoomAnimationStart,
+  gutterAnimationKeyframes,
   prefersReducedMotion,
   ZOOM_ANIMATION_DURATION,
   ZOOM_ANIMATION_EASING,
   zoomAnimationKeyframes,
   type ScreenBox,
+  type ScreenRect,
 } from '@utils/zoomAnimation';
 
 /** The zoom levels the viewport steps through, smallest to largest */
@@ -145,31 +150,83 @@ function followUserScroll(
  * The stage carries this attribute while a zoom animation runs, so that the screen-only
  * annotations, which sit outside the animated paper, can be hidden meanwhile (see
  * AnnotationGutter). Its value is `fit` while the zoomed layout does not scroll sideways, and
- * empty while it does. It is set only where the animation starts, and only the two functions
- * below remove it, together with the ref that holds the running animation, so the two never
- * disagree.
+ * empty while it does (fitsSideways): nothing styles by the value now that the gutters move with
+ * the paper (UI-13, slice 3a-2), but it says which layout the zoom ends in. It is set only where
+ * the animation starts, and only the two functions below remove it, together with the ref that
+ * holds the running animation, so the two never disagree.
  */
 const ZOOMING_ATTRIBUTE = 'data-zooming';
 
+/** Where each annotation gutter is drawn, or null where there is none to draw */
+interface GutterRects {
+  start: ScreenRect | null;
+  end: ScreenRect | null;
+}
+
 /**
- * Ends the zoom animation held in `running`, if any, at once, and clears it and the stage's
- * zooming attribute. For every cancellation: a new zoom, Reset, the user's scrolling, a new
- * numeral, a resize and unmounting.
+ * Where the stage's annotation gutters are drawn now, any running zoom animation's transform on
+ * them included. Null for a gutter not rendered (no annotations) or not displayed (hidden on a
+ * narrow stage, an empty box).
  */
-function settleZoomAnimation(running: { current: Animation | null }, stage: HTMLElement | null) {
-  running.current?.cancel();
+function drawnGutters(stage: HTMLElement): GutterRects {
+  const rectOf = (side: 'start' | 'end') =>
+    drawnRect(stage.querySelector(`[data-numeral-annotations="${side}"]`)?.getBoundingClientRect());
+  return { start: rectOf('start'), end: rectOf('end') };
+}
+
+/**
+ * What a zoom remembers of the layout it starts from, for its animation, measured as drawn just
+ * before any running animation is ended, so a zoom replacing another starts from where things are
+ * drawn mid-way: the numeral image, for the paper's animation, and the annotation gutters, for
+ * theirs (getGutterAnimationStart), each animated from its rect here to its final one.
+ * `fitted`, with `fitsSideways` of the zoomed layout, tells a zoom across the fit/overflow
+ * boundary; the gutters' animation needs no special case for it, as their rects say where they
+ * were and are.
+ */
+interface PendingZoom {
+  /** Where the numeral image was drawn */
+  image: ScreenBox;
+  /** Whether the layout zoomed from fitted the stage sideways (fitsSideways) */
+  fitted: boolean;
+  /** Where the annotation gutters were drawn */
+  gutters: GutterRects;
+}
+
+/**
+ * A running zoom animation (UI-13): the paper's, which decides when the zoom has ended, and the
+ * annotation gutters' that move with it (slice 3a-2), none for a gutter not drawn before or
+ * after. All are started together, with the same timing, and ended together.
+ */
+interface ZoomRun {
+  paper: Animation;
+  gutters: Animation[];
+}
+
+/**
+ * Ends the zoom animation held in `running`, if any, at once, the paper's and the gutters', and
+ * clears it and the stage's zooming attribute. For every cancellation: a new zoom, Reset, the
+ * user's scrolling, a new numeral, a resize, annotations shown or hidden, and unmounting.
+ */
+function settleZoomAnimation(running: { current: ZoomRun | null }, stage: HTMLElement | null) {
+  const run = running.current;
   running.current = null;
+  run?.paper.cancel();
+  run?.gutters.forEach((animation) => animation.cancel());
   stage?.removeAttribute(ZOOMING_ATTRIBUTE);
 }
 
 /**
- * Clears the zoom animation `finished` (completed, or ended by something else) and the stage's
- * attribute, but only if it is still the running one: a stale animation, whose promise settles
- * after a newer one has started, changes nothing, and nothing is cancelled here.
+ * Clears the zoom animation whose paper animation is `finished` (completed, or ended by
+ * something else) and the stage's attribute, but only if it is still the running one: a stale
+ * animation, whose promise settles after a newer one has started, changes nothing. Its gutters'
+ * animations end with it: having the same timing, they have finished too, and one ended early
+ * from outside never outlives the paper's.
  */
-function completeZoomAnimation(running: { current: Animation | null }, stage: HTMLElement | null, finished: Animation) {
-  if (running.current !== finished) return;
+function completeZoomAnimation(running: { current: ZoomRun | null }, stage: HTMLElement | null, finished: Animation) {
+  const run = running.current;
+  if (run?.paper !== finished) return;
   running.current = null;
+  run.gutters.forEach((animation) => animation.cancel());
   stage?.removeAttribute(ZOOMING_ATTRIBUTE);
 }
 
@@ -237,6 +294,14 @@ interface NumeralViewportProps {
    * value, there are no gutters.
    */
   numeralHeight?: number;
+  /**
+   * The annotation gutters' background (UI-13, slice 3b): the paper's colour as the viewer shows
+   * it, opaque, so the gutters and the paper read as one sheet. It must be opaque: the numeral
+   * scrolls under a gutter where the stage scrolls sideways, and must not show through it. For a
+   * translucent `background`, it is that colour over the stage's `canvas` (getGuideColors'
+   * `background`). Without it, the gutters are `canvas`.
+   */
+  annotationBackground?: string;
 }
 
 /**
@@ -256,7 +321,10 @@ interface NumeralViewportProps {
  *   padding), so it does not jump when it begins or stops sticking. `overflow-clip` on the
  *   stage content, unlike `overflow: hidden`, does not make it the scroller sticky positioning
  *   looks to, so the scroller itself is.
- * - Opaque `canvas`, above the numeral (`z-10`), so the numeral scrolls under it. It is hidden
+ * - Opaque, above the numeral (`z-10`), so the numeral scrolls under it: the paper's colour as
+ *   shown (`annotationBackground`, inline, the same in both gutters), or `canvas` without it. It
+ *   is drawn moving with the paper while a zoom animates (below), so it never changes colour or
+ *   clears for a zoom. It is hidden
  *   (`display: none`) below a stage width of 31rem (496 px at the default font size), as a
  *   container query against the scroller, which is a container while there are gutters. The
  *   width queried is the scroller's content box: its client width, without its 1 px borders and
@@ -265,20 +333,16 @@ interface NumeralViewportProps {
  *   from 31rem the whole numeral and its gutters fit. The class must be written out in full for
  *   Tailwind to find it.
  * - While a zoom animation runs (the stage has `data-zooming`), the gutters take their final size
- *   and place at once, while the paper animates. So:
- *   - Its inner box (the labels) is `visibility: hidden`: they would not line up with the numeral.
+ *   and place at once in the layout, but are drawn moving with the paper (UI-13, slice 3a-2): a
+ *   transform animated with the paper's, from where each was drawn before the zoom to its final
+ *   place sideways, and vertically on the paper's drawn top and bottom (getGutterAnimationStart).
+ *   So the paper, drawn larger than its final box zooming out, no longer slides under them, and
+ *   their background stays the opaque `canvas` throughout. Their layout never changes.
+ *   - Its inner box (the labels) is `visibility: hidden`: the vertical scale would stretch them.
  *     It is also transparent then, and fades back in over 150 ms once the mark is removed (the
  *     animation ended or cancelled): visibility, which is not transitioned, hides it at once and
  *     shows it again at once, while its opacity eases back to 1. Without a transition where
  *     reduced motion is preferred (`motion-safe:`), so the labels then reappear at once.
- *   - Where the zoomed layout does not scroll sideways (`data-zooming="fit"`), its background is
- *     transparent: zooming out, the paper is drawn larger than its final box, and would be cut by
- *     the opaque gutters. Nothing scrolls under them there, and their background is the stage's
- *     colour, so the change is not seen otherwise.
- *   - Where it scrolls sideways, the background stays opaque: the gutters are stuck over the
- *     scrolling paper before and after the zoom, and stay so throughout, rather than vanishing
- *     and covering the paper's edges again at the end.
- *   The gutter itself stays visible, and its layout, size and place never change.
  * - At the smallest zoom level (`compact`) the labels are 10 px instead of `text-xs`'s 12 px: a
  *   tier's row is then 20 px tall (80 × 25%), and 12 px labels would be as tall as the glyphs.
  *   Only the font size changes, so rows, alignment and the gutter's width stay as they were. The
@@ -291,14 +355,17 @@ const AnnotationGutter: React.FC<{
   height: number;
   /** Whether the numeral is at the smallest zoom level: smaller labels */
   compact: boolean;
+  /** The paper's colour as shown, opaque (see `annotationBackground`), or none for `canvas` */
+  background?: string;
   children?: React.ReactNode;
-}> = ({ side, height, compact, children }) => (
+}> = ({ side, height, compact, background, children }) => (
   <div
     aria-hidden="true"
     data-numeral-annotations={side}
-    className={`hidden @min-[31rem]:flex sticky z-10 w-10.5 shrink-0 bg-canvas pointer-events-none select-none in-data-[zooming=fit]:bg-transparent ${
+    className={`hidden @min-[31rem]:flex sticky z-10 w-10.5 shrink-0 bg-canvas pointer-events-none select-none ${
       side === 'start' ? 'left-0' : 'right-0'
     }`}
+    style={background ? { backgroundColor: background } : undefined}
   >
     <div className="m-auto w-full py-3">
       <div
@@ -357,6 +424,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   annotationsStart,
   annotationsEnd,
   numeralHeight,
+  annotationBackground,
 }) => {
   const ownScrollerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = givenScrollerRef ?? ownScrollerRef;
@@ -364,11 +432,11 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   const numeralRef = useRef<HTMLDivElement>(null);
   // The paper, which the zoom animation draws transformed (UI-13, slice 6)
   const paperRef = useRef<HTMLDivElement>(null);
-  // The zoom animation running on the paper, if any
-  const zoomAnimation = useRef<Animation | null>(null);
-  // For the zoom level being laid out, its animation: where the numeral image was drawn before.
-  // Null for none (Reset, reduced motion, or no zoom pending)
-  const pendingAnimation = useRef<ScreenBox | null>(null);
+  // The zoom animation running, if any: the paper's and the annotation gutters' (ZoomRun)
+  const zoomAnimation = useRef<ZoomRun | null>(null);
+  // For the zoom level being laid out, its animation: what it remembers of the layout zoomed from
+  // (PendingZoom). Null for none (Reset, reduced motion, or no zoom pending)
+  const pendingAnimation = useRef<PendingZoom | null>(null);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   // Where to scroll once the next zoom level is laid out: the numeral point to keep at the
   // viewer's centre, or the numeral's start
@@ -407,9 +475,12 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
       // Where the numeral is drawn now, part-way through an earlier zoom's animation included:
       // the next animation starts from there, so a quick succession of zooms never jumps
       const { left, top, width } = numeral.getBoundingClientRect();
+      // Likewise the gutters, and whether the layout fits, before the animation is ended
+      const gutters = drawnGutters(scroller);
+      const fitted = fitsSideways(scroller);
       endZoomAnimation();
       // Read at each zoom, so a change of preference applies from the next one
-      pendingAnimation.current = prefersReducedMotion() ? null : { left, top, width };
+      pendingAnimation.current = prefersReducedMotion() ? null : { image: { left, top, width }, fitted, gutters };
       // Around the point the user sees at the centre, also where a resize clamped the intended
       // view: it then becomes the view to keep. Measured untransformed, once settled
       pendingScroll.current = centrePoint(scroller, numeral, zoom);
@@ -437,8 +508,8 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
 
   // Once the zoomed numeral is laid out, keep the same point at the centre (or go to its start).
   // Then, for a zoom (not Reset, nor with reduced motion), animate the paper from where the
-  // numeral was drawn before to its final layout: a transform only, started once the layout and
-  // the scroll position are final, all before paint
+  // numeral was drawn before to its final layout, and the annotation gutters with it: transforms
+  // only, started once the layout and the scroll position are final, all before paint
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const numeral = numeralRef.current;
@@ -451,23 +522,35 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
 
     const paper = paperRef.current;
     if (!pending || !paper || typeof paper.animate !== 'function') return;
-    const start = getZoomAnimationStart(pending, numeral.getBoundingClientRect(), paper.getBoundingClientRect());
+    // The final layout, untransformed: the earlier zoom's animation, if any, was ended in zoomTo
+    const paperBox = paper.getBoundingClientRect();
+    const finalGutters = drawnGutters(scroller);
+    const start = getZoomAnimationStart(pending.image, numeral.getBoundingClientRect(), paperBox);
     if (!start) return;
-    const animation = paper.animate(zoomAnimationKeyframes(start), {
-      duration: ZOOM_ANIMATION_DURATION,
-      easing: ZOOM_ANIMATION_EASING,
-    });
-    // Without a fill, its effect ends with it: the paper is left untransformed. Settling cancels
-    // it, which rejects `finished`: expected. Either way, only the running animation's end
-    // changes anything (see completeZoomAnimation)
+    const timing = { duration: ZOOM_ANIMATION_DURATION, easing: ZOOM_ANIMATION_EASING };
+    const animation = paper.animate(zoomAnimationKeyframes(start), timing);
+    // Each gutter drawn before and after (not hidden, nor added or removed meanwhile) moves with
+    // the paper, from where it was drawn to its final place, with the same timing, started in the
+    // same task, so on the same frame (getGutterAnimationStart)
+    const gutters: Animation[] = [];
+    for (const side of ['start', 'end'] as const) {
+      const before = pending.gutters[side];
+      const final = finalGutters[side];
+      const element = scroller.querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`);
+      if (!before || !final || !element) continue;
+      const gutterStart = getGutterAnimationStart(before, final, start, paperBox.top);
+      if (gutterStart) gutters.push(element.animate(gutterAnimationKeyframes(gutterStart), timing));
+    }
+    // Without a fill, their effect ends with them: all are left untransformed. Settling cancels
+    // them, which rejects `finished`: expected. Either way, only the running paper animation's
+    // end changes anything (see completeZoomAnimation)
     const onEnd = () => completeZoomAnimation(zoomAnimation, scroller, animation);
     animation.finished.then(onEnd, onEnd);
-    // Marked last, once the animation exists and is being followed, so that nothing before it
+    // Marked last, once the animations exist and are being followed, so that nothing before it
     // can leave the stage marked without a running animation
-    zoomAnimation.current = animation;
-    // `fit` where the zoomed layout does not scroll sideways: the gutters are then never stuck
-    // over the paper, and can let it show through (see AnnotationGutter)
-    scroller.setAttribute(ZOOMING_ATTRIBUTE, scroller.scrollWidth > scroller.clientWidth ? '' : 'fit');
+    zoomAnimation.current = { paper: animation, gutters };
+    // `fit` where the zoomed layout does not scroll sideways (fitsSideways), empty where it does
+    scroller.setAttribute(ZOOMING_ATTRIBUTE, fitsSideways(scroller) ? 'fit' : '');
   }, [zoom, scrollerRef]);
 
   // A new numeral shows its start: its highest place value, centred horizontally. Before paint,
@@ -624,7 +707,12 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
         <div data-numeral-stage-content className="flex w-max min-w-full min-h-full p-4 overflow-clip">
           <div data-numeral-group className="m-auto flex shrink-0">
             {gutterHeight !== null && (
-              <AnnotationGutter side="start" height={gutterHeight} compact={compactAnnotations}>
+              <AnnotationGutter
+                side="start"
+                height={gutterHeight}
+                compact={compactAnnotations}
+                background={annotationBackground}
+              >
                 {annotationsStart}
               </AnnotationGutter>
             )}
@@ -657,7 +745,12 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
               </div>
             </div>
             {gutterHeight !== null && (
-              <AnnotationGutter side="end" height={gutterHeight} compact={compactAnnotations}>
+              <AnnotationGutter
+                side="end"
+                height={gutterHeight}
+                compact={compactAnnotations}
+                background={annotationBackground}
+              >
                 {annotationsEnd}
               </AnnotationGutter>
             )}

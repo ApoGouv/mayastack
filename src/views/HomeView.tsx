@@ -196,6 +196,10 @@ export default function HomeView() {
                   // The numeral's background, as MayanRenderer fills it: the viewer's paper
                   // paints it on screen, once, around and behind the numeral
                   background={rgbaToCss(backgroundColor)}
+                  // The annotation gutters' background (UI-13): the paper's colour as the viewer
+                  // shows it, opaque (a translucent background over the theme's canvas), which
+                  // the guides' colours already follow, so the gutters and the paper are one sheet
+                  annotationBackground={rgbaToCss({ ...guideColors.background, a: 1 })}
                   label={mayanData.label}
                   resetKey={mayanData.key}
                   scrollerRef={viewerScrollerRef}

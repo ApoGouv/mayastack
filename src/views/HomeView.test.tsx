@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DisplaySettingsProvider } from '@/context/DisplaySettingsContext';
+import type { DisplaySettingsContextType } from '@/context/DisplaySettingsContextTypes';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { MAX_DIGITS_IN_FILENAME, prepareSvgCloneForExport } from '@utils/exportUtils';
 import { toBase20, toBase20Formula } from '@utils/base20';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
@@ -1279,7 +1281,10 @@ describe('HomeView tier annotations (UI-10)', () => {
   const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
   const gutter = (side: 'start' | 'end') => viewer().querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`);
   const gutters = () => viewer().querySelectorAll('[data-numeral-annotations]');
-  /** The labels of a gutter, bottom tier first (the order of the rows): a power reads as "20" and its exponent */
+  /**
+   * The labels of a gutter, bottom tier first (the order of the rows): a power reads as "20" and
+   * its exponent, a digit as itself in brackets, e.g. "[7]" (UI-13)
+   */
   const labels = (side: 'start' | 'end') =>
     [...(gutter(side)?.querySelectorAll<HTMLElement>('[data-tier-annotation]') ?? [])].map((el) => el.textContent);
   const chooseDate = () => {
@@ -1315,7 +1320,7 @@ describe('HomeView tier annotations (UI-10)', () => {
     expect(gutter('start')!.querySelector('[data-tier-annotations="power"]')).not.toBeNull();
     expect(gutter('end')!.querySelector('[data-tier-annotations="digit"]')).not.toBeNull();
     expect(labels('start')).toEqual(['200', '201', '202', '203']);
-    expect(labels('end')).toEqual(['0', '0', '0', '1']);
+    expect(labels('end')).toEqual(['[0]', '[0]', '[0]', '[1]']);
   });
 
   it('shows the digits of a number, zero digits as 0', () => {
@@ -1323,7 +1328,7 @@ describe('HomeView tier annotations (UI-10)', () => {
     enter('7219'); // 18 × 20² + 0 × 20 + 19
     expect(toBase20(7219n)).toEqual([18, 0, 19]);
     fireEvent.click(annotationsSwitch());
-    expect(labels('end')).toEqual(['19', '0', '18']);
+    expect(labels('end')).toEqual(['[19]', '[0]', '[18]']);
     expect(labels('start')).toEqual(['200', '201', '202']);
   });
 
@@ -1331,7 +1336,7 @@ describe('HomeView tier annotations (UI-10)', () => {
     renderHomeView();
     fireEvent.click(annotationsSwitch());
     expect(labels('start')).toEqual(['200']);
-    expect(labels('end')).toEqual(['0']);
+    expect(labels('end')).toEqual(['[0]']);
   });
 
   it('shows powers only in Date mode, keeping an empty end gutter', () => {
@@ -1349,7 +1354,7 @@ describe('HomeView tier annotations (UI-10)', () => {
     const { enter } = renderHomeView();
     enter('400');
     fireEvent.click(annotationsSwitch());
-    expect(labels('end')).toEqual(['0', '0', '1']);
+    expect(labels('end')).toEqual(['[0]', '[0]', '[1]']);
 
     chooseDate();
     expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
@@ -1357,7 +1362,7 @@ describe('HomeView tier annotations (UI-10)', () => {
     expect(gutter('end')!.querySelector('[data-tier-annotation]')).toBeNull();
 
     fireEvent.click(screen.getByRole('radio', { name: 'Number (Decimal)' }));
-    expect(labels('end')).toEqual(['0', '0', '1']);
+    expect(labels('end')).toEqual(['[0]', '[0]', '[1]']);
   });
 
   it('saves the preference without changing the other display settings', () => {
@@ -1444,7 +1449,7 @@ describe('HomeView tier annotations (UI-10)', () => {
     for (let i = 0; i < 3; i++) zoomOut();
     expect(compact()).toBe(2);
     expect(labels('start')).toEqual(['200', '201', '202', '203']);
-    expect(labels('end')).toEqual(['0', '0', '0', '1']);
+    expect(labels('end')).toEqual(['[0]', '[0]', '[0]', '[1]']);
 
     // Date mode: its viewer starts at 100% (the Number viewer is gone until a date is chosen), then the
     // same at 25%: powers at the start, the empty end gutter, both compact
@@ -1477,5 +1482,151 @@ describe('HomeView tier annotations (UI-10)', () => {
 
     fireEvent.click(annotationsSwitch());
     expect(image.style.width).toBe('437.5px');
+  });
+});
+
+describe('HomeView annotation gutters on the paper’s colour (UI-13, slice 3b)', () => {
+  /** Hands the settings, as components get them, to the test after every render */
+  function SettingsProbe({ onSettings }: { onSettings: (settings: DisplaySettingsContextType) => void }) {
+    onSettings(useDisplaySettings());
+    return null;
+  }
+
+  /**
+   * Stands in for the OS colour-scheme query (the default theme follows it), starting light, and
+   * for every other media query as not matching (no reduced motion). Returns a function that
+   * changes the scheme and tells the provider, as an OS change does.
+   */
+  function fakeSystemScheme() {
+    const listeners = new Set<() => void>();
+    const scheme = { dark: false };
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (media: string) =>
+        ({
+          media,
+          get matches() {
+            return media.includes('prefers-color-scheme: dark') && scheme.dark;
+          },
+          addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+          removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+        }) as unknown as MediaQueryList
+    );
+    return (dark: boolean) => {
+      scheme.dark = dark;
+      act(() => listeners.forEach((listener) => listener()));
+    };
+  }
+
+  /** HomeView with the tier annotations on, a five-tier number shown, and the settings at hand */
+  function renderAnnotated() {
+    localStorage.setItem('mayastack:showTierAnnotations', 'true');
+    let settings!: DisplaySettingsContextType;
+    render(
+      <DisplaySettingsProvider>
+        <HomeView />
+        <SettingsProbe onSettings={(s) => (settings = s)} />
+      </DisplaySettingsProvider>
+    );
+    fireEvent.change(screen.getByLabelText('Decimal integer'), { target: { value: '3047620' } });
+    const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+    const gutters = () => [...viewer().querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+    const paper = () => viewer().querySelector<HTMLElement>('[data-numeral-paper]')!;
+    return { settings: () => settings, viewer, gutters, paper };
+  }
+
+  /** The opaque colour the viewer shows for a background, over the theme's canvas, as CSS */
+  const shown = (background: { r: number; g: number; b: number; a: number }, theme: 'light' | 'dark') =>
+    rgbaToCss({ ...getGuideColors(background, VIEWER_BACKDROP[theme]).background, a: 1 });
+
+  afterEach(() => localStorage.clear());
+
+  it('gives both gutters the default white paper’s colour, as the paper has it', () => {
+    fakeSystemScheme();
+    const v = renderAnnotated();
+    expect(v.gutters()).toHaveLength(2);
+    expect(v.paper().style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+    for (const gutter of v.gutters()) {
+      expect(gutter.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+      // Its place, layer and fallback colour as they were
+      expect(gutter.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'z-10', 'w-10.5', 'bg-canvas']));
+    }
+  });
+
+  it('gives both gutters a custom opaque paper colour exactly as the paper has it', () => {
+    fakeSystemScheme();
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify({ r: 20, g: 40, b: 90, a: 1 }));
+    const v = renderAnnotated();
+    expect(v.paper().style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual(['rgba(20, 40, 90, 1)', 'rgba(20, 40, 90, 1)']);
+  });
+
+  it('gives both gutters a translucent paper’s colour as shown over the canvas, opaque, not the colour as set', () => {
+    fakeSystemScheme();
+    const background = { r: 20, g: 40, b: 90, a: 0.35 };
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+    const v = renderAnnotated();
+    const expected = shown(background, 'light');
+    // The paper keeps the translucent colour, painted over the canvas; the gutters, the result
+    expect(v.paper().style.backgroundColor).toBe(rgbaToCss(background));
+    expect(expected).not.toBe(rgbaToCss(background));
+    expect(expected).toMatch(/, 1\)$/);
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual([expected, expected]);
+  });
+
+  it('updates both gutters when the paper colour or the theme changes', () => {
+    const setDark = fakeSystemScheme();
+    const v = renderAnnotated();
+    const colours = () => v.gutters().map((g) => g.style.backgroundColor);
+    expect(colours()).toEqual(['rgba(255, 255, 255, 1)', 'rgba(255, 255, 255, 1)']);
+
+    const translucent = { r: 200, g: 120, b: 30, a: 0.5 };
+    act(() => v.settings().setBackgroundColor(translucent));
+    expect(colours()).toEqual([shown(translucent, 'light'), shown(translucent, 'light')]);
+
+    // The theme, and so the canvas a translucent paper is shown over
+    setDark(true);
+    expect(v.settings().resolvedTheme).toBe('dark');
+    expect(colours()).toEqual([shown(translucent, 'dark'), shown(translucent, 'dark')]);
+    expect(shown(translucent, 'dark')).not.toBe(shown(translucent, 'light'));
+
+    // An opaque colour is the same in both themes
+    act(() => v.settings().setBackgroundColor({ r: 5, g: 6, b: 7, a: 1 }));
+    expect(colours()).toEqual(['rgba(5, 6, 7, 1)', 'rgba(5, 6, 7, 1)']);
+    setDark(false);
+    expect(colours()).toEqual(['rgba(5, 6, 7, 1)', 'rgba(5, 6, 7, 1)']);
+  });
+
+  it('keeps the gutters’ colour through zooming, and leaves the export unchanged', () => {
+    fakeSystemScheme();
+    const background = { r: 20, g: 40, b: 90, a: 0.35 };
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+    const v = renderAnnotated();
+    const svg = () => v.viewer().querySelector<SVGSVGElement>('svg.mep-svg')!;
+    const exported = exportedMarkup(svg());
+    const expected = shown(background, 'light');
+    for (const button of ['Zoom in', 'Zoom out', 'Zoom out', 'Zoom out', 'Zoom out'] as const) {
+      fireEvent.click(screen.getByRole('button', { name: button }));
+      expect(v.gutters().map((g) => g.style.backgroundColor), button).toEqual([expected, expected]);
+      // No zooming class, background or otherwise, on the gutters
+      for (const gutter of v.gutters()) expect(gutter.className, button).not.toContain('[zooming');
+    }
+    // The SVG, the source of the exports, has nothing of the gutters' colour
+    expect(exportedMarkup(svg())).toBe(exported);
+    expect(exported).not.toContain(expected);
+  });
+
+  it('shows no gutters, and nothing breaks, without annotations, and in Date mode keeps both coloured', () => {
+    fakeSystemScheme();
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify({ r: 20, g: 40, b: 90, a: 1 }));
+    const v = renderAnnotated();
+    act(() => v.settings().setShowTierAnnotations(false));
+    expect(v.gutters()).toHaveLength(0);
+    act(() => v.settings().setShowTierAnnotations(true));
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual(['rgba(20, 40, 90, 1)', 'rgba(20, 40, 90, 1)']);
+    // Date mode: the end gutter is empty, but laid out and coloured like the other
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual(['rgba(20, 40, 90, 1)', 'rgba(20, 40, 90, 1)']);
   });
 });

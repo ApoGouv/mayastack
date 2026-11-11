@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  drawnRect,
+  fitsSideways,
+  getGutterAnimationStart,
   getZoomAnimationStart,
+  gutterAnimationKeyframes,
   prefersReducedMotion,
   ZOOM_ANIMATION_DURATION,
   ZOOM_ANIMATION_EASING,
@@ -116,5 +120,125 @@ describe('prefersReducedMotion', () => {
       if (original) Object.defineProperty(window, 'matchMedia', original);
       else delete (window as { matchMedia?: unknown }).matchMedia;
     }
+  });
+});
+
+describe('fitsSideways (UI-13, slice 3a-1)', () => {
+  it('fits while the content is no wider than the scroller, overflows once it is wider', () => {
+    expect(fitsSideways({ scrollWidth: 600, clientWidth: 703 })).toBe(true);
+    // Exactly as wide: nothing to scroll
+    expect(fitsSideways({ scrollWidth: 703, clientWidth: 703 })).toBe(true);
+    expect(fitsSideways({ scrollWidth: 704, clientWidth: 703 })).toBe(false);
+    expect(fitsSideways({ scrollWidth: 840, clientWidth: 703 })).toBe(false);
+  });
+
+  it('fits with nothing laid out (both 0, as in a test DOM)', () => {
+    expect(fitsSideways({ scrollWidth: 0, clientWidth: 0 })).toBe(true);
+  });
+
+  it('reads the element’s own laid out dimensions', () => {
+    const el = document.createElement('div');
+    Object.defineProperties(el, {
+      scrollWidth: { configurable: true, get: () => 900 },
+      clientWidth: { configurable: true, get: () => 535 },
+    });
+    expect(fitsSideways(el)).toBe(false);
+    Object.defineProperty(el, 'scrollWidth', { configurable: true, get: () => 535 });
+    expect(fitsSideways(el)).toBe(true);
+  });
+});
+
+describe('drawnRect (UI-13, slice 3a-1)', () => {
+  it('keeps a drawn box’s position and size, and nothing else', () => {
+    const rect = new DOMRect(16.5, 40.25, 42, 320);
+    expect(drawnRect(rect)).toEqual({ left: 16.5, top: 40.25, width: 42, height: 320 });
+    // Negative positions are fine: a box partly off screen
+    expect(drawnRect({ left: -120, top: -8, width: 42, height: 80 })).toEqual({ left: -120, top: -8, width: 42, height: 80 });
+  });
+
+  it('is null where there is no element', () => {
+    expect(drawnRect(null)).toBeNull();
+    expect(drawnRect(undefined)).toBeNull();
+  });
+
+  it('is null for an element not displayed: an empty box', () => {
+    expect(drawnRect(new DOMRect(0, 0, 0, 0))).toBeNull();
+    expect(drawnRect({ left: 10, top: 10, width: 0, height: 320 })).toBeNull();
+    expect(drawnRect({ left: 10, top: 10, width: 42, height: 0 })).toBeNull();
+  });
+
+  it('is null for a box that is not finite', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(drawnRect({ left: bad, top: 0, width: 42, height: 320 }), `${bad}`).toBeNull();
+      expect(drawnRect({ left: 0, top: bad, width: 42, height: 320 }), `${bad}`).toBeNull();
+      expect(drawnRect({ left: 0, top: 0, width: bad, height: 320 }), `${bad}`).toBeNull();
+      expect(drawnRect({ left: 0, top: 0, width: 42, height: bad }), `${bad}`).toBeNull();
+    }
+  });
+});
+
+describe('getGutterAnimationStart (UI-13, slice 3a-2)', () => {
+  // A paper laid out at (100, 40), 400 × 300, and a gutter beside it, as tall
+  const paper = { left: 100, top: 40, width: 400, height: 300 };
+  const final = { left: 58, top: 40, width: 42, height: 300 };
+  /** Where a gutter is drawn at an eased progress, from its start to its layout */
+  const gutterAt = (start: { x: number; y: number; scaleY: number }, box: typeof final, progress: number) => {
+    const rest = 1 - progress;
+    return { left: box.left + start.x * rest, top: box.top + start.y * rest, height: box.height * (1 + (start.scaleY - 1) * rest) };
+  };
+  /** Where the paper's transform, eased to the same progress, draws a height of the paper laid out at `q` */
+  const paperAt = (start: ZoomAnimationStart, q: number, progress: number) => {
+    const rest = 1 - progress;
+    return paper.top + start.y * rest + (1 + (start.scale - 1) * rest) * (q - paper.top);
+  };
+
+  it('starts sideways where the gutter was drawn, keeping its width', () => {
+    const before = { left: 20, top: 10, width: 42, height: 360 };
+    const start = getGutterAnimationStart(before, final, { scale: 1.2, x: -30, y: -30 }, paper.top)!;
+    expect(start.x).toBe(before.left - final.left);
+    expect(gutterAt(start, final, 0).left).toBe(before.left);
+    expect(gutterAnimationKeyframes(start)[0].transform).toMatch(/scale\(1, /);
+  });
+
+  it('keeps the gutter’s top and bottom on the paper’s drawn ones at every progress, zooming in and out', () => {
+    for (const paperStart of [
+      { scale: 1.25, x: -50, y: -45 },
+      { scale: 0.8, x: 40, y: 36 },
+      { scale: 1.5, x: -120, y: 10 },
+    ]) {
+      const start = getGutterAnimationStart({ left: 0, top: 0, width: 42, height: 10 }, final, paperStart, paper.top)!;
+      for (const progress of [0, 0.1, 0.5, 0.9, 1]) {
+        const g = gutterAt(start, final, progress);
+        expect(g.top).toBeCloseTo(paperAt(paperStart, final.top, progress), 9);
+        expect(g.top + g.height).toBeCloseTo(paperAt(paperStart, final.top + final.height, progress), 9);
+      }
+    }
+  });
+
+  it('maps a gutter whose top is not the paper’s by the same transform', () => {
+    const lower = { left: 58, top: 70, width: 42, height: 200 };
+    const paperStart = { scale: 1.4, x: -10, y: -60 };
+    const start = getGutterAnimationStart(lower, lower, paperStart, paper.top)!;
+    for (const progress of [0, 0.3, 0.7]) {
+      const g = gutterAt(start, lower, progress);
+      expect(g.top).toBeCloseTo(paperAt(paperStart, lower.top, progress), 9);
+      expect(g.top + g.height).toBeCloseTo(paperAt(paperStart, lower.top + lower.height, progress), 9);
+    }
+  });
+
+  it('is null where nothing would move, or a value is not finite', () => {
+    expect(getGutterAnimationStart(final, final, { scale: 1, x: 0, y: 0 }, paper.top)).toBeNull();
+    expect(getGutterAnimationStart({ ...final, left: Number.NaN }, final, { scale: 1.2, x: 0, y: 0 }, paper.top)).toBeNull();
+    expect(getGutterAnimationStart(final, final, { scale: Number.POSITIVE_INFINITY, x: 0, y: 0 }, paper.top)).toBeNull();
+    expect(getGutterAnimationStart(final, final, { scale: 0, x: 0, y: 0 }, paper.top)).toBeNull();
+    // Moved sideways only (the scale and the paper's top unchanged): still animated
+    expect(getGutterAnimationStart({ ...final, left: 0 }, final, { scale: 1, x: 0, y: 0 }, paper.top)).toEqual({ x: -58, y: 0, scaleY: 1 });
+  });
+
+  it('eases from a translation and a vertical scale about the gutter’s corner to none', () => {
+    expect(gutterAnimationKeyframes({ x: -12.5, y: 30, scaleY: 1.25 })).toEqual([
+      { transformOrigin: '0 0', transform: 'translate(-12.5px, 30px) scale(1, 1.25)' },
+      { transformOrigin: '0 0', transform: 'none' },
+    ]);
   });
 });

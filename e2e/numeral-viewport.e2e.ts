@@ -2892,15 +2892,13 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
   });
 
   /*
-   * UI-10: zooming out, the paper is drawn larger than its final box for the animation, and would
-   * be cut by the opaque annotation gutters, which take their final place at once. So while it
-   * runs the labels are hidden, and where the zoomed layout does not scroll sideways the gutters'
-   * background is transparent; where it does, the gutters stay opaque, stuck over the scrolling
-   * paper as before and after, so they never vanish and cover its edges again at the end. The
-   * gutters themselves stay visible, keeping their layout. Not asserted: whether the drawn paper
-   * meets the gutters' boxes, which it may.
+   * UI-10, changed deliberately in UI-13 slice 3a-2: while a zoom animation runs the labels are
+   * hidden, and the gutters stay visible, opaque and laid out, whether the zoomed layout fits the
+   * stage or scrolls sideways: they are drawn moving with the paper (their own animation, checked
+   * frame by frame in the next test), so the paper no longer slides under them and no background
+   * has to clear. Their layout (offsets, which ignore transforms) never changes for the zoom.
    */
-  test('clears the annotation gutters’ background while zooming out to a layout that fits, keeps it where it scrolls, and keeps the layout', async ({ page }) => {
+  test('keeps the annotation gutters opaque and laid out while zooming out, with the labels hidden, whether the layout fits or scrolls', async ({ page }) => {
     // The stage leaves 647 px for the numeral here: up to 150% it and its gutters fit (525 + 84
     // px), its group centred; at 200% (700 + 84 px) and above they do not, at any screen size, and
     // the stage scrolls sideways under the sticky gutters
@@ -2931,18 +2929,15 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
         const gutters = [...document.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
         const boxes = [...document.querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')];
         const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        // The gutters, their labels and the paper's untransformed layout (offsets ignore
-        // transforms), and the scroll
+        // The gutters, their labels, the gutters' and the paper's untransformed layout (offsets
+        // ignore transforms, which both are drawn with meanwhile), and the scroll
         const snapshot = () => ({
           visibility: gutters.map((g) => getComputedStyle(g).visibility),
           opacity: gutters.map((g) => getComputedStyle(g).opacity),
           background: gutters.map((g) => getComputedStyle(g).backgroundColor),
           labels: boxes.map((b) => getComputedStyle(b).visibility),
           display: gutters.map((g) => getComputedStyle(g).display),
-          gutters: gutters.map((g) => {
-            const r = g.getBoundingClientRect();
-            return [r.left, r.top, r.width, r.height];
-          }),
+          gutters: gutters.map((g) => [g.offsetLeft, g.offsetTop, g.offsetWidth, g.offsetHeight]),
           paper: [paper.offsetLeft, paper.offsetTop, paper.offsetWidth, paper.offsetHeight],
           scroll: [stage.scrollLeft, stage.scrollTop],
           fits: stage.scrollWidth <= stage.clientWidth,
@@ -2977,28 +2972,228 @@ test.describe('zoom animation (UI-13 slice 6)', () => {
       expect(settled.fits, label).toBe(fitsBefore);
       expect(result.after.fits, label).toBe(fitsAfter);
       // During the animation, marked for the zoomed layout: the labels hidden; the gutters still
-      // visible and laid out, transparent where it fits, opaque where it scrolls sideways
+      // visible, laid out and opaque, whether it fits or scrolls sideways
       expect([result.running, result.zooming], label).toEqual([1, fitsAfter ? 'fit' : '']);
       expect(result.during.labels, label).toEqual(['hidden', 'hidden']);
       expect(result.during.visibility, label).toEqual(['visible', 'visible']);
       expect(result.during.opacity, label).toEqual(['1', '1']);
       expect(result.during.display, label).toEqual(['flex', 'flex']);
-      expect(result.during.background, label).toEqual(
-        fitsAfter ? ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'] : settled.background
-      );
+      expect(result.during.background, label).toEqual(settled.background);
       // Afterwards: as before the zoom
       expect(result.stillZooming, label).toBe(false);
       expect(result.after.labels, label).toEqual(['visible', 'visible']);
       expect(result.after.visibility, label).toEqual(['visible', 'visible']);
       expect(result.after.background, label).toEqual(settled.background);
-      // The change of background and labels moves no layout and no scroll position: the gutters'
-      // boxes (never transformed), the paper's untransformed layout and the scroll are the same
-      // during and after
+      // Hiding and showing the labels moves no layout and no scroll position: the gutters' and the
+      // paper's untransformed layout and the scroll are the same during and after
       expect(result.during.gutters, label).toEqual(result.after.gutters);
       expect(result.during.paper, label).toEqual(result.after.paper);
       expect(result.during.scroll, label).toEqual(result.after.scroll);
       for (const r of result.after.gutters) expect(r[2], label).toBeCloseTo(42, 1);
     }
+  });
+
+  /*
+   * UI-13, slice 3a-2: the annotation gutters are drawn moving with the paper, each from where it
+   * was drawn to its final place sideways, and on the paper's drawn top and bottom. Sampled in the
+   * page: just before the zoom, right after it starts (microtasks only, so no frame has passed and
+   * the animations are at their start), every frame until nothing has animated for 2 frames, and
+   * settled. At 1600 px the stage fits the five-tier numeral and its gutters up to 150%, and
+   * scrolls sideways from 200%.
+   */
+  type GutterAction = { at: number; do: 'zoom in' | 'zoom out' | 'scroll by'; left?: number };
+
+  const sampleGutters = (page: Page, first: 'zoom in' | 'zoom out', later: GutterAction[] = []) =>
+    page.evaluate(
+      async ({ first, later }) => {
+        const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+        const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+        const gutter = (side: string) => document.querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`)!;
+        const box = (el: HTMLElement) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        };
+        const snap = () => ({
+          paper: box(paper),
+          start: box(gutter('start')),
+          end: box(gutter('end')),
+          paperAnimations: paper.getAnimations().length,
+          gutterAnimations: gutter('start').getAnimations().length + gutter('end').getAnimations().length,
+          fits: stage.scrollWidth <= stage.clientWidth,
+        });
+        const button = (name: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+        const act = async (what: 'zoom in' | 'zoom out') => {
+          button(what === 'zoom in' ? 'Zoom in' : 'Zoom out').click();
+          // React renders the click in a microtask, and starts the animations in its layout effect
+          await Promise.resolve();
+          await Promise.resolve();
+        };
+        const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const before = snap();
+        await act(first);
+        const atStart = snap();
+        const frames: (ReturnType<typeof snap> & { frame: number })[] = [];
+        const replaced: { before: ReturnType<typeof snap>; after: ReturnType<typeof snap> }[] = [];
+        let still = 0;
+        for (let frame = 0; frame < 120 && still < 2; frame++) {
+          await nextFrame();
+          const now = snap();
+          frames.push({ ...now, frame });
+          const pending = later.some((s) => s.at > frame);
+          still = !pending && now.paperAnimations + now.gutterAnimations === 0 ? still + 1 : 0;
+          for (const step of later.filter((s) => s.at === frame)) {
+            if (step.do === 'scroll by') stage.scrollBy({ left: step.left ?? 0, behavior: 'instant' });
+            else {
+              const was = snap();
+              await act(step.do);
+              replaced.push({ before: was, after: snap() });
+            }
+          }
+        }
+        return { before, atStart, frames, replaced, settled: snap() };
+      },
+      { first, later }
+    );
+
+  type GutterSampled = Awaited<ReturnType<typeof sampleGutters>>;
+
+  /** Checks a sampled zoom from `zFrom` to `zTo` (zoom levels as fractions) */
+  const checkGutterZoom = (sampled: GutterSampled, zFrom: number, zTo: number, label: string) => {
+    const { before, atStart, frames, settled } = sampled;
+    // The paper's padding scales for the animation only: the most a gap may open at the start
+    const allowance = 12 * Math.abs(zFrom / zTo - 1) + 0.5;
+    // Started together: the paper's animation and both gutters'
+    expect([atStart.paperAnimations, atStart.gutterAnimations], `${label}: started`).toEqual([1, 2]);
+    // No jump at the start: each gutter is drawn where it was
+    for (const side of ['start', 'end'] as const) {
+      expect(Math.abs(atStart[side].left - before[side].left), `${label}: ${side} at the start`).toBeLessThanOrEqual(0.5);
+    }
+    const checked = [atStart, ...frames];
+    for (const [i, f] of checked.entries()) {
+      const at = `${label}, sample ${i}`;
+      for (const side of ['start', 'end'] as const) {
+        // On the paper's drawn top and bottom, in every frame
+        expect(Math.abs(f[side].top - f.paper.top), `${at}: ${side} top`).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(f[side].bottom - f.paper.bottom), `${at}: ${side} bottom`).toBeLessThanOrEqual(0.5);
+        expect(f[side].right - f[side].left, `${at}: ${side} width`).toBeCloseTo(42, 0);
+      }
+      // No gap between the paper and either gutter, beyond the paper's scaled padding
+      expect(f.paper.left - f.start.right, `${at}: start-side gap`).toBeLessThanOrEqual(allowance);
+      expect(f.end.left - f.paper.right, `${at}: end-side gap`).toBeLessThanOrEqual(allowance);
+    }
+    // Something was drawn part-way, and it ended: nothing left running, nothing transformed
+    expect(frames.some((f) => f.gutterAnimations === 2), `${label}: animated frames`).toBe(true);
+    expect([settled.paperAnimations, settled.gutterAnimations], `${label}: ended`).toEqual([0, 0]);
+    // No jump at the end: the last animated frame is already close to the final place
+    const lastAnimated = [...frames].reverse().find((f) => f.gutterAnimations > 0)!;
+    for (const side of ['start', 'end'] as const) {
+      const travel = Math.abs(settled[side].left - before[side].left);
+      expect(Math.abs(settled[side].left - lastAnimated[side].left), `${label}: ${side} at the end`).toBeLessThanOrEqual(
+        Math.max(1, 0.2 * travel)
+      );
+    }
+  };
+
+  async function showAnnotatedAt1600(page: Page) {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.reload();
+    const viewer = await showNumber(page, '3047620');
+    await viewer.scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    return viewer;
+  }
+
+  test('moves the annotation gutters with the paper, frame by frame, fitting, overflowing and across the boundary, both ways', async ({ page }) => {
+    await showAnnotatedAt1600(page);
+    for (const [step, zFrom, zTo, fitsBefore, fitsAfter] of [
+      ['zoom in', 1, 1.25, true, true],
+      ['zoom in', 1.25, 1.5, true, true],
+      ['zoom in', 1.5, 2, true, false],
+      ['zoom in', 2, 3, false, false],
+      ['zoom out', 3, 2, false, false],
+      ['zoom out', 2, 1.5, false, true],
+      ['zoom out', 1.5, 1.25, true, true],
+      ['zoom out', 1.25, 1, true, true],
+    ] as const) {
+      const label = `${zFrom * 100}% → ${zTo * 100}%`;
+      const sampled = await sampleGutters(page, step);
+      expect([sampled.before.fits, sampled.settled.fits], label).toEqual([fitsBefore, fitsAfter]);
+      checkGutterZoom(sampled, zFrom, zTo, label);
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${zTo * 100}%`));
+    }
+  });
+
+  test('moves them from the scroll limits, where a gutter starts or stops sticking', async ({ page }) => {
+    const viewer = await showAnnotatedAt1600(page);
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^200%/);
+    await settleZoom(page);
+    for (const [limit, label] of [['start', 'from the scroll start'], ['end', 'from the scroll end']] as const) {
+      await viewer.evaluate(
+        (el, limit) => el.scrollTo({ left: limit === 'start' ? 0 : el.scrollWidth, behavior: 'instant' }),
+        limit
+      );
+      await viewer.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const zoomedIn = await sampleGutters(page, 'zoom in');
+      // At a limit one gutter is in the flow, 16 px in from the stage's content edge
+      const stage = await viewer.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left + el.clientLeft, right: r.left + el.clientLeft + el.clientWidth };
+      });
+      if (limit === 'start') expect(zoomedIn.before.start.left - stage.left, label).toBeCloseTo(16, 0);
+      else expect(stage.right - zoomedIn.before.end.right, label).toBeCloseTo(16, 0);
+      checkGutterZoom(zoomedIn, 2, 3, `200% → 300% ${label}`);
+      checkGutterZoom(await sampleGutters(page, 'zoom out'), 3, 2, `300% → 200% after the ${label}`);
+    }
+  });
+
+  test('replaces a zoom across the boundary from where the gutters are drawn, and ends them with a scroll or at once with reduced motion', async ({ page }) => {
+    const viewer = await showAnnotatedAt1600(page);
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^150%/);
+    await settleZoom(page);
+
+    // 150% → 200% (fit → overflow), replaced at frame 3 by 200% → 300%
+    const replaced = await sampleGutters(page, 'zoom in', [{ at: 3, do: 'zoom in' }]);
+    expect(replaced.replaced).toHaveLength(1);
+    const [swap] = replaced.replaced;
+    expect([swap.after.paperAnimations, swap.after.gutterAnimations]).toEqual([1, 2]);
+    for (const side of ['start', 'end'] as const) {
+      expect(Math.abs(swap.after[side].left - swap.before[side].left), `${side} at the replacement`).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(swap.after[side].top - swap.before[side].top), `${side} top at the replacement`).toBeLessThanOrEqual(
+        12 * Math.abs(2 / 3 - 1) + 0.5
+      );
+    }
+    expect([replaced.settled.paperAnimations, replaced.settled.gutterAnimations]).toEqual([0, 0]);
+    await expect(zoomLevel(page)).toHaveText(/^300%/);
+
+    // 300% → 200%, ended by the user's scrolling at frame 2: everything at its final layout at once
+    const scrolled = await sampleGutters(page, 'zoom out', [{ at: 2, do: 'scroll by', left: 40 }]);
+    const afterScroll = scrolled.frames.find((f) => f.frame === 3)!;
+    expect([afterScroll.paperAnimations, afterScroll.gutterAnimations]).toEqual([0, 0]);
+    expect(afterScroll.start).toEqual(scrolled.settled.start);
+    expect(afterScroll.end).toEqual(scrolled.settled.end);
+
+    // The labels' box keeps its fade back in with motion, a transition of its opacity only
+    const boxTransitions = () =>
+      page.locator('[data-numeral-annotations-box]').evaluateAll((boxes) => boxes.map((b) => getComputedStyle(b).transitionProperty));
+    expect(await boxTransitions()).toEqual(['opacity', 'opacity']);
+
+    // Reduced motion: no animation at all, across the boundary too, gutters at once on the paper
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    // Nor any transition of the labels' box, whose height the global reduced-motion rule would
+    // otherwise transition for 0.01 ms, while the zoom's anchored scroll is measured (src/index.css)
+    expect(await boxTransitions()).toEqual(['none', 'none']);
+    for (const step of ['zoom out', 'zoom in'] as const) {
+      const instant = await sampleGutters(page, step);
+      expect([instant.atStart.paperAnimations, instant.atStart.gutterAnimations], step).toEqual([0, 0]);
+      expect(instant.atStart.start, step).toEqual(instant.settled.start);
+      expect(instant.atStart.end, step).toEqual(instant.settled.end);
+      expect(Math.abs(instant.atStart.start.top - instant.atStart.paper.top), step).toBeLessThanOrEqual(0.5);
+    }
+    await expect(viewer).not.toHaveAttribute('data-zooming');
   });
 
   /*
