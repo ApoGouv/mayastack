@@ -305,6 +305,37 @@ interface NumeralViewportProps {
 }
 
 /**
+ * While there are annotation gutters, the stage content's and the paper's horizontal padding is
+ * removed under exactly the condition that shows the gutters (`@min-[31rem]:flex`, see
+ * AnnotationGutter): the same container query against the scroller. The gutters then take the
+ * place of that padding, and sit flush with the stage's edges at the scroll limits; the paper's
+ * edge is the numeral image's, so its zoom animation scales no horizontal padding, and no gap
+ * opens between it and the gutters (UI-13). Where the stage is narrower and the gutters are
+ * hidden, the padding stays, as without annotations. Vertical padding is never removed. Written
+ * out in full for Tailwind to find it.
+ */
+const GUTTERS_SHOWN_NO_INLINE_PADDING = '@min-[31rem]:px-0';
+
+/**
+ * The paper's side bleed (UI-13): while there are annotation gutters, the paper is marked
+ * `data-numeral-gutter-bleed` and given the gutters' colour in this custom property. A rule in
+ * `src/index.css`, under the same container query that shows the gutters (31rem), then paints two
+ * horizontal offset shadows of that colour, 8 px beside each of the paper's sides, before its ring
+ * and `shadow-sm`, which stay. They lie under the opaque gutters, so they are never seen, but they
+ * move and scale with the paper: where the paper's edge and a gutter's meet on a fraction of a
+ * device pixel (while a zoom animates, or at rest at fractional display scaling), each is
+ * antialiased on its own, and without the bleed the paper's dark ring and the stage's backdrop
+ * showed through the seam. A box-shadow changes no layout box and no scrollable area.
+ */
+const GUTTER_BLEED_PROPERTY = '--numeral-gutter-bleed';
+
+/**
+ * The annotation gutters' colour, as AnnotationGutter paints it: the paper's as shown
+ * (`annotationBackground`, inline) where given, or `canvas` (its `bg-canvas` class) where not
+ */
+const gutterColour = (annotationBackground: string | undefined) => annotationBackground || 'var(--color-canvas)';
+
+/**
  * One annotation gutter (see `annotationsStart`), a flex item beside the paper in its group,
  * laid out like the paper so that its box mirrors the numeral image's:
  * - It stretches to the group's height, which is the paper's, and its inner box has the same
@@ -316,11 +347,12 @@ interface NumeralViewportProps {
  *   i.e. `numeralHeight × zoom`.
  * - It sticks to the scroller's edge (`left-0` / `right-0`), so nothing of the scrolling paper
  *   shows beside it. It is a flex item of the group, whose box spans the whole scrollable width
- *   whenever the stage scrolls sideways, so it can follow the scroller across all of it. At the
- *   scroll start or end it is in the flow at least as far in as the edge (the stage content's
- *   padding), so it does not jump when it begins or stops sticking. `overflow-clip` on the
- *   stage content, unlike `overflow: hidden`, does not make it the scroller sticky positioning
- *   looks to, so the scroller itself is.
+ *   whenever the stage scrolls sideways, so it can follow the scroller across all of it. While
+ *   the gutters are shown, the stage content and the paper have no horizontal padding (UI-13,
+ *   see GUTTERS_SHOWN_NO_INLINE_PADDING): at the scroll start or end the gutter is in the flow at
+ *   the stage's edge, so it stays flush with it at every scroll position, and the paper's edge
+ *   is the numeral image's. `overflow-clip` on the stage content, unlike `overflow: hidden`, does
+ *   not make it the scroller sticky positioning looks to, so the scroller itself is.
  * - Opaque, above the numeral (`z-10`), so the numeral scrolls under it: the paper's colour as
  *   shown (`annotationBackground`, inline, the same in both gutters), or `canvas` without it. It
  *   is drawn moving with the paper while a zoom animates (below), so it never changes colour or
@@ -328,10 +360,11 @@ interface NumeralViewportProps {
  *   (`display: none`) below a stage width of 31rem (496 px at the default font size), as a
  *   container query against the scroller, which is a container while there are gutters. The
  *   width queried is the scroller's content box: its client width, without its 1 px borders and
- *   any classic scrollbar. At 100% zoom the numeral needs 350 (its width) + 24 (the paper's
- *   padding) + 84 (two gutters) + 32 (the stage content's padding) = 490 px in both modes, so
- *   from 31rem the whole numeral and its gutters fit. The class must be written out in full for
- *   Tailwind to find it.
+ *   any classic scrollbar. At 100% zoom the numeral and its gutters need 350 (its width) + 96
+ *   (two 48 px gutters, `w-12`) = 446 px in both modes, with no horizontal padding beside them,
+ *   so from 31rem they fit. The 31rem threshold itself is kept as it was (UI-13): it was set when
+ *   they needed 490 px, and is not recalculated from the 446 px here. The class must be written
+ *   out in full for Tailwind to find it.
  * - While a zoom animation runs (the stage has `data-zooming`), the gutters take their final size
  *   and place at once in the layout, but are drawn moving with the paper (UI-13, slice 3a-2): a
  *   transform animated with the paper's, from where each was drawn before the zoom to its final
@@ -362,7 +395,7 @@ const AnnotationGutter: React.FC<{
   <div
     aria-hidden="true"
     data-numeral-annotations={side}
-    className={`hidden @min-[31rem]:flex sticky z-10 w-10.5 shrink-0 bg-canvas pointer-events-none select-none ${
+    className={`hidden @min-[31rem]:flex sticky z-10 w-12 shrink-0 bg-canvas pointer-events-none select-none ${
       side === 'start' ? 'left-0' : 'right-0'
     }`}
     style={background ? { backgroundColor: background } : undefined}
@@ -401,7 +434,8 @@ const AnnotationGutter: React.FC<{
  * contains the stage content (`data-numeral-stage-content`: at least as large as the stage, as
  * large as the paper and its padding, and clipping only what is drawn outside it), which
  * contains the paper (`data-numeral-paper`: the visible surface, with the numeral's background,
- * a fixed 12 px padding that does not zoom, and a screen-only edge and shadow), which contains
+ * a fixed 12 px padding that does not zoom, none at its sides while annotation gutters are shown
+ * (GUTTERS_SHOWN_NO_INLINE_PADDING), and a screen-only edge and shadow), which contains
  * the numeral image (`data-numeral-image`: the zoom wrapper, with `role="img"` and the label):
  * the underlay, the numeral's SVG and the overlay, in that order. The SVG (`svg.mep-svg`) is
  * deliberately given no attribute here: its markup is what is exported. The paper is centred both
@@ -564,7 +598,8 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
 
   // Showing or hiding the annotation gutters changes the width of the group around the paper, and
   // so where the paper is in the scrollable area (from the stage's padding where it overflows,
-  // centred where it fits), but not the scroll position: the same position would then show another
+  // centred where it fits), and with them the stage content's and the paper's horizontal padding
+  // (GUTTERS_SHOWN_NO_INLINE_PADDING), but not the scroll position: the same position would then show another
   // part of the numeral. Show the intended view again, before paint. A transition only: not the
   // first render, whose gutters, if any, are laid out with the numeral's start, nor an ordinary
   // rerender. After the effects above, so that a new numeral's start is the intended view here.
@@ -700,11 +735,18 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
             paper. It is not a scroll container; it clips only what is drawn outside it. The
             group (`data-numeral-group`, always present, a real flex box) is its only item: it is
             centred both ways by automatic margins while it fits, and starts at the stage
-            content's padding where it does not, so it is never out of reach. It is as wide as
+            content's padding where it does not, so it is never out of reach. While annotation
+            gutters are shown, that padding is vertical only (GUTTERS_SHOWN_NO_INLINE_PADDING),
+            so the gutters reach the stage's edges. It is as wide as
             the paper and its annotation gutters, if any, which are its first and last items:
             as conditional siblings they leave the paper's place in the group, and so its
             identity, unchanged. */}
-        <div data-numeral-stage-content className="flex w-max min-w-full min-h-full p-4 overflow-clip">
+        <div
+          data-numeral-stage-content
+          className={`flex w-max min-w-full min-h-full p-4${
+            hasAnnotations ? ` ${GUTTERS_SHOWN_NO_INLINE_PADDING}` : ''
+          } overflow-clip`}
+        >
           <div data-numeral-group className="m-auto flex shrink-0">
             {gutterHeight !== null && (
               <AnnotationGutter
@@ -721,12 +763,22 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
                 `src/index.css` makes the SVG's own background rectangle transparent inside it), and
                 its edge and shadow, the page's, never part of the SVG. Its group centres it
                 (both ways while it fits, from the stage content's padding where it does not); it is
-                never shrunk. Its padding does not zoom, and is never exported */}
+                never shrunk. Its padding does not zoom, and is never exported. While annotation
+                gutters are shown, it has no horizontal padding (GUTTERS_SHOWN_NO_INLINE_PADDING):
+                the gutters beside it take that place, and it bleeds the gutters' colour under them
+                (GUTTER_BLEED_PROPERTY), so no seam shows where its edge meets theirs */}
             <div
               ref={paperRef}
               data-numeral-paper
-              className="m-auto shrink-0 p-3 shadow-sm ring-1 ring-line"
-              style={{ backgroundColor: background }}
+              data-numeral-gutter-bleed={hasAnnotations ? '' : undefined}
+              className={`m-auto shrink-0 p-3${
+                hasAnnotations ? ` ${GUTTERS_SHOWN_NO_INLINE_PADDING}` : ''
+              } shadow-sm ring-1 ring-line`}
+              style={
+                hasAnnotations
+                  ? ({ backgroundColor: background, [GUTTER_BLEED_PROPERTY]: gutterColour(annotationBackground) } as React.CSSProperties)
+                  : { backgroundColor: background }
+              }
             >
               {/* The numeral image, the zoom wrapper: one image for assistive technology instead of
                   thousands of glyph shapes, and the positioning context of the underlay and

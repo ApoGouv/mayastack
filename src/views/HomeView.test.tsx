@@ -1548,7 +1548,7 @@ describe('HomeView annotation gutters on the paper’s colour (UI-13, slice 3b)'
     for (const gutter of v.gutters()) {
       expect(gutter.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
       // Its place, layer and fallback colour as they were
-      expect(gutter.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'z-10', 'w-10.5', 'bg-canvas']));
+      expect(gutter.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'z-10', 'w-12', 'bg-canvas']));
     }
   });
 

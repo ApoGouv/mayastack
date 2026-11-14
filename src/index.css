@@ -218,6 +218,28 @@
   fill: transparent;
 }
 
+/* The paper's side bleed under the annotation gutters (UI-13, see GUTTER_BLEED_PROPERTY in
+   NumeralViewport): two horizontal offset shadows in the gutters' colour, 8 px beside each side,
+   hidden under the opaque gutters but painted with the paper, so its antialiased edge never lets
+   the paper's ring or the stage's backdrop show between it and a gutter. Only while the gutters
+   are shown: the paper is marked while there are annotations, and the scroller, then a container,
+   is at least 31rem wide, the gutters' own `@min-[31rem]:flex`. The shadows come first, over the
+   ring's sides (also under the gutters); then Tailwind's own composition of `ring-1` and
+   `shadow-sm` (v4: its registered variables, `0 0 #0000` when unset), in its own order, so both
+   are kept. Offset only, no spread: the ring's top and bottom are not covered. */
+@container (width >= 31rem) {
+  [data-numeral-paper][data-numeral-gutter-bleed] {
+    box-shadow:
+      -8px 0 0 0 var(--numeral-gutter-bleed),
+      8px 0 0 0 var(--numeral-gutter-bleed),
+      var(--tw-inset-shadow, 0 0 #0000),
+      var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000),
+      var(--tw-shadow, 0 0 #0000);
+  }
+}
+
 /* The viewer's numeral image (the zoom wrapper, UI-13): with reduced motion, the global rule
    above gives every element a 0.01 ms transition, and, `transition-property` being `all` by
    default, the wrapper's zoomed width would become one, kept at the previous level's until the
@@ -225,10 +247,17 @@
    the final width: the wrapper has no transitions. Only this element; the rule is unchanged.
    Likewise the annotation gutters' label box (UI-13): its inline height, the numeral's at this
    zoom, sets the gutters' and so the centred group's height, which the anchored scroll position
-   is measured against. Its fade back in is `motion-safe:` only, so nothing else is lost. */
+   is measured against. Its fade back in is `motion-safe:` only, so nothing else is lost.
+   Likewise the stage content and the paper (UI-13): their horizontal padding is removed while
+   annotation gutters are shown, so showing or hiding them, or the stage crossing the gutters'
+   width threshold, changes it, and the scroll position kept is measured in the same frame. They
+   have no transitions of their own; the zoom animation is a Web Animation, which this rule does
+   not affect. */
 @media (prefers-reduced-motion: reduce) {
   [data-numeral-image],
-  [data-numeral-annotations-box] {
+  [data-numeral-annotations-box],
+  [data-numeral-stage-content],
+  [data-numeral-paper] {
     transition-property: none;
   }
 }
