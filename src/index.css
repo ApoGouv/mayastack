@@ -3,6 +3,20 @@
 /** @see https://tailwindcss.com/docs/dark-mode#toggling-dark-mode-manually */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* The sticky desktop viewer (UI-13, slice 5e): from lg (64rem, the two-column workspace) and only
+   on screens at least 40rem tall. The viewer card then sticks 1rem below the top of the screen,
+   and all of it must fit: from lg its stage is at least 28rem (448 px, `numeral-stage-height`),
+   and the card's header, glyph key and padding add a little over 100 px, so the card is under
+   600 px below 45rem of screen height, and grows with the stage, 100svh − 17.5rem, above it,
+   always ending above the screen's bottom. Below either threshold the card stays in the flow.
+   The threshold follows the provisional stage height: re-evaluate it if the stage sizing
+   changes (slice 5d, deferred). */
+@custom-variant sticky-viewer {
+  @media (width >= 64rem) and (height >= 40rem) {
+    @slot;
+  }
+}
+
 /* Design system: see docs/DESIGN_SYSTEM.md for the token roles, contrast checks and rules. */
 
 /* Heading font: the unmodified official Playfair Display variable font, self-hosted with its

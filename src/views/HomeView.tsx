@@ -163,7 +163,9 @@ export default function HomeView() {
           left (5 of 12 columns) and the numeral viewer on the right (7 of 12), spanning all three
           rows. Below lg, one column in source order: input, viewer, base-20, settings. The last row
           takes the viewer's extra height (1fr), so the left cards stay directly under each other.
-          Every card stays in place without a valid input; only their results need one. */}
+          Every card stays in place without a valid input; only their results need one. Items
+          start at the top of their areas (`items-start`), so the viewer card is only as tall as
+          its content, and its area leaves it room to stick (UI-13, slice 5e). */}
       <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12 lg:grid-rows-[auto_auto_1fr]">
         {/* Input Section: Render Mode + Input */}
         <section className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none space-y-4 lg:col-span-5">
@@ -182,8 +184,16 @@ export default function HomeView() {
           )}
         </section>
 
-        {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result */}
-        <div data-viewer-card className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
+        {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result.
+            On desktop screens tall enough for all of it (the `sticky-viewer` variant, src/index.css),
+            it sticks 1rem below the top of the screen while the page scrolls (UI-13, slice 5e):
+            within its grid area, which spans all three rows, so it moves only while the left
+            column is taller than the card, and stops at the column's end, above the footer. The
+            stage keeps its own scrolling */}
+        <div
+          data-viewer-card
+          className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3 sticky-viewer:sticky sticky-viewer:top-4"
+        >
           {/* The heading leads the viewer's header row, beside its zoom controls; without a result,
               it stands alone */}
           {hasValidinput && mayanData ? (

@@ -1298,3 +1298,288 @@ test.describe('base-20 expansion: formula, Copy Formula and analytical breakdown
     await expect(toggle(page)).toHaveCount(0);
   });
 });
+
+/*
+ * UI-13, slice 5e: the sticky desktop viewer. From lg (64rem) on screens at least 40rem tall (the
+ * `sticky-viewer` variant in src/index.css), the viewer card sticks 1rem (16 px) below the top of
+ * the screen while the page scrolls, within its grid area, which spans the workspace's three rows:
+ * it moves only while the left column is taller than the card, and stops at the column's end,
+ * above the footer. Below either threshold it stays in the flow. The stage keeps its own scrolling.
+ * The page can end before the card reaches that stop: where the space below the stuck card is
+ * larger than what follows the grid (the main element's bottom spacing and the footer), the card
+ * is still stuck at the page's maximum scroll. The tests derive which case applies from measurements.
+ */
+test.describe('sticky desktop viewer (UI-13 slice 5e)', () => {
+  const STICKY_TOP = 16;
+  const MAX_NUMBER = '9'.repeat(128);
+
+  /** Opens the app at a screen size and enters a number; optionally with the annotations on */
+  async function showAt(page: Page, size: { width: number; height: number }, digits: string, annotations = false) {
+    await page.setViewportSize(size);
+    if (annotations) await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.goto('./');
+    await page.getByLabel('Decimal integer').fill(digits);
+    await expect(page.getByRole('group', { name: 'Numeral viewer' })).toBeVisible();
+  }
+
+  /** Opens the 99-tier analytical breakdown, which makes the left column far taller than the viewer card */
+  async function openBreakdown(page: Page) {
+    await page.getByRole('button', { name: 'Analytical breakdown' }).click();
+    await expect(page.getByRole('region', { name: 'Analytical breakdown' }).locator('tbody tr')).toHaveCount(99);
+  }
+
+  const scrollPageTo = (page: Page, top: number) =>
+    page.evaluate((top) => window.scrollTo({ top, left: 0, behavior: 'instant' }), top);
+
+  /**
+   * The viewer card's computed position and boxes, in page coordinates (from the top of the
+   * document), with its grid area's bottom (the workspace grid's, as the card spans all its rows),
+   * the input card's top, the footer's top, and the page's scroll position and horizontal overflow
+   */
+  const viewerLayout = (page: Page) =>
+    page.evaluate(() => {
+      const card = document.querySelector<HTMLElement>('[data-viewer-card]')!;
+      const r = card.getBoundingClientRect();
+      const grid = card.parentElement!.getBoundingClientRect();
+      const input = document.querySelector('section')!.getBoundingClientRect();
+      const footer = document.querySelector('footer')!.getBoundingClientRect();
+      const y = window.scrollY;
+      return {
+        position: getComputedStyle(card).position,
+        scrollY: y,
+        maxScroll: document.documentElement.scrollHeight - window.innerHeight,
+        viewportHeight: window.innerHeight,
+        top: r.top,
+        pageTop: r.top + y,
+        height: r.height,
+        gridTop: grid.top + y,
+        gridBottom: grid.bottom + y,
+        inputPageTop: input.top + y,
+        footerTop: footer.top + y,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+
+  // Qualifying desktop sizes, the narrow desktop (1024 px: the indicator wraps under the heading),
+  // and exactly the 40rem threshold
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1024, height: 768 },
+    { width: 1024, height: 640 },
+  ]) {
+    test(`sticks 16 px below the top, stays within its grid area above the footer, stopping at its end where the page scrolls that far, and returns without a jump at ${size.width} × ${size.height}`, async ({ page }) => {
+      await showAt(page, size, MAX_NUMBER);
+      await openBreakdown(page);
+      await scrollPageTo(page, 0);
+      const start = await viewerLayout(page);
+      expect(start.position).toBe('sticky');
+      // The whole card fits below the 16 px offset: the threshold's premise, measured
+      expect(STICKY_TOP + start.height, 'card height').toBeLessThanOrEqual(start.viewportHeight);
+      test.info().annotations.push({ type: 'card', description: `${size.width} × ${size.height}: card ${start.height.toFixed(1)} px, top ${start.pageTop.toFixed(1)} px` });
+      // Room to travel: the left column, with the breakdown open, is taller than the card
+      const travel = start.gridBottom - start.pageTop - start.height;
+      expect(travel, 'sticky travel').toBeGreaterThan(200);
+      // The page scroll at which the card would reach the end of its grid area, and whether the
+      // page scrolls that far: measured, not assumed
+      const stopAt = start.gridBottom - start.height - STICKY_TOP;
+      const reachable = stopAt <= start.maxScroll;
+      test.info().annotations.push({
+        type: 'stop',
+        description: `${size.width} × ${size.height}: stop ${reachable ? 'reachable' : 'not reachable'}, stopAt ${stopAt.toFixed(1)} px, maxScroll ${start.maxScroll.toFixed(1)} px, grid bottom ${start.gridBottom.toFixed(1)} px`,
+      });
+
+      let stuck = false;
+      let stopped = false;
+      for (let y = 0; ; y = Math.min(y + 97, start.maxScroll)) {
+        await scrollPageTo(page, y);
+        const now = await viewerLayout(page);
+        const at = `page scrolled to ${now.scrollY}`;
+        // Where native sticky positioning puts it: in the flow, then 16 px below the top, then at
+        // the bottom of its grid area
+        const expected = Math.min(Math.max(start.pageTop, now.scrollY + STICKY_TOP), start.gridBottom - start.height);
+        expect(Math.abs(now.pageTop - expected), at).toBeLessThanOrEqual(1);
+        expect(now.height, at).toBeCloseTo(start.height, 1);
+        expect(now.pageTop + now.height, `${at}: within its grid area`).toBeLessThanOrEqual(start.gridBottom + 0.5);
+        expect(now.pageTop + now.height, `${at}: above the footer`).toBeLessThanOrEqual(now.footerTop);
+        expect(now.overflow, at).toBe(0);
+        if (Math.abs(now.top - STICKY_TOP) <= 1) stuck = true;
+        if (Math.abs(now.pageTop + now.height - start.gridBottom) <= 1) stopped = true;
+        if (y >= start.maxScroll) break;
+      }
+      expect(stuck, 'reached the 16 px offset').toBe(true);
+      // The loop ended at the page's maximum scroll: the card there
+      const last = await viewerLayout(page);
+      expect(last.scrollY, 'scrolled to the end of the page').toBe(start.maxScroll);
+      if (reachable) {
+        // The page scrolls past the stop: the card stops at the end of its grid area
+        expect(stopped, 'stopped at the end of its grid area').toBe(true);
+        expect(Math.abs(last.pageTop + last.height - start.gridBottom), 'at the maximum scroll: at the end of its grid area').toBeLessThanOrEqual(1);
+      } else {
+        // The page ends first: at its maximum scroll the card is still stuck 16 px below the top,
+        // its bottom at or above the end of its grid area
+        expect(Math.abs(last.top - STICKY_TOP), 'at the maximum scroll: still at the 16 px offset').toBeLessThanOrEqual(1);
+        expect(last.pageTop + last.height, 'at the maximum scroll: within its grid area').toBeLessThanOrEqual(start.gridBottom + 0.5);
+      }
+
+      // Back to the top: where it was, level with the input card
+      await scrollPageTo(page, 0);
+      const back = await viewerLayout(page);
+      expect(Math.abs(back.pageTop - start.pageTop)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(back.pageTop - back.inputPageTop)).toBeLessThanOrEqual(0.5);
+    });
+  }
+
+  test('does not move when the page cannot scroll the viewer to its sticky offset', async ({ page }) => {
+    // A one-digit number, the breakdown closed, on a tall screen: the page is barely taller than
+    // the screen, so its maximum scroll is less than the scroll at which the card would reach the
+    // 16 px offset. (This says nothing about the left column's height relative to the card's.)
+    await showAt(page, { width: 1920, height: 1200 }, '7');
+    const start = await viewerLayout(page);
+    expect(start.position).toBe('sticky');
+    const stickAt = start.pageTop - STICKY_TOP;
+    test.info().annotations.push({ type: 'scroll', description: `1920 × 1200: sticks at ${stickAt.toFixed(1)} px, maxScroll ${start.maxScroll.toFixed(1)} px` });
+    expect(start.maxScroll, 'the page cannot scroll to the sticky offset').toBeLessThan(stickAt);
+    for (const y of [Math.round(start.maxScroll / 2), start.maxScroll]) {
+      await scrollPageTo(page, y);
+      const now = await viewerLayout(page);
+      const at = `page scrolled to ${now.scrollY}`;
+      expect(now.position, at).toBe('sticky');
+      expect(Math.abs(now.pageTop - start.pageTop), at).toBeLessThanOrEqual(0.5);
+      expect(now.overflow, at).toBe(0);
+    }
+  });
+
+  test('stays in the flow below 64rem wide or 40rem tall, and is sticky from exactly both', async ({ page }) => {
+    for (const [size, position] of [
+      [{ width: 375, height: 812 }, 'static'],
+      [{ width: 768, height: 1024 }, 'static'],
+      [{ width: 1023, height: 900 }, 'static'],
+      [{ width: 1024, height: 639 }, 'static'],
+      [{ width: 1280, height: 639 }, 'static'],
+      [{ width: 1024, height: 640 }, 'sticky'],
+      [{ width: 1280, height: 640 }, 'sticky'],
+    ] as const) {
+      await showAt(page, size, MAX_NUMBER);
+      const label = `${size.width} × ${size.height}`;
+      expect((await viewerLayout(page)).position, label).toBe(position);
+      if (position === 'static') {
+        // In the flow: scrolling the page moves it with the page, whatever the left column
+        await openBreakdown(page);
+        await scrollPageTo(page, 0);
+        const start = await viewerLayout(page);
+        await scrollPageTo(page, 300);
+        const now = await viewerLayout(page);
+        expect(Math.abs(now.pageTop - start.pageTop), label).toBeLessThanOrEqual(0.5);
+        expect(now.overflow, label).toBe(0);
+      }
+    }
+  });
+
+  test('keeps the viewer working while stuck: zoom and its anchor, the stage’s own scrolling and the annotation gutters', async ({ page }) => {
+    await showAt(page, { width: 1280, height: 800 }, MAX_NUMBER, true);
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    await openBreakdown(page);
+    await scrollPageTo(page, 0);
+    const start = await viewerLayout(page);
+    await scrollPageTo(page, start.pageTop - STICKY_TOP + 200);
+    const stuck = await viewerLayout(page);
+    expect(Math.abs(stuck.top - STICKY_TOP)).toBeLessThanOrEqual(1);
+    const viewer = page.getByRole('group', { name: 'Numeral viewer' });
+    const zoomLevel = page.getByRole('group', { name: 'Zoom controls' }).locator('[aria-live]');
+
+    /** Waits for the zoom animation, if any, to end */
+    const settle = () =>
+      page.evaluate(async () => {
+        const paper = document.querySelector('[data-numeral-paper]')!;
+        for (let r = paper.getAnimations(); r.length > 0; r = paper.getAnimations()) {
+          await Promise.all(r.map((a) => a.finished.catch(() => undefined)));
+        }
+      });
+    /** The numeral point at the stage's centre, as fractions of the image, and the image's size */
+    const centre = () =>
+      viewer.evaluate((stage) => {
+        const image = stage.querySelector('[data-numeral-image]')!.getBoundingClientRect();
+        const r = stage.getBoundingClientRect();
+        const x = r.left + stage.clientLeft + stage.clientWidth / 2;
+        const y = r.top + stage.clientTop + stage.clientHeight / 2;
+        return { fx: (x - image.left) / image.width, fy: (y - image.top) / image.height, width: image.width, height: image.height };
+      });
+
+    // The stage's own scrolling: a wheel over it scrolls the stage, not the page
+    const stageBox = (await viewer.boundingBox())!;
+    await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height / 2);
+    const before = await viewer.evaluate((el) => el.scrollTop);
+    await page.mouse.wheel(0, 400);
+    await expect.poll(() => viewer.evaluate((el) => el.scrollTop)).toBeGreaterThan(before);
+    expect((await viewerLayout(page)).scrollY).toBe(stuck.scrollY);
+
+    // Zooming with the real controls keeps the point at the stage's centre, and the card stuck,
+    // its height unchanged
+    for (const [button, level] of [['Zoom in', '125%'], ['Zoom in', '150%'], ['Zoom in', '200%'], ['Zoom out', '150%']] as const) {
+      const point = await centre();
+      await page.getByRole('button', { name: button, exact: true }).click();
+      await expect(zoomLevel).toHaveText(new RegExp(`^${level}`));
+      await settle();
+      const now = await centre();
+      const offBy = Math.max(Math.abs(now.fx - point.fx) * now.width, Math.abs(now.fy - point.fy) * now.height);
+      expect(offBy, `${button} to ${level}: anchor`).toBeLessThanOrEqual(1);
+      const layout = await viewerLayout(page);
+      expect(Math.abs(layout.top - STICKY_TOP), level).toBeLessThanOrEqual(1);
+      expect(layout.height, level).toBeCloseTo(start.height, 1);
+    }
+
+    // At 200%, where the stage scrolls sideways, the gutters stay flush with its edges, stuck or not
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    await expect(zoomLevel).toHaveText(/^200%/);
+    await settle();
+    await viewer.evaluate((el) => el.scrollTo({ left: (el.scrollWidth - el.clientWidth) / 2, behavior: 'instant' }));
+    const gutters = await viewer.evaluate((stage) => {
+      const r = stage.getBoundingClientRect();
+      const edge = (side: string) => stage.querySelector(`[data-numeral-annotations="${side}"]`)!.getBoundingClientRect();
+      return {
+        fits: stage.scrollWidth <= stage.clientWidth,
+        start: edge('start').left - (r.left + stage.clientLeft),
+        end: r.left + stage.clientLeft + stage.clientWidth - edge('end').right,
+      };
+    });
+    expect(gutters.fits).toBe(false);
+    expect(Math.abs(gutters.start)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(gutters.end)).toBeLessThanOrEqual(0.5);
+  });
+
+  test('keeps the zoom controls and the glyphs clear of the floating Export trigger while stuck', async ({ page }) => {
+    const exportButton = page.getByRole('button', { name: '📦 Export' });
+    const intersects = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+      a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    for (const size of [
+      { width: 1280, height: 720 },
+      { width: 1280, height: 800 },
+      { width: 1440, height: 900 },
+      { width: 1024, height: 768 },
+    ]) {
+      await showAt(page, size, MAX_NUMBER);
+      await openBreakdown(page);
+      await scrollPageTo(page, 0);
+      const start = await viewerLayout(page);
+      await scrollPageTo(page, start.pageTop - STICKY_TOP + 200);
+      const stuck = await viewerLayout(page);
+      const label = `${size.width} × ${size.height}`;
+      expect(Math.abs(stuck.top - STICKY_TOP), label).toBeLessThanOrEqual(1);
+      const trigger = (await exportButton.boundingBox())!;
+      // Measured, not assumed: the space between the stuck card's bottom and the trigger's top
+      test.info().annotations.push({ type: 'export', description: `${label}: card bottom ${(stuck.top + stuck.height).toFixed(1)}, trigger top ${trigger.y.toFixed(1)}` });
+      for (const name of ['Zoom out', 'Zoom in', 'Reset']) {
+        const button = (await page.getByRole('button', { name, exact: true }).boundingBox())!;
+        expect(intersects(button, trigger), `${label}: ${name}`).toBe(false);
+      }
+      // The glyphs, with the stage scrolled to its bottom-right corner, where the trigger is nearest
+      const viewer = page.getByRole('group', { name: 'Numeral viewer' });
+      await viewer.evaluate((el) => el.scrollTo(el.scrollWidth, el.scrollHeight));
+      const glyphs = await viewer.locator('g[data-digit-index]').evaluateAll((gs) =>
+        gs.map((g) => g.getBoundingClientRect()).filter((r) => r.height > 0).map(({ x, y, width, height }) => ({ x, y, width, height })));
+      expect(glyphs.filter((g) => intersects(g, trigger)), label).toEqual([]);
+    }
+  });
+});

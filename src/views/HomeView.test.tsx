@@ -173,6 +173,24 @@ describe('HomeView numeral viewport', () => {
     expect([...svg.attributes].map((a) => a.name).filter((name) => name.startsWith('data-') || name.startsWith('aria-') || name === 'role')).toEqual([]);
   });
 
+  it('makes the viewer card, and only it, sticky on tall desktop screens, with or without a result (UI-13, slice 5e)', () => {
+    const { enter } = renderHomeView();
+    const viewerCard = () => document.querySelector<HTMLElement>('[data-viewer-card]')!;
+    const stickyClasses = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter((c) => /(^|:)(sticky|top-\d)/.test(c));
+    for (const input of ['', '8000', '9'.repeat(128)]) {
+      enter(input);
+      // Only under the `sticky-viewer` variant (src/index.css: lg and at least 40rem tall), never
+      // unconditionally or from a width alone
+      expect(stickyClasses(viewerCard()), input).toEqual(['sticky-viewer:sticky', 'sticky-viewer:top-4']);
+      // Its sibling cards in the workspace grid, and nothing else on the page, take no sticky class
+      const others = [...document.querySelectorAll('[class]')].filter((el) => el !== viewerCard());
+      expect(others.filter((el) => stickyClasses(el).some((c) => c.startsWith('sticky-viewer:'))), input).toEqual([]);
+      const siblings = [...viewerCard().parentElement!.children].filter((el) => el !== viewerCard());
+      expect(siblings.length, input).toBe(3);
+      for (const sibling of siblings) expect(stickyClasses(sibling), input).toEqual([]);
+    }
+  });
+
   it('describes the largest number by its length, inside the bounded viewer', () => {
     const { enter } = renderHomeView();
     enter('9'.repeat(128));
