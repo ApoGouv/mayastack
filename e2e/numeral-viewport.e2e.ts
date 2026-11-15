@@ -30,12 +30,27 @@ function visibleStacks(page: Page) {
 const zoomLevel = (page: Page) => page.getByRole('group', { name: 'Zoom controls' }).locator('[aria-live]');
 
 /**
- * The viewer card: the nearest card around its heading, which is in the viewer's header row with
- * a result (UI-13, slice 5a) and directly in the card without one
+ * Waits until the viewer's zoom animation (UI-13, slice 6), if any, has ended: the paper's own
+ * Web Animations finished or cancelled, so its transform no longer applies and boxes on screen
+ * are the final layout's. Waits on the animations themselves, never for a fixed time.
+ */
+async function settleZoom(page: Page) {
+  await page.evaluate(async () => {
+    const paper = document.querySelector('[data-numeral-paper]');
+    if (!paper) return;
+    // Any animation started meanwhile is waited for too
+    for (let running = paper.getAnimations(); running.length > 0; running = paper.getAnimations()) {
+      await Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
+    }
+  });
+}
+
+/**
+ * The viewer card, marked `data-viewer-card` (UI-13), around its heading, which is in the
+ * viewer's header row with a result (UI-13, slice 5a) and directly in the card without one
  */
 const viewerCard = (page: Page) =>
-  page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true })
-    .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+  page.locator('[data-viewer-card]').filter({ has: page.getByRole('heading', { name: 'Mayan Numeral Stack', exact: true }) });
 
 /** Exports through the real Export menu and returns the downloaded file */
 async function exportFile(page: Page, format: 'svg' | 'png') {
@@ -105,9 +120,9 @@ test.describe('bounded numeral viewport', () => {
     const svg = viewer.locator('svg');
     const width = (await svg.boundingBox())!.width;
 
-    await page.getByRole('button', { name: 'Zoom in' }).click();
-    await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 125%, 150%, 200%
     await expect(zoomLevel(page)).toHaveText('200%');
+    await settleZoom(page); // the final layout, not the zoom animation's (UI-13, slice 6)
     expect((await svg.boundingBox())!.width / width).toBeCloseTo(2, 2);
 
     await page.getByRole('button', { name: 'Zoom out' }).click();
@@ -123,7 +138,7 @@ test.describe('bounded numeral viewport', () => {
   test('marks the zoom limits', async ({ page }) => {
     await showNumber(page, FIFTY_DIGITS);
     const zoomIn = page.getByRole('button', { name: 'Zoom in' });
-    for (let i = 0; i < 4; i++) await zoomIn.click(); // 150%, 200%, 300%, 400%
+    for (let i = 0; i < 5; i++) await zoomIn.click(); // 125%, 150%, 200%, 300%, 400%
     await expect(zoomLevel(page)).toHaveText('400% (maximum zoom)');
     await expect(zoomIn).toHaveAttribute('aria-disabled', 'true');
     // Still focused, and Playwright (like assistive technology) treats it as disabled
@@ -135,7 +150,7 @@ test.describe('bounded numeral viewport', () => {
     const viewer = await showNumber(page, FIFTY_DIGITS);
     await viewer.focus();
     await page.keyboard.press('+');
-    await expect(zoomLevel(page)).toHaveText('150%');
+    await expect(zoomLevel(page)).toHaveText('125%');
     await page.keyboard.press('-');
     await page.keyboard.press('-');
     await expect(zoomLevel(page)).toHaveText('75%');
@@ -149,10 +164,10 @@ test.describe('bounded numeral viewport', () => {
     await input.press('End');
     await input.press('0');
     await expect(input).toHaveValue(`${FIFTY_DIGITS}0`);
-    await expect(zoomLevel(page)).toHaveText('150%');
+    await expect(zoomLevel(page)).toHaveText('125%');
   });
 
-  test('keeps the stage’s structure: the scroller, a padded, clipping stage box, then the slab', async ({ page }) => {
+  test('keeps the stage’s structure: the scroller, a padded, clipping stage content, the paper, then the numeral image', async ({ page }) => {
     // Changed deliberately in UI-13: the stage spans the viewer card's content (card less its
     // 16 px padding at each side) instead of 384 px, and its height is the screen's
     for (const [width, height] of [[375, 900], [768, 900], [1280, 900]] as const) {
@@ -164,23 +179,46 @@ test.describe('bounded numeral viewport', () => {
       expect(box.height, `${width}px`).toBe(width >= 1024 ? 620 : 480);
       expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px`).toBeLessThanOrEqual(width);
       const structure = await viewer.evaluate((scroller) => {
-        const stage = scroller.firstElementChild as HTMLElement;
-        const style = getComputedStyle(stage);
-        const s = stage.getBoundingClientRect();
+        const content = scroller.firstElementChild as HTMLElement;
+        const style = getComputedStyle(content);
+        const s = content.getBoundingClientRect();
+        // Changed deliberately in UI-13: the paper, with its 12 px padding, between the stage content and the numeral image
+        // Changed deliberately in UI-13: the numeral group, the stage content's only item, holds the paper
+        const group = content.querySelector('[data-numeral-group]') as HTMLElement;
+        const paper = group.querySelector('[data-numeral-paper]') as HTMLElement;
+        const image = paper.querySelector('[data-numeral-image]') as HTMLElement;
+        const svg = image.querySelector('svg.mep-svg')!;
         return {
+          // Changed deliberately in UI-13: the scroller is the stage, and its child the stage content
+          stage: scroller.hasAttribute('data-numeral-stage'),
+          viewerCard: scroller.closest('[data-viewer-card]') !== null,
           children: scroller.children.length,
-          stage: stage.hasAttribute('data-numeral-stage'),
+          content: content.hasAttribute('data-numeral-stage-content'),
           overflow: style.overflow,
           padding: style.padding,
-          // The stage box spans the whole scrollable area, and at least the scroller
+          // The stage content spans the whole scrollable area, and at least the scroller
           covers: s.width === scroller.scrollWidth && s.height === scroller.scrollHeight
             && s.width >= scroller.clientWidth && s.height >= scroller.clientHeight,
-          wrapper: stage.firstElementChild!.getAttribute('role'),
+          contentChildren: content.children.length,
+          group: group.parentElement === content,
+          groupChildren: group.children.length,
+          paperInGroup: paper.parentElement === group,
+          imageInPaper: image.parentElement === paper,
+          paper: paper.hasAttribute('data-numeral-paper'),
+          paperPadding: getComputedStyle(paper).padding,
+          paperChildren: paper.children.length,
+          image: image.hasAttribute('data-numeral-image'),
+          wrapper: image.getAttribute('role'),
+          // The SVG artwork, the source of the exports, has none of the viewer's DOM names
+          svgParent: svg.parentElement === image,
+          svgMarked: [...svg.attributes].some((a) => a.name.startsWith('data-') || a.name.startsWith('aria-') || a.name === 'role'),
           scrollers: [...scroller.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)).length,
         };
       });
       expect(structure, `${width}px`).toEqual({
-        children: 1, stage: true, overflow: 'clip', padding: '16px', covers: true, wrapper: 'img', scrollers: 0,
+        stage: true, viewerCard: true, children: 1, content: true, overflow: 'clip', padding: '16px', covers: true,
+        contentChildren: 1, group: true, groupChildren: 1, paperInGroup: true, imageInPaper: true, paper: true, paperPadding: '12px', paperChildren: 1, image: true, wrapper: 'img',
+        svgParent: true, svgMarked: false, scrollers: 0,
       });
     }
   });
@@ -202,14 +240,17 @@ test.describe('bounded numeral viewport', () => {
 });
 
 test.describe('numeral scale and position', () => {
-  const LEVELS = ['25%', '50%', '75%', '100%', '150%', '200%', '300%', '400%'];
+  const LEVELS = ['25%', '50%', '75%', '100%', '125%', '150%', '200%', '300%', '400%'];
 
-  /** Steps the zoom with its buttons to the given level, e.g. "50%" */
+  /**
+   * Steps the zoom with its buttons to the given level, e.g. "50%", and waits for its animation
+   * to end, so what follows sees the final layout
+   */
   async function zoomTo(page: Page, level: string) {
     for (;;) {
       const current = (await zoomLevel(page).textContent())!.split(' ')[0];
       const steps = LEVELS.indexOf(level) - LEVELS.indexOf(current);
-      if (steps === 0) return;
+      if (steps === 0) return settleZoom(page);
       await page.getByRole('button', { name: steps > 0 ? 'Zoom in' : 'Zoom out' }).click();
       await expect(zoomLevel(page)).not.toHaveText(new RegExp(`^${current}`));
     }
@@ -218,10 +259,12 @@ test.describe('numeral scale and position', () => {
   /**
    * The numeral as laid out in the viewer, measured from the boxes on screen: its SVG's size in CSS
    * px and logical size in SVG units, its left edge in the scrollable area, the scroll position,
-   * the point at the viewer's centre in SVG units, and any page-level horizontal overflow
+   * the point at the viewer's centre in SVG units, and any page-level horizontal overflow. Once
+   * any zoom animation has ended: the final layout
    */
-  const measure = (page: Page) =>
-    page.evaluate(() => {
+  const measure = async (page: Page) => {
+    await settleZoom(page);
+    return page.evaluate(() => {
       const viewer = document.querySelector<HTMLElement>('[role="group"][aria-label="Numeral viewer"]')!;
       const svg = viewer.querySelector('svg')!;
       // The scroller's padding box, inside its border: the scrollable area's origin, at scroll 0
@@ -251,6 +294,7 @@ test.describe('numeral scale and position', () => {
         pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       };
     });
+  };
 
   /** Expects a measured centre point to be within `px` CSS pixels of a point, at its zoom level */
   const expectCentre = (m: Awaited<ReturnType<typeof measure>>, point: { x: number; y: number }, px: number, what: string) => {
@@ -299,6 +343,49 @@ test.describe('numeral scale and position', () => {
         expect(m.height, `${width}px at ${level}`).toBe(m.units.height * zoom);
         expect(m.pageOverflow, `${width}px at ${level}`).toBe(0);
       }
+      await page.getByRole('button', { name: 'Reset' }).click();
+    }
+  });
+
+  test('passes through 125% between 100% and 150% both ways, keeping the point at the centre, in Number and Date modes', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    for (const mode of ['number', 'date'] as const) {
+      let viewer;
+      if (mode === 'number') viewer = await showNumber(page, FIFTY_DIGITS);
+      else {
+        await showDate(page);
+        viewer = page.getByRole('group', { name: 'Numeral viewer' });
+      }
+      await page.getByRole('button', { name: 'Reset' }).click();
+      // The middle of the numeral in view, taken as the user's: the scroll event has arrived
+      await viewer.evaluate((el) => el.scrollTo({ top: (el.scrollHeight - el.clientHeight) / 2, behavior: 'instant' }));
+      await viewer.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const start = await measure(page);
+      expect(start.width, mode).toBe(350);
+      for (const level of ['125%', '150%', '125%', '100%']) {
+        await zoomTo(page, level);
+        const m = await measure(page);
+        expect(m.width, `${mode} at ${level}`).toBe(350 * (parseFloat(level) / 100));
+        expectCentre(m, start.centre, 1, `${mode} at ${level}`);
+        expect(m.pageOverflow, `${mode} at ${level}`).toBe(0);
+      }
+    }
+  });
+
+  test('fits the stage at 125% where the stage is wide enough, and scrolls sideways where it is not', async ({ page }) => {
+    // The stage leaves 479 px (1024 px wide) to 647 px (1600 px) for the 437.5 px numeral, and 253 px on a phone
+    for (const [width, height, fits] of [
+      [375, 667, false], [375, 812, false], [768, 1024, true], [1024, 768, true],
+      [1280, 720, true], [1280, 800, true], [1440, 900, true], [1600, 900, true],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await showNumber(page, FIFTY_DIGITS);
+      await zoomTo(page, '125%');
+      const m = await measure(page);
+      expect(m.width, `${width} × ${height}`).toBe(437.5);
+      if (fits) expect(m.sideways, `${width} × ${height}`).toBe(0);
+      else expect(m.sideways, `${width} × ${height}`).toBeGreaterThan(0);
+      expect(m.pageOverflow, `${width} × ${height}`).toBe(0);
       await page.getByRole('button', { name: 'Reset' }).click();
     }
   });
@@ -448,7 +535,8 @@ test.describe('numeral scale and position', () => {
       expect(m.scrollHeight, what).toBe(m.clientHeight);
       expect(Math.abs(m.top - m.bottom), what).toBeLessThanOrEqual(1);
       // Horizontally: centred where it fits; on a phone, wider than the stage, it starts at its centre
-      if (m.width + 32 <= m.clientWidth) expect(Math.abs(m.left - m.right), what).toBeLessThanOrEqual(1);
+      // (the slab fits with the stage's 16 px and the paper's 12 px of padding at each side)
+      if (m.width + 56 <= m.clientWidth) expect(Math.abs(m.left - m.right), what).toBeLessThanOrEqual(1);
       else expect(Math.abs(m.centre.x - 175), what).toBeLessThanOrEqual(0.5);
     }
 
@@ -491,14 +579,15 @@ test.describe('numeral scale and position', () => {
         const what = `${screen.width} × ${screen.height} at ${level}`;
         await viewer.evaluate((el) => el.scrollTo(el.scrollLeft, 0));
         const top = await measure(page);
-        // The top tier, the highest place value, after the stage's 16 px padding
-        expect(top.top, what).toBe(16);
+        // The top tier, the highest place value, after the stage's 16 px padding and the
+        // paper's 12 px (changed deliberately in UI-13; the paper's does not zoom)
+        expect(top.top, what).toBe(28);
         expect(await wholeInView(0), what).toBe(true);
         await viewer.evaluate((el) => el.scrollTo(el.scrollLeft, el.scrollHeight));
         const bottom = await measure(page);
-        // The bottom tier, the units, with the stage's padding below it: the scrollable area is the slab and its padding
-        expect(bottom.scrollHeight - bottom.top - bottom.height, what).toBe(16);
-        expect(bottom.scrollHeight, what).toBe(bottom.height + 32);
+        // The bottom tier, the units, with both paddings below it: the scrollable area is the numeral and the paddings
+        expect(bottom.scrollHeight - bottom.top - bottom.height, what).toBe(28);
+        expect(bottom.scrollHeight, what).toBe(bottom.height + 56);
         expect(await wholeInView(98), what).toBe(true);
       }
       await page.getByRole('button', { name: 'Reset' }).click();
@@ -589,7 +678,7 @@ test.describe('numeral scale and position', () => {
     [1280, MAX_DIGITS, ['25%', '400%', '100%']],
   ] as const) {
     test(`returns to the same position after switching between zoom levels repeatedly, without drift, at ${width}px`, async ({ page }) => {
-      // Five cycles of up to 14 zoom steps each, every step waited for
+      // Five cycles of up to 16 zoom steps each, every step waited for
       test.slow();
       await page.setViewportSize({ width, height: 900 });
       const viewer = await showNumber(page, digits);
@@ -612,18 +701,23 @@ test.describe('numeral scale and position', () => {
     const heading = (page: Page) => page.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack', exact: true });
     const controls = (page: Page) => page.getByRole('group', { name: 'Zoom controls' });
 
+    /** The heading's cluster in the header row: the heading and the tier-direction indicator (slice 5b) */
+    const cluster = (page: Page) => heading(page).locator('xpath=..');
+    const indicator = (page: Page) => heading(page).locator('xpath=following-sibling::*[1]');
+
     /** The header row's parts and the stage, as laid out on screen, and the card's content box */
     const headerLayout = async (page: Page) => {
       const card = (await viewerCard(page).boundingBox())!;
-      const [h, c, stage] = await Promise.all([heading(page), controls(page), page.getByRole('group', { name: 'Numeral viewer' })]
-        .map(async (locator) => (await locator.boundingBox())!));
+      const [h, c, stage, cl, ind] = await Promise.all(
+        [heading(page), controls(page), page.getByRole('group', { name: 'Numeral viewer' }), cluster(page), indicator(page)]
+          .map(async (locator) => (await locator.boundingBox())!));
       const parts = await controls(page).evaluate((group) =>
         [...group.children].map((el) => {
           const b = el.getBoundingClientRect();
           return { tag: el.tagName.toLowerCase(), name: el.getAttribute('aria-label') ?? el.textContent!.trim(), x: b.x, y: b.y, width: b.width, height: b.height };
         }));
       const content = { left: card.x + 16, right: card.x + card.width - 16, width: card.width - 32 };
-      return { card, content, heading: h, controls: c, stage, parts };
+      return { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind };
     };
 
     // The six approved sizes, the lg boundary and a tablet width
@@ -635,29 +729,54 @@ test.describe('numeral scale and position', () => {
         const what = `${size.width} × ${size.height}`;
         await page.setViewportSize({ width: size.width, height: size.height });
         await showNumber(page, FIFTY_DIGITS);
-        const { card, content, heading: h, controls: c, stage, parts } = await headerLayout(page);
+        const { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind } = await headerLayout(page);
 
         // At the top of the card, within its content box, with no page-level overflow
         expect(Math.min(h.y, c.y) - card.y, what).toBeCloseTo(16, 0);
-        for (const box of [h, c]) {
+        for (const box of [h, c, ind]) {
           expect(box.x, what).toBeGreaterThanOrEqual(content.left - 0.5);
           expect(box.x + box.width, what).toBeLessThanOrEqual(content.right + 0.5);
         }
         expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), what).toBe(0);
 
         // Beside the heading where both fit with the 12 px gap, otherwise on their own line under it,
-        // never overlapping it
+        // never overlapping it. Changed deliberately in UI-13 (slice 5b): the heading is in a
+        // cluster with the tier-direction indicator, which wraps first, so the controls still go
+        // under it only where the heading alone leaves no room; beside it, they are centred on
+        // the cluster, which has two lines where the indicator is under the heading
         const wraps = h.width + 12 + c.width > content.width;
         if (wraps) {
-          expect(c.y, what).toBeGreaterThanOrEqual(h.y + h.height);
+          expect(c.y, what).toBeGreaterThanOrEqual(cl.y + cl.height);
           expect(c.x, what).toBeCloseTo(content.left, 0);
         } else {
-          expect(Math.abs(c.y + c.height / 2 - (h.y + h.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(Math.abs(c.y + c.height / 2 - (cl.y + cl.height / 2)), what).toBeLessThanOrEqual(1);
           expect(c.x + c.width, what).toBeCloseTo(content.right, 0);
+          expect(cl.x + cl.width, what).toBeLessThanOrEqual(c.x - 12 + 0.5);
         }
-        // Phones wrap; tablets and desktops stay on one row (the measured threshold, 472 px, is
-        // recorded in the roadmap rather than asserted here, so font metrics can move it)
+        // Phones wrap; tablets and desktops stay on one row (the measured threshold, 462 px since
+        // the compact toolbar, is recorded in the roadmap rather than asserted here, so font
+        // metrics can move it)
         expect(wraps, what).toBe(size.width <= 375);
+
+        // The indicator: beside the heading, centred on it, where it fits in the room the controls
+        // leave; otherwise under the heading, at its start
+        const room = wraps ? content.width : content.width - 12 - c.width;
+        const indicatorWraps = h.width + 12 + ind.width > room;
+        if (indicatorWraps) {
+          expect(ind.y, what).toBeGreaterThanOrEqual(h.y + h.height);
+          expect(ind.x, what).toBeCloseTo(h.x, 0);
+        } else {
+          expect(Math.abs(ind.y + ind.height / 2 - (h.y + h.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(ind.x, what).toBeCloseTo(h.x + h.width + 12, 0);
+        }
+        // Robust at these sizes: one row on desktops; both wrapped on phones (the measured
+        // thresholds are in the roadmap)
+        if (size.width >= 1280) expect(indicatorWraps, what).toBe(false);
+        if (size.width <= 375) expect(indicatorWraps, what).toBe(true);
+        // The heading on one line, the indicator never wrapping within itself or clipped
+        expect(h.height, what).toBeLessThanOrEqual(28.5);
+        expect(ind.height, what).toBeLessThanOrEqual(20.5);
+        expect(await indicator(page).evaluate((el) => el.scrollWidth - el.clientWidth), what).toBeLessThanOrEqual(0);
 
         // The controls in one row, in order, with buttons of at least 24 × 24 px
         expect(parts.map((p) => p.name), what).toEqual(['Zoom out', '100%', 'Zoom in', '', 'Reset']);
@@ -669,12 +788,33 @@ test.describe('numeral scale and position', () => {
         }
 
         // The stage 12 px under the header row; its height is unchanged (17.5rem offset kept)
-        expect(stage.y - Math.max(h.y + h.height, c.y + c.height), what).toBeCloseTo(12, 0);
+        expect(stage.y - Math.max(cl.y + cl.height, c.y + c.height), what).toBeCloseTo(12, 0);
         // 1024 × 768: 100svh − 17.5rem; 768 × 1024: the 30rem maximum below lg
         const expected = 'stage' in size ? size.stage : size.width >= 1024 ? size.height - 280 : 480;
         expect(stage.height, what).toBeCloseTo(expected, 0);
         if (size.width >= 1024) expect(card.y + card.height, what).toBeLessThanOrEqual(size.height);
       }
+    });
+
+    test('shows the tier-direction indicator for the tallest group, within the card, without overflow (slice 5b)', async ({ page }) => {
+      for (const width of [1280, 1024, 375, 320]) {
+        await page.setViewportSize({ width, height: 800 });
+        for (const [digits, shown] of [['7', '1 tier · 20⁰'], [MAX_DIGITS, 'Top: 20⁹⁸ ↓ Bottom: 20⁰']]) {
+          await showNumber(page, digits);
+          await expect(indicator(page).locator('[aria-hidden="true"]'), `${width}px`).toHaveText(shown);
+          const { content, indicator: ind } = await headerLayout(page);
+          expect(ind.x, `${width}px`).toBeGreaterThanOrEqual(content.left - 0.5);
+          expect(ind.x + ind.width, `${width}px`).toBeLessThanOrEqual(content.right + 0.5);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${width}px`).toBe(0);
+        }
+      }
+      // Date mode: the year's three tiers, not the day's one
+      await showDate(page);
+      await expect(indicator(page).locator('[aria-hidden="true"]')).toHaveText('Top: 20² ↓ Bottom: 20⁰');
+      await expect(indicator(page)).toHaveText(/Top tier 20 to the power of 2, down to the bottom tier, 20 to the power of 0$/);
+      // The heading's accessible name is unchanged, and the indicator is not part of the numeral
+      await expect(heading(page)).toHaveAccessibleName('Mayan Numeral Stack');
+      expect(await page.locator('svg.mep-svg').evaluate((svg) => svg.textContent)).not.toMatch(/Top|tier/);
     });
 
     test('keeps Zoom in, Reset and the percentage in place at every zoom level', async ({ page }) => {
@@ -703,7 +843,7 @@ test.describe('numeral scale and position', () => {
       await page.keyboard.press('Tab');
       await expect(viewer).toBeFocused();
       await page.keyboard.press('+');
-      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomLevel(page)).toHaveText('125%');
       await page.keyboard.press('0');
       await expect(zoomLevel(page)).toHaveText('100%');
       // The percentage and the separator are never focused
@@ -730,6 +870,136 @@ test.describe('numeral scale and position', () => {
       }
       // Back at the starting size, exactly where it was
       expect(Math.abs((await measure(page)).scrollTop - start.scrollTop)).toBeLessThanOrEqual(1);
+    });
+  });
+
+  test.describe('glyph key (UI-13 slice 5c)', () => {
+    const key = (page: Page) => page.getByRole('list', { name: 'Glyph key' });
+    // The theme's muted text colour, the labels'; and its accent text colour, the glyphs'
+    const FG_MUTED = { light: 'rgb(79, 71, 56)', dark: 'rgb(194, 182, 157)' } as const;
+    const ACCENT_FG = { light: 'rgb(115, 92, 0)', dark: 'rgb(229, 193, 88)' } as const;
+
+    /** The key, its entries' glyphs and labels, and the stage and card around it, as laid out */
+    const keyLayout = (page: Page) =>
+      key(page).evaluate((list) => {
+        const box = (el: Element) => {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        };
+        const stage = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
+        const card = stage.closest('[data-viewer-card]')!;
+        return {
+          list: box(list),
+          stage: box(stage),
+          card: box(card),
+          entries: [...list.children].map((item) => {
+            const svg = item.querySelector('svg')!;
+            const glyph = (svg.firstElementChild as SVGGraphicsElement).getBBox();
+            const { x, y, width, height } = svg.viewBox.baseVal;
+            return {
+              item: box(item),
+              svg: box(svg),
+              label: box(item.querySelector('span')!),
+              text: item.textContent!,
+              viewBox: { x, y, width, height },
+              glyph: { x: glyph.x, y: glyph.y, width: glyph.width, height: glyph.height },
+              color: getComputedStyle(svg).color,
+              overflow: getComputedStyle(svg).overflow,
+              labelColor: getComputedStyle(item).color,
+              clipped: item.scrollWidth - item.clientWidth,
+            };
+          }),
+          pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      });
+
+    test('shows the actual glyphs at 0.6 of their size beside their labels, in one row under the stage, in both themes', async ({ page }) => {
+      // Seven screen sizes in each theme
+      test.slow();
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate((theme) => localStorage.setItem('mayastack:theme', theme), theme);
+        for (const screen of [...SCREENS, { width: 1024, height: 768, stage: 488 }]) {
+          const what = `${theme}, ${screen.width} × ${screen.height}`;
+          await page.setViewportSize(screen);
+          await page.goto('./');
+          await showNumber(page, FIFTY_DIGITS);
+          const { list, stage, card, entries, pageOverflow } = await keyLayout(page);
+
+          expect(entries.map((e) => e.text), what).toEqual(['Shell = 0', 'Dot = 1', 'Bar = 5']);
+          // 12 px under the stage, the last thing in the card, across its content box
+          expect(list.y - (stage.y + stage.height), what).toBeCloseTo(12, 0);
+          expect(card.y + card.height - (list.y + list.height), what).toBeCloseTo(16, 0);
+          expect(list.x, what).toBeCloseTo(card.x + 16, 0);
+          expect(list.width, what).toBeCloseTo(card.width - 32, 0);
+          // The stage's height is unchanged (slice 5d refines it); from lg, the card still fits the screen
+          expect(stage.height, what).toBeCloseTo(screen.stage, 0);
+          if (screen.width >= 1024) expect(card.y + card.height, what).toBeLessThanOrEqual(screen.height);
+          expect(pageOverflow, what).toBe(0);
+
+          // One row at every approved size, starting at the content edge, in line with the
+          // heading and the stage: it fits 256 px, the narrowest content box
+          const first = entries[0].item;
+          for (const e of entries) expect(e.item.y, what).toBeCloseTo(first.y, 0);
+          expect(first.x, what).toBeCloseTo(list.x, 1);
+          expect(first.x, what).toBeCloseTo(stage.x, 1);
+
+          for (const e of entries) {
+            const which = `${what}: ${e.text}`;
+            // The glyph fills its viewBox exactly, drawn at scale 1: the shell's outline with its
+            // stroke's outer half; the dot's circle; the bar's line, whose 6-unit stroke its box omits
+            if (e.text === 'Shell = 0') {
+              expect(e.viewBox.x, which).toBeCloseTo(e.glyph.x - 0.75, 3);
+              expect(e.viewBox.y, which).toBeCloseTo(e.glyph.y - 0.75, 3);
+              expect(e.viewBox.width, which).toBeCloseTo(e.glyph.width + 1.5, 3);
+              expect(e.viewBox.height, which).toBeCloseTo(e.glyph.height + 1.5, 3);
+            } else if (e.text === 'Dot = 1') {
+              expect(e.viewBox, which).toEqual(e.glyph);
+            } else {
+              expect([e.viewBox.x, e.viewBox.width, e.viewBox.height], which).toEqual([e.glyph.x, e.glyph.width, 6]);
+              expect(e.glyph.y, which).toBe(3);
+            }
+            // At 0.6 of the viewer's size at 100%, keeping the glyph's proportions
+            expect(e.svg.width, which).toBeCloseTo(e.viewBox.width * 0.6, 1);
+            expect(e.svg.height, which).toBeCloseTo(e.viewBox.height * 0.6, 1);
+            // Before its label, centred on it, nothing clipped; the glyph in the accent text
+            // colour, not clipped to its flush viewBox, and the label in the muted text colour
+            expect(Math.abs(e.svg.y + e.svg.height / 2 - (e.label.y + e.label.height / 2)), which).toBeLessThanOrEqual(0.5);
+            expect(e.svg.x + e.svg.width, which).toBeLessThanOrEqual(e.label.x);
+            expect(e.clipped, which).toBe(0);
+            expect(e.color, which).toBe(ACCENT_FG[theme]);
+            expect(e.overflow, which).toBe('visible');
+            expect(e.labelColor, which).toBe(FG_MUTED[theme]);
+          }
+        }
+      }
+    });
+
+    test('wraps whole entries, each glyph staying beside its label, where the key is narrow', async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 568 });
+      await showNumber(page, '26');
+      // Narrower than any screen makes it, to see how it wraps
+      await key(page).evaluate((list) => { list.style.width = '120px'; });
+      const { list, entries } = await keyLayout(page);
+
+      expect(new Set(entries.map((e) => Math.round(e.item.y))).size).toBeGreaterThan(1);
+      for (const e of entries) {
+        expect(Math.abs(e.svg.y + e.svg.height / 2 - (e.label.y + e.label.height / 2)), e.text).toBeLessThanOrEqual(0.5);
+        expect(e.svg.x + e.svg.width, e.text).toBeLessThanOrEqual(e.label.x);
+        expect(e.item.x, e.text).toBeGreaterThanOrEqual(list.x - 0.5);
+        expect(e.item.x + e.item.width, e.text).toBeLessThanOrEqual(list.x + list.width + 0.5);
+        expect(e.clipped, e.text).toBe(0);
+      }
+    });
+
+    test('is in Date mode too, outside the numeral’s SVG, and not shown without a result', async ({ page }) => {
+      await showDate(page);
+      await expect(key(page).getByRole('listitem')).toHaveText(['Shell = 0', 'Dot = 1', 'Bar = 5']);
+      expect(await key(page).evaluate((list) => list.closest('svg, [role="group"][aria-label="Numeral viewer"]'))).toBeNull();
+      expect(await page.locator('svg.mep-svg').evaluate((svg) => svg.textContent)).not.toMatch(/Shell|Dot|Bar/);
+
+      await page.getByRole('radio', { name: 'Number' }).check();
+      await page.getByLabel('Decimal integer').fill('');
+      await expect(key(page)).toHaveCount(0);
     });
   });
 
@@ -899,6 +1169,22 @@ test.describe('export with the viewport', () => {
     const svg = after.data.toString('utf-8');
     expect(svg).toContain('width="350" height="7920" viewBox="0 0 350 7920"');
     expect(svg.match(/data-digit-index=/g)).toHaveLength(99);
+  });
+
+  // UI-13, slice 5c: the glyph key, on screen beside the numeral, is never exported
+  test('exports only the numeral’s own glyphs, at its own size, with the glyph key on screen', async ({ page }) => {
+    // 26 = 1 × 20¹ + 6 × 20⁰: two dots and a bar; the key draws one more dot, outside the SVG
+    await showNumber(page, '26');
+    const key = page.getByRole('list', { name: 'Glyph key' });
+    await expect(key).toBeVisible();
+    expect(await page.locator('svg.mep-svg circle').count()).toBe(2);
+    expect(await key.locator('circle').count()).toBe(1);
+
+    const svg = (await exportFile(page, 'svg')).data.toString('utf-8');
+    expect(svg).toContain('width="350" height="160" viewBox="0 0 350 160"');
+    expect(svg.match(/<circle/g)).toHaveLength(2);
+    expect(svg).not.toMatch(/Shell|Dot = |Bar = |Glyph key|<ul|<li/);
+    expect(pngSize((await exportFile(page, 'png')).data)).toEqual({ width: 350, height: 160 });
   });
 
   test('exports a complete, identical PNG at the original size before and after zooming', async ({ page }) => {
@@ -1317,7 +1603,8 @@ test.describe('screen-only tier guides', () => {
    * Returns how many hairlines were checked, and what was wrong.
    */
   const checkHairlines = (page: Page, stacksPerGroup: number[]) =>
-    page.evaluate((stacksPerGroup) => {
+    // Once any zoom animation has ended: the final layout
+    settleZoom(page).then(() => page.evaluate((stacksPerGroup) => {
       const TOLERANCE = 1; // px: HTML and SVG positions may round differently
       const viewer = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
       const view = viewer.getBoundingClientRect();
@@ -1341,9 +1628,10 @@ test.describe('screen-only tier guides', () => {
         const above = stacks[first + stacksPerGroup[group] - 1 - k];
         const below = stacks[first + stacksPerGroup[group] - k];
         const expectedY = svg.top + ((maxTiers - k) / maxTiers) * svg.height;
-        // 3% of the group's width in from each side, as the cards
-        const expectedLeft = svg.left + (group * (groupWidth + 25) + 0.03 * groupWidth) * unit;
-        const expectedWidth = 0.94 * groupWidth * unit;
+        // Across the group's whole width, exactly as its cards (changed deliberately in UI-13,
+        // from 3% in at each side): in Number mode, the whole numeral
+        const expectedLeft = svg.left + group * (groupWidth + 25) * unit;
+        const expectedWidth = groupWidth * unit;
 
         const name = `group ${group}, boundary ${k}`;
         if (Math.abs(y - expectedY) > TOLERANCE) problems.push(`${name}: y ${y}, expected ${expectedY}`);
@@ -1357,7 +1645,7 @@ test.describe('screen-only tier guides', () => {
         if (box.height > 1.01) problems.push(`${name}: ${box.height} px thick`);
       }
       return { checked, problems };
-    }, stacksPerGroup);
+    }, stacksPerGroup));
 
   /**
    * Checks every band in view against the rendered numeral: it covers its tier's 80-unit cell,
@@ -1366,7 +1654,7 @@ test.describe('screen-only tier guides', () => {
    * Returns how many bands were checked, and what was wrong.
    */
   const checkBands = (page: Page, stacksPerGroup: number[]) =>
-    page.evaluate((stacksPerGroup) => {
+    settleZoom(page).then(() => page.evaluate((stacksPerGroup) => {
       const TOLERANCE = 1; // px
       const viewer = document.querySelector('[role="group"][aria-label="Numeral viewer"]')!;
       const view = viewer.getBoundingClientRect();
@@ -1393,9 +1681,10 @@ test.describe('screen-only tier guides', () => {
         const first = stacksPerGroup.slice(0, group).reduce((sum, n) => sum + n, 0);
         const stack = stacks[first + stacksPerGroup[group] - 1 - e];
         const cellTop = svg.top + ((maxTiers - 1 - e) / maxTiers) * svg.height;
-        // 3% of the group's width in from each side, as the hairlines
-        const expectedLeft = svg.left + (group * (groupWidth + 25) + 0.03 * groupWidth) * unit;
-        const expectedWidth = 0.94 * groupWidth * unit;
+        // Across the group's whole width (changed deliberately in UI-13, from 3% in at each side,
+        // as the hairlines): in Number mode, the whole numeral
+        const expectedLeft = svg.left + group * (groupWidth + 25) * unit;
+        const expectedWidth = groupWidth * unit;
 
         const name = `group ${group}, exponent ${e}`;
         if (Math.abs(box.top - (cellTop + 2 * unit)) > TOLERANCE) problems.push(`${name}: top ${box.top}, expected ${cellTop + 2 * unit}`);
@@ -1408,7 +1697,7 @@ test.describe('screen-only tier guides', () => {
         }
       }
       return { checked, problems };
-    }, stacksPerGroup);
+    }, stacksPerGroup));
 
   const enterDate25th = async (page: Page) => {
     await page.getByRole('radio', { name: 'Date' }).check();
@@ -1458,7 +1747,7 @@ test.describe('screen-only tier guides', () => {
     const zoomOut = page.getByRole('button', { name: 'Zoom out' });
     const zoomIn = page.getByRole('button', { name: 'Zoom in' });
 
-    for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['400%', zoomIn, 7]] as const) {
+    for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['400%', zoomIn, 8]] as const) {
       for (let i = 0; i < presses; i++) await button.click();
       await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
       const lines = await checkHairlines(page, [5]);
@@ -1481,7 +1770,7 @@ test.describe('screen-only tier guides', () => {
     const viewer = await showNumber(page, MAX_DIGITS);
     await expect(hairlines(page)).toHaveCount(98);
     await expect(bands(page)).toHaveCount(99);
-    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
     await expect(zoomLevel(page)).toHaveText(/^400%/);
 
     for (const fraction of [0, 0.37, 0.5, 1]) {
@@ -1502,7 +1791,7 @@ test.describe('screen-only tier guides', () => {
       locator.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.groupIndex));
     expect(await groupsOf(hairlines(page))).toEqual(['0', '2', '2']);
     expect(await groupsOf(bands(page))).toEqual(['0', '0', '1', '2', '2', '2']);
-    for (const [level, presses] of [['100%', 0], ['25%', 3], ['400%', 7]] as const) {
+    for (const [level, presses] of [['100%', 0], ['25%', 3], ['400%', 8]] as const) {
       const button = page.getByRole('button', { name: level === '400%' ? 'Zoom in' : 'Zoom out' });
       for (let i = 0; i < presses; i++) await button.click();
       await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
@@ -1615,7 +1904,8 @@ test.describe('screen-only tier guides', () => {
       )
     );
     expect(layers).toEqual(['cards', 'svg', 'hairlines']);
-    // On screen only, the SVG's own background is transparent over the cards' layer, which paints it
+    // On screen only, the SVG's own background is transparent. Changed deliberately in UI-13:
+    // the viewer's paper paints it, behind the cards' layer, which paints only the cards
     const styles = await viewerGroup(page).evaluate((viewer) => {
       const svg = viewer.querySelector('svg.mep-svg')!;
       return {
@@ -1623,22 +1913,28 @@ test.describe('screen-only tier guides', () => {
         rectFill: getComputedStyle(svg.querySelector('rect')!).fill,
         rectAttribute: svg.querySelector('rect')!.getAttribute('fill'),
         layer: getComputedStyle(viewer.querySelector('[data-place-tier-guides]')!).backgroundColor,
+        paper: getComputedStyle(viewer.querySelector('[data-numeral-paper]')!).backgroundColor,
       };
     });
     expect(styles).toEqual({
       svgPosition: 'relative',
       rectFill: 'rgba(0, 0, 0, 0)',
       rectAttribute: 'rgba(255, 255, 255, 1)',
-      layer: 'rgb(255, 255, 255)',
+      layer: 'rgba(0, 0, 0, 0)',
+      paper: 'rgb(255, 255, 255)',
     });
 
-    // Without the cards, the SVG is as before
+    // Without the cards, the SVG is not lifted, and its background stays transparent over the paper
     await bandsSwitch(page).click();
     const plain = await viewerGroup(page).evaluate((viewer) => {
       const svg = viewer.querySelector('svg.mep-svg')!;
-      return [getComputedStyle(svg).position, getComputedStyle(svg.querySelector('rect')!).fill];
+      return [
+        getComputedStyle(svg).position,
+        getComputedStyle(svg.querySelector('rect')!).fill,
+        getComputedStyle(viewer.querySelector('[data-numeral-paper]')!).backgroundColor,
+      ];
     });
-    expect(plain).toEqual(['static', 'rgb(255, 255, 255)']);
+    expect(plain).toEqual(['static', 'rgba(0, 0, 0, 0)', 'rgb(255, 255, 255)']);
   });
 
   // The screen-only rule keys on the SVG's first child: with the grid on, that must still be the
@@ -1681,7 +1977,7 @@ test.describe('screen-only tier guides', () => {
     /**
      * The colours along a row of the top tier, from a screenshot: 30 units down, between the
      * grid's horizontal lines (every 20 units) and clear of the glyphs (from about 41 units), and
-     * from 15 to 335 units across, within the card (10.5 to 339.5), crossing its vertical lines
+     * from 15 to 335 units across, within the card (0 to 350 since UI-13), crossing its vertical lines
      */
     const row = async () => {
       await viewer.scrollIntoViewIfNeeded();
@@ -1736,14 +2032,14 @@ test.describe('screen-only tier guides', () => {
     expect(gridLines(cardOnly, carded)).toEqual({ lines: 0, runs: 0 });
     expect(nearly(cardOnly, carded)).toBe(cardOnly.length);
 
-    // Without the guides, the SVG paints its own background again, under the same grid
+    // Without the guides, the paper's background shows under the same grid (UI-13: the SVG's own stays transparent)
     await page.getByRole('switch', { name: 'Show Grid:' }).click();
     await bandsSwitch(page).click();
     await hairlinesSwitch(page).click();
     await expect(bands(page)).toHaveCount(0);
     await expect(hairlines(page)).toHaveCount(0);
     const plain = await rects();
-    expect(plain).toMatchObject({ svgPosition: 'static', first: 'rect', firstFill: 'rgb(60, 60, 70)', gridIsFirst: false });
+    expect(plain).toMatchObject({ svgPosition: 'static', first: 'rect', firstFill: 'rgba(0, 0, 0, 0)', gridIsFirst: false });
     const withoutGuides = await row();
     expect(gridLines(withoutGuides, background)).toEqual({ lines: 16, runs: 16 });
     expect(nearly(withoutGuides, background)).toBeGreaterThan(withoutGuides.length / 2);
@@ -1793,14 +2089,16 @@ test.describe('screen-only tier guides', () => {
       const sample = async () => {
         await viewer.scrollIntoViewIfNeeded();
         // The middle of the top tier's lowest bar (19: three bars), a point of its card clear of
-        // any glyph, and a point in the card's side inset
+        // any glyph, a point of its card near its side (UI-13: the cards have no side inset), and
+        // a point in the 4-unit gap between the top two tiers' cards
         const bar = (await viewer.locator('g[data-digit-index="0"] path').first().boundingBox())!;
         const svg = (await viewer.locator('svg.mep-svg').boundingBox())!;
         const unit = svg.width / 350;
         const points = {
           glyph: { x: Math.round(bar.x + bar.width / 2), y: Math.round(bar.y + bar.height / 2) },
           card: { x: Math.round(svg.x + 30 * unit), y: Math.round(svg.y + 40 * unit) },
-          inset: { x: Math.round(svg.x + 4 * unit), y: Math.round(svg.y + 40 * unit) },
+          side: { x: Math.round(svg.x + 4 * unit), y: Math.round(svg.y + 40 * unit) },
+          gap: { x: Math.round(svg.x + 30 * unit), y: Math.round(svg.y + 80 * unit) },
         };
         const clip = { x: Math.floor(svg.x), y: Math.floor(svg.y), width: Math.ceil(svg.width), height: Math.ceil(Math.min(svg.height, 200)) };
         const png = await page.screenshot({ clip });
@@ -1835,10 +2133,13 @@ test.describe('screen-only tier guides', () => {
       // Without cards: the glyph over the background
       close(off.glyph, over({ ...glyph, a: alpha }, background));
       close(off.card, background);
-      // With them: the card is visible, the side inset is not, and the glyph is drawn over the card
+      // With them: the card is visible, also near its side, the gap between cards is not, and
+      // the glyph is drawn over the card
       const carded = over(cardColour, background);
       close(on.card, carded);
-      close(on.inset, background);
+      close(on.side, carded);
+      close(off.side, background);
+      close(on.gap, background);
       close(on.glyph, over({ ...glyph, a: alpha }, carded));
       expect(Math.max(...(['r', 'g', 'b'] as const).map((c) => Math.abs(on.card[c] - off.card[c])))).toBeGreaterThanOrEqual(5);
       // An opaque glyph keeps its exact colour
@@ -1883,7 +2184,7 @@ test.describe('screen-only tier guides', () => {
     await expect.poll(hovered).toEqual([]);
 
     // The viewer still scrolls under the pointer, and the hover follows the card now under it
-    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
     await expect(zoomLevel(page)).toHaveText(/^400%/);
     await viewer.evaluate((el) => el.scrollTo(0, 0)); // zooming kept the middle in view
     await viewer.scrollIntoViewIfNeeded();
@@ -1948,7 +2249,7 @@ test.describe('screen-only tier guides', () => {
 
     await viewer.focus();
     await page.keyboard.press('+');
-    await expect(zoomLevel(page)).toHaveText('150%');
+    await expect(zoomLevel(page)).toHaveText('125%');
     await page.keyboard.press('0');
     await expect(zoomLevel(page)).toHaveText('100%');
     // The numeral is still one labelled image, the guides hidden from assistive technology
@@ -1963,7 +2264,7 @@ test.describe('screen-only tier guides', () => {
       await showNumber(page, FIVE_TIERS);
       await bandsSwitch(page).click();
       await hairlinesSwitch(page).click();
-      for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+      for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
       await expect(zoomLevel(page)).toHaveText(/^400%/);
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
@@ -1988,4 +2289,1638 @@ test.describe('screen-only tier guides', () => {
       expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
     });
   }
+
+  /**
+   * UI-13: the viewer's paper, between the stage box and the zoom wrapper, paints the numeral's
+   * background once across its fixed 12 px padding and the numeral, with the SVG's own
+   * background rectangle transparent on screen; the guides keep their geometry inside the zoom
+   * wrapper, and the exports are the SVG alone.
+   */
+  test.describe('viewer paper (UI-13)', () => {
+    // 1 × 20³: 4 tiers, 350 × 320 units; at 150%, 525 × 480 px, which with both paddings fits
+    // the 1440 × 900 stage (686 × 620 px), centred, away from its inset shadow and the Export trigger
+    const FOUR_TIERS = '8000';
+    const TRANSLUCENT = { r: 20, g: 40, b: 90, a: 0.35 };
+
+    /** The paper's and the zoom wrapper's boxes on screen, in CSS px */
+    /** Once any zoom animation has ended: the final layout */
+    const boxes = (page: Page) =>
+      settleZoom(page).then(() => page.evaluate(() => {
+        const rect = (el: Element) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+        };
+        const paper = document.querySelector('[data-numeral-paper]')!;
+        const wrapper = paper.querySelector(':scope > [data-numeral-image]')!;
+        return { paper: rect(paper), wrapper: rect(wrapper), svg: rect(wrapper.querySelector('svg.mep-svg')!), dpr: devicePixelRatio };
+      }));
+
+    test('keeps a fixed 12 px margin around the zoom wrapper, clear of the guides, which keep their geometry', async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openWith(page, BOTH_ON);
+      const viewer = await showNumber(page, FIVE_TIERS);
+      const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+      const zoomOut = page.getByRole('button', { name: 'Zoom out' });
+      for (const [level, button, presses] of [['100%', zoomIn, 0], ['25%', zoomOut, 3], ['125%', zoomIn, 4], ['150%', zoomIn, 1], ['400%', zoomIn, 3]] as const) {
+        for (let i = 0; i < presses; i++) await button.click();
+        await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+        await viewer.evaluate((el) => el.scrollTo(0, 0));
+        const { paper, wrapper, svg } = await boxes(page);
+        // The same 12 px at every zoom level, on all four sides: the padding does not zoom
+        for (const [side, gap] of Object.entries({
+          left: wrapper.left - paper.left, top: wrapper.top - paper.top,
+          right: paper.right - wrapper.right, bottom: paper.bottom - wrapper.bottom,
+        })) expect(gap, `${side} at ${level}`).toBeCloseTo(12, 1);
+        // The zoom wrapper is the numeral's box, at its zoomed size
+        expect(svg, level).toEqual(wrapper);
+        expect(wrapper.width, level).toBeCloseTo(350 * (parseFloat(level) / 100), 1);
+
+        // Every band and hairline lies within the zoom wrapper, never in the paper's margin
+        const outside = await viewer.evaluate((el, w) =>
+          [...el.querySelectorAll('[data-place-tier-band], [data-tier-hairline]')]
+            .map((g) => g.getBoundingClientRect())
+            .filter((r) => r.left < w.left - 0.5 || r.right > w.right + 0.5 || r.top < w.top - 0.5 || r.bottom > w.bottom + 0.5).length,
+        wrapper);
+        expect(outside, level).toBe(0);
+        // Each band and each hairline spans the zoom wrapper exactly, from its left edge to its
+        // right (UI-13), so the hairlines' ends meet the bands' sides
+        const spans = (selector: string) => viewer.evaluate((el, selector) =>
+          [...el.querySelectorAll(selector)].map((b) => {
+            const r = b.getBoundingClientRect();
+            return { left: r.left, right: r.right, width: r.width };
+          }), selector);
+        for (const [guide, count] of [['[data-place-tier-band]', 5], ['[data-tier-hairline]', 4]] as const) {
+          const found = await spans(guide);
+          expect(found, `${guide} at ${level}`).toHaveLength(count);
+          for (const box of found) {
+            expect(Math.abs(box.left - wrapper.left), `${guide} at ${level}: left`).toBeLessThanOrEqual(0.05);
+            expect(Math.abs(box.right - wrapper.right), `${guide} at ${level}: right`).toBeLessThanOrEqual(0.05);
+            expect(Math.abs(box.width - wrapper.width), `${guide} at ${level}: width`).toBeLessThanOrEqual(0.05);
+          }
+        }
+        // And they keep their alignment with the tiers, the cards' insets and the gaps between them
+        for (const result of [await checkBands(page, [5]), await checkHairlines(page, [5])]) {
+          expect(result.checked, level).toBeGreaterThan(0);
+          expect(result.problems, level).toEqual([]);
+        }
+      }
+      // Hairlines between the tiers only: 4 for 5 tiers
+      await expect(hairlines(page)).toHaveCount(4);
+    });
+
+    /**
+     * Samples, from a screenshot of the paper at device resolution, four lines that cross from
+     * the paper's padding into the SVG, one across each edge, all clear of the glyphs, the cards
+     * and the hairlines: the side rows in the 4-unit gap between the top two tiers' cards, midway
+     * between the upper card's bottom edge and the hairline's top edge (both cards and hairline
+     * span the numeral's width since UI-13); the columns within the cards' 2-unit top and bottom
+     * insets. Returns each line's pixels, in device pixels.
+     */
+    async function boundaryLines(page: Page) {
+      await page.mouse.move(0, 0); // no card hovered
+      // The page at its top, where the whole viewer is on screen, clear of the sticky header
+      // (clicking the guide switches may have scrolled it)
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+      const { paper, wrapper, dpr } = await boxes(page);
+      const header = await page.evaluate(() => document.querySelector('header')?.getBoundingClientRect().bottom ?? 0);
+      expect(paper.top, 'the paper below the page header').toBeGreaterThan(header);
+      const unit = wrapper.width / 350;
+      // Inside the paper's box, clear of its edge and shadow, which are drawn outside it
+      const clip = {
+        x: Math.ceil(paper.left) + 1, y: Math.ceil(paper.top) + 1,
+        width: Math.floor(paper.right) - 1 - (Math.ceil(paper.left) + 1),
+        height: Math.floor(paper.bottom) - 1 - (Math.ceil(paper.top) + 1),
+      };
+      // The upper card ends 2 units above the boundary at 80 units; the 1 px hairline is centred on it
+      const tierGap = wrapper.top + (78 * unit + (80 * unit - 0.5)) / 2;
+      const midX = wrapper.left + wrapper.width / 2;
+      // [from, to] in CSS px, along x for a row and along y for a column, each across one edge
+      const lines = {
+        left: { along: 'x', at: tierGap, from: clip.x, to: wrapper.left + 8 * unit, edge: wrapper.left },
+        right: { along: 'x', at: tierGap, from: wrapper.right - 8 * unit, to: clip.x + clip.width, edge: wrapper.right },
+        top: { along: 'y', at: midX, from: clip.y, to: wrapper.top + 1 * unit, edge: wrapper.top },
+        bottom: { along: 'y', at: midX, from: wrapper.bottom - 1 * unit, to: clip.y + clip.height, edge: wrapper.bottom },
+      } as const;
+      for (const [name, line] of Object.entries(lines)) {
+        // Each line reaches at least 1.4 CSS px into the padding and into the SVG
+        expect(Math.min(line.edge - line.from, line.to - line.edge), name).toBeGreaterThanOrEqual(1.4);
+      }
+      const png = await page.screenshot({ clip });
+      return page.evaluate(async ({ data, clip, dpr, lines }) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        [canvas.width, canvas.height] = [image.width, image.height];
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image, 0, 0);
+        const pixel = (x: number, y: number) => {
+          const [r, g, b] = context.getImageData(x, y, 1, 1).data;
+          return { r, g, b };
+        };
+        return {
+          scale: image.width / clip.width,
+          dpr,
+          lines: Object.fromEntries(Object.entries(lines).map(([name, l]) => {
+            const origin = l.along === 'x' ? clip.x : clip.y;
+            const across = Math.round(((l.along === 'x' ? l.at - clip.y : l.at - clip.x)) * dpr);
+            const [from, to] = [Math.ceil((l.from - origin) * dpr), Math.floor((l.to - origin) * dpr) - 1];
+            const pixels = [];
+            for (let p = from; p <= to; p++) pixels.push(l.along === 'x' ? pixel(p, across) : pixel(across, p));
+            return [name, pixels];
+          })),
+        };
+      }, { data: png.toString('base64'), clip, dpr, lines });
+    }
+
+    /** Expects every pixel of every line to be the background, composited once over the canvas */
+    function expectSinglePaint(sampled: Awaited<ReturnType<typeof boundaryLines>>, expected: Rgb, what: string) {
+      for (const [name, pixels] of Object.entries(sampled.lines)) {
+        expect(pixels.length, `${what}, ${name}`).toBeGreaterThanOrEqual(4);
+        for (const [i, p] of pixels.entries()) {
+          for (const c of ['r', 'g', 'b'] as const) {
+            // No seam: every pixel, on both sides of the edge, as its neighbour (rounding only)
+            if (i > 0) expect(Math.abs(p[c] - pixels[i - 1][c]), `${what}, ${name}, pixel ${i}: ${JSON.stringify(pixels)}`).toBeLessThanOrEqual(1);
+            // Painted once: a second translucent layer would darken it far beyond rounding
+            expect(Math.abs(p[c] - expected[c]), `${what}, ${name}, pixel ${i}: ${JSON.stringify(p)} vs ${JSON.stringify(expected)}`).toBeLessThanOrEqual(2);
+          }
+        }
+      }
+    }
+
+    for (const [dpr, themes] of [[1.5, ['light', 'dark']], [2, ['light']]] as const) {
+      test.describe(`at ${dpr * 100}% display scaling`, () => {
+        test.use({ deviceScaleFactor: dpr, viewport: { width: 1440, height: 900 } });
+
+        for (const theme of themes) {
+          test(`paints the background once across the padding and the SVG, with no seam, at 150% zoom, guides off and on (${theme})`, async ({ page }) => {
+            for (const [name, background] of [['translucent', TRANSLUCENT], ['opaque white', { r: 255, g: 255, b: 255, a: 1 }]] as const) {
+              await openWith(page, {
+                'mayastack:theme': theme,
+                'mayastack:backgroundColor': JSON.stringify(background),
+                'mayastack:showPlaceTierGuides': 'false',
+                'mayastack:showTierHairlines': 'false',
+              });
+              const viewer = await showNumber(page, FOUR_TIERS);
+              for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 125%, 150%
+              await expect(zoomLevel(page)).toHaveText('150%');
+              await viewer.scrollIntoViewIfNeeded();
+              // Short enough to be centred, so nothing scrolls
+              expect(await viewer.evaluate((el) => [el.scrollWidth - el.clientWidth, el.scrollHeight - el.clientHeight])).toEqual([0, 0]);
+              const expected = over(background, BACKDROP[theme]);
+
+              const off = await boundaryLines(page);
+              expect(off.dpr).toBe(dpr);
+              expect(off.scale).toBeCloseTo(dpr, 1);
+              // A fractional device-pixel position, where separately painted areas would leave a seam
+              expectSinglePaint(off, expected, `${name}, guides off`);
+
+              await bandsSwitch(page).click();
+              await hairlinesSwitch(page).click();
+              await expect(bands(page)).toHaveCount(4);
+              await expect(hairlines(page)).toHaveCount(3);
+              expectSinglePaint(await boundaryLines(page), expected, `${name}, guides on`);
+              // Reset for the next background (saved preferences, overridden by the next init script)
+              await page.evaluate(() => localStorage.clear());
+            }
+          });
+        }
+      });
+    }
+
+    test('exports neither the paper nor its padding, with the SVG’s own translucent background and size unchanged', async ({ page }) => {
+      await openWith(page, { 'mayastack:backgroundColor': JSON.stringify(TRANSLUCENT) });
+      await showNumber(page, FOUR_TIERS);
+      const svgBefore = await exportFile(page, 'svg');
+      const pngBefore = await exportFile(page, 'png');
+      await page.getByRole('button', { name: '📦 Export' }).click(); // close the menu
+
+      // Zoomed and with both guides, where the paper paints the background on screen
+      await page.getByRole('button', { name: 'Zoom in' }).click();
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await bandsSwitch(page).click();
+      await hairlinesSwitch(page).click();
+      const svgAfter = await exportFile(page, 'svg');
+      const pngAfter = await exportFile(page, 'png');
+      expect(svgAfter.data.equals(svgBefore.data)).toBe(true);
+      expect(pngAfter.data.equals(pngBefore.data)).toBe(true);
+
+      // The SVG's background rectangle keeps its fill in the file; no paper, padding or edge
+      const svg = svgAfter.data.toString('utf-8');
+      expect(svg).toMatch(/^<svg[^>]* width="350" height="320"/);
+      expect(svg).toMatch(/<rect x="0" y="0" width="100%" height="100%" fill="rgba\(20, 40, 90, 0\.35\)"/);
+      expect(svg).not.toMatch(/numeral-paper|ring-|shadow|padding/);
+      // The PNG is the numeral alone, at its own size, its corner the translucent background
+      expect(pngSize(pngAfter.data)).toEqual({ width: 350, height: 320 });
+      const corner = await page.evaluate(async (data) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        [canvas.width, canvas.height] = [image.width, image.height];
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image, 0, 0);
+        const [r, g, b, a] = context.getImageData(1, 1, 1, 1).data;
+        return { r, g, b, a };
+      }, pngAfter.data.toString('base64'));
+      expect(Math.abs(corner.a - Math.round(0.35 * 255))).toBeLessThanOrEqual(1);
+      for (const c of ['r', 'g', 'b'] as const) expect(Math.abs(corner[c] - TRANSLUCENT[c])).toBeLessThanOrEqual(3);
+    });
+  });
+});
+
+test.describe('zoom animation (UI-13 slice 6)', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  /** Something the sampler does in the page, at a frame: a zoom control, a scroll, or a stage resize */
+  type Step =
+    | { at: number; do: 'zoom in' | 'zoom out' | 'reset' | 'key +' | 'key -' }
+    | { at: number; do: 'scroll by'; top: number }
+    | { at: number; do: 'stage height'; height: string };
+
+  /**
+   * Samples every frame in the page, from just before the first step until the paper has had no
+   * running animation for 3 frames (at most 2 s): the numeral image's box as drawn, the stage's
+   * scroll extent and position, and the paper's running animations; and every animation started
+   * on the paper meanwhile, with its final play state. Each frame is sampled first, as painted,
+   * then its steps run, in the page, so a step lands during an animation deterministically; the
+   * next frame is the first to show its result. Clicks and key events are the real controls'
+   * (`click()` and `keydown` on the viewer), handled by React.
+   * The viewer's `stage height` step sets an inline height on the stage, as a layout change would,
+   * and an empty height removes it again: a test-only resize, observed by the viewer.
+   */
+  const sample = (page: Page, steps: Step[]) =>
+    page.evaluate(async (steps) => {
+      const viewer = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+      const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+      const image = document.querySelector<HTMLElement>('[data-numeral-image]')!;
+      const units = document.querySelector<SVGSVGElement>('svg.mep-svg')!.viewBox.baseVal.width;
+      const button = (name: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+      const frames: {
+        image: { left: number; top: number; width: number; height: number };
+        centre: { x: number; y: number };
+        pxPerUnit: number;
+        scrollWidth: number;
+        scrollHeight: number;
+        scrollTop: number;
+        animations: { duration: unknown; easing: unknown; transform: string }[];
+      }[] = [];
+      // Every animation started on the paper, also one cancelled before any frame sampled it
+      const seen: Animation[] = [];
+      const animate = paper.animate;
+      paper.animate = function (...args: Parameters<HTMLElement['animate']>) {
+        const animation = animate.apply(paper, args);
+        seen.push(animation);
+        return animation;
+      };
+      const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      let still = 0;
+      for (let frame = 0; frame < 120 && still < 3; frame++) {
+        await nextFrame();
+        const r = image.getBoundingClientRect();
+        const v = viewer.getBoundingClientRect();
+        const pxPerUnit = r.width / units;
+        const running = paper.getAnimations();
+        frames.push({
+          image: { left: r.left, top: r.top, width: r.width, height: r.height },
+          centre: {
+            x: (v.left + viewer.clientLeft + viewer.clientWidth / 2 - r.left) / pxPerUnit,
+            y: (v.top + viewer.clientTop + viewer.clientHeight / 2 - r.top) / pxPerUnit,
+          },
+          pxPerUnit,
+          scrollWidth: viewer.scrollWidth,
+          scrollHeight: viewer.scrollHeight,
+          scrollTop: viewer.scrollTop,
+          animations: running.map((a) => {
+            const timing = a.effect!.getTiming();
+            return { duration: timing.duration, easing: timing.easing, transform: getComputedStyle(paper).transform };
+          }),
+        });
+        const lastStep = Math.max(...steps.map((s) => s.at));
+        still = frame >= lastStep && running.length === 0 ? still + 1 : 0;
+        // Then this frame's steps: sampled from the next frame on
+        for (const step of steps.filter((s) => s.at === frame)) {
+          if (step.do === 'zoom in') button('Zoom in').click();
+          else if (step.do === 'zoom out') button('Zoom out').click();
+          else if (step.do === 'reset') button('Reset').click();
+          else if (step.do === 'key +' || step.do === 'key -') {
+            viewer.dispatchEvent(new KeyboardEvent('keydown', { key: step.do.slice(-1), bubbles: true, cancelable: true }));
+          } else if (step.do === 'scroll by') viewer.scrollBy({ top: step.top, behavior: 'instant' });
+          else if (step.do === 'stage height') viewer.style.height = step.height;
+        }
+      }
+      delete (paper as Partial<HTMLElement>).animate; // the prototype's again
+      return {
+        frames,
+        animations: seen.map((a) => a.playState),
+        paperTransform: getComputedStyle(paper).transform,
+        paperStyle: paper.getAttribute('style'),
+      };
+    }, steps);
+
+  type Sampled = Awaited<ReturnType<typeof sample>>;
+
+  /** How far each frame's drawn centre point is from a point, in CSS px at the drawn scale */
+  const drift = ({ frames }: Sampled, point: { x: number; y: number }) =>
+    frames.map((f) => Math.max(Math.abs(f.centre.x - point.x), Math.abs(f.centre.y - point.y)) * f.pxPerUnit);
+
+  /** Counts the paper's `animate` calls from now on, whatever triggers them */
+  const countAnimations = (page: Page) =>
+    page.evaluate(() => {
+      const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+      const original = paper.animate.bind(paper);
+      (window as unknown as { zoomAnimations: number }).zoomAnimations = 0;
+      paper.animate = (...args: Parameters<HTMLElement['animate']>) => {
+        (window as unknown as { zoomAnimations: number }).zoomAnimations++;
+        return original(...args);
+      };
+    });
+  const animationCount = (page: Page) => page.evaluate(() => (window as unknown as { zoomAnimations: number }).zoomAnimations);
+
+  /** The 99-tier numeral, scrolled to its middle, where no zoom is clamped; the point at the centre */
+  async function showLargeAtMiddle(page: Page) {
+    const viewer = await showNumber(page, MAX_DIGITS);
+    await viewer.scrollIntoViewIfNeeded();
+    await viewer.evaluate((el) => el.scrollTo({ top: (el.scrollHeight - el.clientHeight) / 2, behavior: 'instant' }));
+    // The scroll event arrives, and is taken as the user's view
+    await viewer.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    return viewer;
+  }
+
+  /** The point at the stage's centre in the final layout, in SVG units, once nothing animates */
+  const layoutCentre = async (page: Page) => {
+    await settleZoom(page);
+    return page.evaluate(() => {
+      const viewer = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+      const r = document.querySelector('[data-numeral-image]')!.getBoundingClientRect();
+      const v = viewer.getBoundingClientRect();
+      const pxPerUnit = r.width / document.querySelector<SVGSVGElement>('svg.mep-svg')!.viewBox.baseVal.width;
+      return {
+        x: (v.left + viewer.clientLeft + viewer.clientWidth / 2 - r.left) / pxPerUnit,
+        y: (v.top + viewer.clientTop + viewer.clientHeight / 2 - r.top) / pxPerUnit,
+      };
+    });
+  };
+
+  test('eases the paper from the earlier scale to the final layout, keeping the anchor, zooming in and out', async ({ page }) => {
+    await showLargeAtMiddle(page);
+    const point = await layoutCentre(page);
+
+    for (const [step, from, to] of [['zoom in', 350, 437.5], ['zoom out', 437.5, 350], ['zoom out', 350, 262.5]] as const) {
+      const sampled = await sample(page, [{ at: 1, do: step }]);
+      const { frames } = sampled;
+      // From the frame after the step's, the zoom's first laid out
+      const after = frames.slice(2);
+      // One animation, on the paper, with the approved timing; ended with nothing left on the paper
+      expect(sampled.animations, step).toEqual(['finished']);
+      const timings = after.flatMap((f) => f.animations);
+      expect(timings.length, `${step}: frames animated`).toBeGreaterThanOrEqual(3);
+      for (const t of timings) expect([t.duration, t.easing], step).toEqual([200, 'cubic-bezier(0.4, 0, 0.2, 1)']);
+      expect(sampled.paperTransform, step).toBe('none');
+      expect(sampled.paperStyle, step).not.toMatch(/transform/);
+      // Drawn at the earlier size at first, then easing, only ever between the two, to the final one
+      expect(frames[0].image.width, step).toBeCloseTo(from, 1);
+      const widths = after.map((f) => f.image.width);
+      for (const w of widths) expect(Math.min(from, to) - 0.5 <= w && w <= Math.max(from, to) + 0.5, `${step}: ${w}`).toBe(true);
+      expect(widths.some((w) => Math.abs(w - from) > 1 && Math.abs(w - to) > 1), `${step}: an intermediate frame`).toBe(true);
+      expect(widths.at(-1), step).toBeCloseTo(to, 3);
+      // The anchor stays at the centre in every frame, and the scrollable area is the final layout's throughout
+      for (const [i, d] of drift(sampled, point).entries()) expect(d, `${step}, frame ${i}`).toBeLessThanOrEqual(1);
+      const final = frames.at(-1)!;
+      for (const f of after) expect([f.scrollWidth, f.scrollHeight], step).toEqual([final.scrollWidth, final.scrollHeight]);
+    }
+    // The final layout: the paper's 12 px padding, and the exact width
+    const paper = await page.evaluate(() => {
+      const p = document.querySelector('[data-numeral-paper]')!.getBoundingClientRect();
+      const i = document.querySelector('[data-numeral-image]')!.getBoundingClientRect();
+      return [i.left - p.left, i.top - p.top, p.right - i.right, p.bottom - i.bottom, i.width];
+    });
+    for (const gap of paper.slice(0, 4)) expect(gap).toBeCloseTo(12, 1);
+    expect(paper[4]).toBeCloseTo(262.5, 3);
+  });
+
+  test('keeps the anchor and the final scrollable area through 25% to 400% and back, on the 99-tier numeral', async ({ page }) => {
+    test.slow();
+    await showLargeAtMiddle(page);
+    const point = await layoutCentre(page);
+    // With the keyboard shortcuts, each step's animation running to its end
+    const expected = [262.5, 175, 87.5, 175, 262.5, 350, 437.5, 525, 700, 1050, 1400, 1050, 700, 525, 437.5, 350];
+    const keys = ['-', '-', '-', '+', '+', '+', '+', '+', '+', '+', '+', '-', '-', '-', '-', '-'] as const;
+    for (const [i, key] of keys.entries()) {
+      const sampled = await sample(page, [{ at: 1, do: `key ${key}` }]);
+      const what = `step ${i + 1} (${key}) to ${expected[i]} px`;
+      expect(sampled.animations, what).toEqual(['finished']);
+      const final = sampled.frames.at(-1)!;
+      expect(final.image.width, what).toBeCloseTo(expected[i], 3);
+      for (const f of sampled.frames.slice(2)) expect([f.scrollWidth, f.scrollHeight], what).toEqual([final.scrollWidth, final.scrollHeight]);
+      expect(Math.max(...drift(sampled, point)), what).toBeLessThanOrEqual(1);
+    }
+    await expect(zoomLevel(page)).toHaveText('100%');
+  });
+
+  test('animates the real controls and the keyboard shortcuts, but not Reset, a new numeral, Date mode or a limit', async ({ page }) => {
+    const viewer = await showNumber(page, FIFTY_DIGITS);
+    await countAnimations(page);
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await settleZoom(page);
+    await viewer.focus();
+    await page.keyboard.press('+');
+    await settleZoom(page);
+    await page.keyboard.press('-');
+    await settleZoom(page);
+    expect(await animationCount(page)).toBe(3);
+    // Reset, the button and 0: instant
+    await page.getByRole('button', { name: 'Reset' }).click();
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await settleZoom(page);
+    await viewer.focus();
+    await page.keyboard.press('0');
+    await expect(zoomLevel(page)).toHaveText('100%');
+    expect(await animationCount(page)).toBe(4);
+    // A new numeral, and Date mode: no animation
+    await showNumber(page, '8000');
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 15/ })).toBeVisible();
+    expect(await page.locator('[data-numeral-paper]').evaluate((p) => p.getAnimations().length)).toBe(0);
+    // At the limit, a further zoom changes nothing and animates nothing (the paper may be new)
+    await countAnimations(page);
+    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^400%/);
+    await settleZoom(page);
+    const atLimit = await animationCount(page);
+    // aria-disabled at the limit, so not clickable for Playwright: the click event itself
+    await page.getByRole('button', { name: 'Zoom in' }).dispatchEvent('click');
+    await expect(zoomLevel(page)).toHaveText(/^400%/);
+    expect(await animationCount(page)).toBe(atLimit);
+    expect(await page.locator('[data-numeral-paper]').evaluate((p) => p.getAnimations().length)).toBe(0);
+  });
+
+  test('follows each Date-mode zoom with the numeral centred, as without the animation', async ({ page }) => {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 25th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 25/ })).toBeVisible();
+    await page.getByRole('group', { name: 'Numeral viewer' }).scrollIntoViewIfNeeded();
+    // 350 × 240 units: centred in the stage at 100% and at 125%, so the anchor is its middle
+    const point = await layoutCentre(page);
+    expect(point.x).toBeCloseTo(175, 0);
+    for (const step of ['zoom in', 'zoom out'] as const) {
+      const sampled = await sample(page, [{ at: 1, do: step }]);
+      expect(sampled.animations, step).toEqual(['finished']);
+      expect(Math.max(...drift(sampled, point)), step).toBeLessThanOrEqual(1);
+    }
+    await expect(zoomLevel(page)).toHaveText('100%');
+  });
+
+  test('retargets rapid zooms from where the numeral is drawn, one animation at a time, ending exactly', async ({ page }) => {
+    await showLargeAtMiddle(page);
+    const point = await layoutCentre(page);
+    // Four zooms in, two frames apart (100% → 125% → 150% → 200% → 300%), then two out (200%,
+    // 150%): each during the previous one's animation
+    const sampled = await sample(page, [
+      { at: 1, do: 'zoom in' },
+      { at: 3, do: 'zoom in' },
+      { at: 5, do: 'zoom in' },
+      { at: 7, do: 'key +' },
+      { at: 9, do: 'zoom out' },
+      { at: 11, do: 'key -' },
+    ]);
+    expect(sampled.animations).toEqual(['idle', 'idle', 'idle', 'idle', 'idle', 'finished']);
+    for (const f of sampled.frames) expect(f.animations.length).toBeLessThanOrEqual(1);
+    // No jump back at a retarget: each new animation continues from where the numeral is drawn,
+    // so every frame's drawn width is between the previous frame's and the layout width then in
+    // effect (laid out from the frame after each step's), never past either. A restart from
+    // either layout would leave that range. Changed deliberately with the slower-starting easing
+    // (2026-11-07): the zoom out at frame 9 can still grow the numeral, drawn short of the 300%
+    // layout, towards 200%'s, so "only shrinks after frame 9" no longer holds; this checks the
+    // same property directly
+    const widths = sampled.frames.map((f) => f.image.width);
+    const layoutWidth = (frame: number) => {
+      const done = [350, 437.5, 525, 700, 1050, 700, 525].slice(0, 1 + [1, 3, 5, 7, 9, 11].filter((at) => at < frame).length);
+      return done.at(-1)!;
+    };
+    for (let i = 1; i < widths.length; i++) {
+      const [from, to] = [widths[i - 1], layoutWidth(i)];
+      const within = Math.min(from, to) - 0.5 <= widths[i] && widths[i] <= Math.max(from, to) + 0.5;
+      expect(within, `frame ${i}: ${widths[i]}, not from ${from} towards ${to} (${widths})`).toBe(true);
+    }
+    // The anchor holds in every frame, and the end is the final layout of 150%, exactly
+    expect(Math.max(...drift(sampled, point))).toBeLessThanOrEqual(1);
+    expect(widths.at(-1)).toBeCloseTo(525, 3);
+    expect(sampled.paperTransform).toBe('none');
+    await expect(zoomLevel(page)).toHaveText('150%');
+  });
+
+  test('ends the animation for a resize during it, and keeps the anchor through resizes during and after', async ({ page }) => {
+    const viewer = await showLargeAtMiddle(page);
+    const point = await layoutCentre(page);
+    // The stage made shorter two frames into the zoom's animation
+    const during = await sample(page, [{ at: 1, do: 'zoom in' }, { at: 3, do: 'stage height', height: '300px' }]);
+    expect(during.animations).toEqual(['idle']); // cancelled by the resize correction, not finished
+    expect(during.paperTransform).toBe('none');
+    // In every frame, the resize's correction included
+    expect(Math.max(...drift(during, point))).toBeLessThanOrEqual(1);
+    expect(await viewer.evaluate((el) => el.clientHeight)).toBeLessThan(300);
+    // Back to its own height, then the window resized immediately after the next zoom
+    await sample(page, [{ at: 1, do: 'stage height', height: '' }]);
+    expect((await layoutCentre(page)).y).toBeCloseTo(point.y, 0);
+    await page.getByRole('button', { name: 'Zoom out' }).click();
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await settleZoom(page);
+    const after = await layoutCentre(page);
+    const pxPerUnit = 350 / 350;
+    expect(Math.abs(after.y - point.y) * pxPerUnit).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.x - point.x) * pxPerUnit).toBeLessThanOrEqual(1);
+  });
+
+  test('ends the animation for the user’s scrolling, which then becomes the view to keep', async ({ page }) => {
+    const viewer = await showLargeAtMiddle(page);
+    const scrolled = await sample(page, [{ at: 1, do: 'zoom in' }, { at: 3, do: 'scroll by', top: 400 }]);
+    expect(scrolled.animations).toEqual(['idle']);
+    expect(scrolled.paperTransform).toBe('none');
+    // The scrolled-to point is kept by the next zoom
+    const point = await layoutCentre(page);
+    const next = await sample(page, [{ at: 1, do: 'zoom out' }]);
+    expect(Math.max(...drift(next, point))).toBeLessThanOrEqual(1);
+
+    // A real mouse wheel, right after a zoom: the view follows it once its animation has ended
+    const box = (await viewer.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const top = await viewer.evaluate((el) => el.scrollTop);
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await page.mouse.wheel(0, 500);
+    await expect.poll(() => viewer.evaluate((el) => el.scrollTop)).toBeGreaterThan(top + 100);
+    await settleZoom(page);
+    const wheeled = await layoutCentre(page);
+    const kept = await sample(page, [{ at: 1, do: 'zoom in' }]);
+    expect(Math.max(...drift(kept, wheeled))).toBeLessThanOrEqual(1);
+  });
+
+  test('zooms at once, with no animation, when reduced motion is preferred, and animates again without it', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await showLargeAtMiddle(page);
+    const point = await layoutCentre(page);
+    // Levels at which the numeral fits the stage's width (125%, 100% and 75% at 1280 px); wider
+    // levels with reduced motion are tested in the click-only group's reduced-motion tests,
+    // with the zoom wrapper's own transitions
+    const reduced = await sample(page, [{ at: 1, do: 'zoom in' }, { at: 4, do: 'key -' }, { at: 7, do: 'zoom out' }]);
+    expect(reduced.animations).toEqual([]);
+    // Nor on the zoom wrapper: no transitions, which the global reduced-motion rule would give it
+    expect(await page.locator('[data-numeral-image]').evaluate((el) => getComputedStyle(el).transitionProperty)).toBe('none');
+    for (const f of reduced.frames) expect(f.animations).toEqual([]);
+    // Each zoom's final width from its first laid-out frame on, never an intermediate one
+    expect(reduced.frames.map((f) => f.image.width)).toEqual([350, 350, 437.5, 437.5, 437.5, 350, 350, 350, 262.5, 262.5]);
+    expect(Math.max(...drift(reduced, point))).toBeLessThanOrEqual(1);
+
+    // A change of preference applies from the next zoom
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const animated = await sample(page, [{ at: 1, do: 'zoom out' }]);
+    expect(animated.animations).toEqual(['finished']);
+  });
+
+  test('exports the same SVG after an animated zoom has ended as before it', async ({ page }) => {
+    await showNumber(page, FIFTY_DIGITS);
+    const before = await exportFile(page, 'svg');
+    await page.getByRole('button', { name: '📦 Export' }).click(); // close the menu
+    const sampled = await sample(page, [{ at: 1, do: 'zoom in' }, { at: 2, do: 'zoom in' }]);
+    expect(sampled.animations).toEqual(['idle', 'finished']);
+    const after = await exportFile(page, 'svg');
+    expect(after.data.equals(before.data)).toBe(true);
+  });
+
+  /*
+   * UI-10, changed deliberately in UI-13 slice 3a-2: while a zoom animation runs the labels are
+   * hidden, and the gutters stay visible, opaque and laid out, whether the zoomed layout fits the
+   * stage or scrolls sideways: they are drawn moving with the paper (their own animation, checked
+   * frame by frame in the next test), so the paper no longer slides under them and no background
+   * has to clear. Their layout (offsets, which ignore transforms) never changes for the zoom.
+   */
+  test('keeps the annotation gutters opaque and laid out while zooming out, with the labels hidden, whether the layout fits or scrolls', async ({ page }) => {
+    // With the gutters shown, the stage content and the paper have no horizontal padding (UI-13):
+    // up to 150% the numeral and its gutters fit (525 + 96 px), their group centred; at 200%
+    // (700 + 96 px) and above they do not, and the stage scrolls sideways under the sticky gutters
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.reload();
+    const viewer = await showNumber(page, '3047620');
+    await viewer.scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+
+    // Whether the layout fits the stage sideways before the zoom, and at its level
+    for (const [from, to, clicksIn, fitsBefore, fitsAfter] of [
+      ['125%', '100%', 1, true, true],
+      ['150%', '125%', 2, true, true],
+      ['200%', '150%', 2, false, true],
+      ['300%', '200%', 2, false, false],
+    ] as const) {
+      for (let i = 0; i < clicksIn; i++) await zoomIn.click();
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${from}`));
+      await settleZoom(page);
+      // The viewer clears its mark in the animation's own end handler
+      await expect(viewer).not.toHaveAttribute('data-zooming');
+
+      const result = await page.evaluate(async () => {
+        const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+        const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+        const gutters = [...document.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+        const boxes = [...document.querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')];
+        const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        // The gutters, their labels, the gutters' and the paper's untransformed layout (offsets
+        // ignore transforms, which both are drawn with meanwhile), and the scroll
+        const snapshot = () => ({
+          visibility: gutters.map((g) => getComputedStyle(g).visibility),
+          opacity: gutters.map((g) => getComputedStyle(g).opacity),
+          background: gutters.map((g) => getComputedStyle(g).backgroundColor),
+          labels: boxes.map((b) => getComputedStyle(b).visibility),
+          display: gutters.map((g) => getComputedStyle(g).display),
+          gutters: gutters.map((g) => [g.offsetLeft, g.offsetTop, g.offsetWidth, g.offsetHeight]),
+          paper: [paper.offsetLeft, paper.offsetTop, paper.offsetWidth, paper.offsetHeight],
+          scroll: [stage.scrollLeft, stage.scrollTop],
+          fits: stage.scrollWidth <= stage.clientWidth,
+        });
+        const settledBefore = snapshot();
+        // The real control. React renders the click's update in a microtask, and the animation
+        // starts in its layout effect: sampled once that has run, well within the 200 ms (checked
+        // below by the animation still running)
+        document.querySelector<HTMLButtonElement>('button[aria-label="Zoom out"]')!.click();
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        const running = paper.getAnimations().length;
+        const zooming = stage.getAttribute('data-zooming');
+        const during = snapshot();
+        // Waits on the animation itself, then a frame for the viewer's own end handler
+        for (let a = paper.getAnimations(); a.length > 0; a = paper.getAnimations()) {
+          await Promise.all(a.map((x) => x.finished.catch(() => undefined)));
+        }
+        await nextFrame();
+        return { settledBefore, running, zooming, during, after: snapshot(), stillZooming: stage.hasAttribute('data-zooming') };
+      });
+
+      const label = `${from} → ${to}`;
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${to}`));
+      const settled = result.settledBefore;
+      // Before the zoom: gutters and labels shown, opaque; the layout fits the stage, or not, as intended
+      expect(settled.visibility, label).toEqual(['visible', 'visible']);
+      expect(settled.labels, label).toEqual(['visible', 'visible']);
+      expect(settled.opacity, label).toEqual(['1', '1']);
+      expect(settled.display, label).toEqual(['flex', 'flex']);
+      expect(settled.background[0], label).not.toBe('rgba(0, 0, 0, 0)');
+      expect(settled.background[1], label).toBe(settled.background[0]);
+      expect(settled.fits, label).toBe(fitsBefore);
+      expect(result.after.fits, label).toBe(fitsAfter);
+      // During the animation, marked for the zoomed layout: the labels hidden; the gutters still
+      // visible, laid out and opaque, whether it fits or scrolls sideways
+      expect([result.running, result.zooming], label).toEqual([1, fitsAfter ? 'fit' : '']);
+      expect(result.during.labels, label).toEqual(['hidden', 'hidden']);
+      expect(result.during.visibility, label).toEqual(['visible', 'visible']);
+      expect(result.during.opacity, label).toEqual(['1', '1']);
+      expect(result.during.display, label).toEqual(['flex', 'flex']);
+      expect(result.during.background, label).toEqual(settled.background);
+      // Afterwards: as before the zoom
+      expect(result.stillZooming, label).toBe(false);
+      expect(result.after.labels, label).toEqual(['visible', 'visible']);
+      expect(result.after.visibility, label).toEqual(['visible', 'visible']);
+      expect(result.after.background, label).toEqual(settled.background);
+      // Hiding and showing the labels moves no layout and no scroll position: the gutters' and the
+      // paper's untransformed layout and the scroll are the same during and after
+      expect(result.during.gutters, label).toEqual(result.after.gutters);
+      expect(result.during.paper, label).toEqual(result.after.paper);
+      expect(result.during.scroll, label).toEqual(result.after.scroll);
+      for (const r of result.after.gutters) expect(r[2], label).toBeCloseTo(48, 1);
+    }
+  });
+
+  /*
+   * UI-13, slice 3a-2: the annotation gutters are drawn moving with the paper, each from where it
+   * was drawn to its final place sideways, and on the paper's drawn top and bottom. Sampled in the
+   * page: just before the zoom, right after it starts (microtasks only, so no frame has passed and
+   * the animations are at their start), every frame until nothing has animated for 2 frames, and
+   * settled. At 1600 px the stage fits the five-tier numeral and its gutters up to 150%, and
+   * scrolls sideways from 200%.
+   */
+  type GutterAction = { at: number; do: 'zoom in' | 'zoom out' | 'scroll by'; left?: number };
+
+  const sampleGutters = (page: Page, first: 'zoom in' | 'zoom out', later: GutterAction[] = []) =>
+    page.evaluate(
+      async ({ first, later }) => {
+        const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+        const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+        const gutter = (side: string) => document.querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`)!;
+        const box = (el: HTMLElement) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        };
+        const snap = () => ({
+          paper: box(paper),
+          start: box(gutter('start')),
+          end: box(gutter('end')),
+          paperAnimations: paper.getAnimations().length,
+          gutterAnimations: gutter('start').getAnimations().length + gutter('end').getAnimations().length,
+          fits: stage.scrollWidth <= stage.clientWidth,
+        });
+        const button = (name: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+        const act = async (what: 'zoom in' | 'zoom out') => {
+          button(what === 'zoom in' ? 'Zoom in' : 'Zoom out').click();
+          // React renders the click in a microtask, and starts the animations in its layout effect
+          await Promise.resolve();
+          await Promise.resolve();
+        };
+        const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const before = snap();
+        await act(first);
+        const atStart = snap();
+        const frames: (ReturnType<typeof snap> & { frame: number })[] = [];
+        const replaced: { before: ReturnType<typeof snap>; after: ReturnType<typeof snap> }[] = [];
+        let still = 0;
+        for (let frame = 0; frame < 120 && still < 2; frame++) {
+          await nextFrame();
+          const now = snap();
+          frames.push({ ...now, frame });
+          const pending = later.some((s) => s.at > frame);
+          still = !pending && now.paperAnimations + now.gutterAnimations === 0 ? still + 1 : 0;
+          for (const step of later.filter((s) => s.at === frame)) {
+            if (step.do === 'scroll by') stage.scrollBy({ left: step.left ?? 0, behavior: 'instant' });
+            else {
+              const was = snap();
+              await act(step.do);
+              replaced.push({ before: was, after: snap() });
+            }
+          }
+        }
+        return { before, atStart, frames, replaced, settled: snap() };
+      },
+      { first, later }
+    );
+
+  type GutterSampled = Awaited<ReturnType<typeof sampleGutters>>;
+
+  /**
+   * Checks a sampled zoom. With the gutters shown, the paper has no horizontal padding (UI-13), so
+   * its animation scales none beside them: no gap opens between the paper and a gutter in any
+   * frame (with the 12 px padding, one of 12 px × |scale − 1| opened at the start). While the
+   * layout fits before and after, the paper also never slides under a gutter: they touch.
+   */
+  const checkGutterZoom = (sampled: GutterSampled, label: string) => {
+    const { before, atStart, frames, settled } = sampled;
+    // Rounding of drawn boxes only
+    const tolerance = 0.5;
+    const fitsThroughout = before.fits && settled.fits;
+    // Started together: the paper's animation and both gutters'
+    expect([atStart.paperAnimations, atStart.gutterAnimations], `${label}: started`).toEqual([1, 2]);
+    // No jump at the start: each gutter is drawn where it was
+    for (const side of ['start', 'end'] as const) {
+      expect(Math.abs(atStart[side].left - before[side].left), `${label}: ${side} at the start`).toBeLessThanOrEqual(0.5);
+    }
+    const checked = [atStart, ...frames];
+    for (const [i, f] of checked.entries()) {
+      const at = `${label}, sample ${i}`;
+      for (const side of ['start', 'end'] as const) {
+        // On the paper's drawn top and bottom, in every frame
+        expect(Math.abs(f[side].top - f.paper.top), `${at}: ${side} top`).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(f[side].bottom - f.paper.bottom), `${at}: ${side} bottom`).toBeLessThanOrEqual(0.5);
+        expect(f[side].right - f[side].left, `${at}: ${side} width`).toBeCloseTo(48, 0);
+      }
+      // No gap between the paper and either gutter
+      expect(f.paper.left - f.start.right, `${at}: start-side gap`).toBeLessThanOrEqual(tolerance);
+      expect(f.end.left - f.paper.right, `${at}: end-side gap`).toBeLessThanOrEqual(tolerance);
+      if (fitsThroughout) {
+        expect(Math.abs(f.paper.left - f.start.right), `${at}: start side touches`).toBeLessThanOrEqual(tolerance);
+        expect(Math.abs(f.end.left - f.paper.right), `${at}: end side touches`).toBeLessThanOrEqual(tolerance);
+      }
+    }
+    // Something was drawn part-way, and it ended: nothing left running, nothing transformed
+    expect(frames.some((f) => f.gutterAnimations === 2), `${label}: animated frames`).toBe(true);
+    expect([settled.paperAnimations, settled.gutterAnimations], `${label}: ended`).toEqual([0, 0]);
+    // No jump at the end: the last animated frame is already close to the final place
+    const lastAnimated = [...frames].reverse().find((f) => f.gutterAnimations > 0)!;
+    for (const side of ['start', 'end'] as const) {
+      const travel = Math.abs(settled[side].left - before[side].left);
+      expect(Math.abs(settled[side].left - lastAnimated[side].left), `${label}: ${side} at the end`).toBeLessThanOrEqual(
+        Math.max(1, 0.2 * travel)
+      );
+    }
+  };
+
+  async function showAnnotatedAt1600(page: Page) {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.reload();
+    const viewer = await showNumber(page, '3047620');
+    await viewer.scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    return viewer;
+  }
+
+  test('moves the annotation gutters with the paper, frame by frame, fitting, overflowing and across the boundary, both ways', async ({ page }) => {
+    await showAnnotatedAt1600(page);
+    for (const [step, zFrom, zTo, fitsBefore, fitsAfter] of [
+      ['zoom in', 1, 1.25, true, true],
+      ['zoom in', 1.25, 1.5, true, true],
+      ['zoom in', 1.5, 2, true, false],
+      ['zoom in', 2, 3, false, false],
+      ['zoom out', 3, 2, false, false],
+      ['zoom out', 2, 1.5, false, true],
+      ['zoom out', 1.5, 1.25, true, true],
+      ['zoom out', 1.25, 1, true, true],
+    ] as const) {
+      const label = `${zFrom * 100}% → ${zTo * 100}%`;
+      const sampled = await sampleGutters(page, step);
+      expect([sampled.before.fits, sampled.settled.fits], label).toEqual([fitsBefore, fitsAfter]);
+      checkGutterZoom(sampled, label);
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${zTo * 100}%`));
+    }
+  });
+
+  test('moves them from the scroll limits, where a gutter starts or stops sticking', async ({ page }) => {
+    const viewer = await showAnnotatedAt1600(page);
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^200%/);
+    await settleZoom(page);
+    for (const [limit, label] of [['start', 'from the scroll start'], ['end', 'from the scroll end']] as const) {
+      await viewer.evaluate(
+        (el, limit) => el.scrollTo({ left: limit === 'start' ? 0 : el.scrollWidth, behavior: 'instant' }),
+        limit
+      );
+      await viewer.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const zoomedIn = await sampleGutters(page, 'zoom in');
+      // At a limit one gutter is in the flow and the other stuck: both flush with the stage's
+      // edges, as the stage content has no horizontal padding while they are shown (UI-13)
+      const stage = await viewer.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left + el.clientLeft, right: r.left + el.clientLeft + el.clientWidth };
+      });
+      expect(Math.abs(zoomedIn.before.start.left - stage.left), `${label}: start`).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(stage.right - zoomedIn.before.end.right), `${label}: end`).toBeLessThanOrEqual(0.5);
+      checkGutterZoom(zoomedIn, `200% → 300% ${label}`);
+      checkGutterZoom(await sampleGutters(page, 'zoom out'), `300% → 200% after the ${label}`);
+    }
+  });
+
+  test('replaces a zoom across the boundary from where the gutters are drawn, and ends them with a scroll or at once with reduced motion', async ({ page }) => {
+    const viewer = await showAnnotatedAt1600(page);
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^150%/);
+    await settleZoom(page);
+
+    // 150% → 200% (fit → overflow), replaced at frame 3 by 200% → 300%
+    const replaced = await sampleGutters(page, 'zoom in', [{ at: 3, do: 'zoom in' }]);
+    expect(replaced.replaced).toHaveLength(1);
+    const [swap] = replaced.replaced;
+    expect([swap.after.paperAnimations, swap.after.gutterAnimations]).toEqual([1, 2]);
+    for (const side of ['start', 'end'] as const) {
+      expect(Math.abs(swap.after[side].left - swap.before[side].left), `${side} at the replacement`).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(swap.after[side].top - swap.before[side].top), `${side} top at the replacement`).toBeLessThanOrEqual(
+        12 * Math.abs(2 / 3 - 1) + 0.5
+      );
+    }
+    expect([replaced.settled.paperAnimations, replaced.settled.gutterAnimations]).toEqual([0, 0]);
+    await expect(zoomLevel(page)).toHaveText(/^300%/);
+
+    // 300% → 200%, ended by the user's scrolling at frame 2: everything at its final layout at once
+    const scrolled = await sampleGutters(page, 'zoom out', [{ at: 2, do: 'scroll by', left: 40 }]);
+    const afterScroll = scrolled.frames.find((f) => f.frame === 3)!;
+    expect([afterScroll.paperAnimations, afterScroll.gutterAnimations]).toEqual([0, 0]);
+    expect(afterScroll.start).toEqual(scrolled.settled.start);
+    expect(afterScroll.end).toEqual(scrolled.settled.end);
+
+    // The labels' box keeps its fade back in with motion, a transition of its opacity only
+    const boxTransitions = () =>
+      page.locator('[data-numeral-annotations-box]').evaluateAll((boxes) => boxes.map((b) => getComputedStyle(b).transitionProperty));
+    expect(await boxTransitions()).toEqual(['opacity', 'opacity']);
+
+    // Reduced motion: no animation at all, across the boundary too, gutters at once on the paper
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    // Nor any transition of the labels' box, whose height the global reduced-motion rule would
+    // otherwise transition for 0.01 ms, while the zoom's anchored scroll is measured (src/index.css)
+    expect(await boxTransitions()).toEqual(['none', 'none']);
+    for (const step of ['zoom out', 'zoom in'] as const) {
+      const instant = await sampleGutters(page, step);
+      expect([instant.atStart.paperAnimations, instant.atStart.gutterAnimations], step).toEqual([0, 0]);
+      expect(instant.atStart.start, step).toEqual(instant.settled.start);
+      expect(instant.atStart.end, step).toEqual(instant.settled.end);
+      expect(Math.abs(instant.atStart.start.top - instant.atStart.paper.top), step).toBeLessThanOrEqual(0.5);
+    }
+    await expect(viewer).not.toHaveAttribute('data-zooming');
+  });
+
+  /*
+   * The zoom buttons and the + and - shortcuts are click-only: one level per activation, nothing
+   * on pointerdown, nothing repeated while a button or a key is held. A held press's timing is
+   * driven by Playwright's clock, installed once the page is set up, so each test runs exactly
+   * the time it names, and no test waits for a fixed time. The zoom animations are the
+   * browser's, in real time, and are waited for through `settleZoom`.
+   */
+  test.describe('click-only zoom buttons and shortcuts', () => {
+    const zoomIn = (page: Page) => page.getByRole('button', { name: 'Zoom in' });
+    const zoomOut = (page: Page) => page.getByRole('button', { name: 'Zoom out' });
+
+    /** Records every animation started on the paper from now on, for its final play state */
+    const recordAnimations = (page: Page) =>
+      page.evaluate(() => {
+        const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+        const seen: Animation[] = [];
+        (window as unknown as { recordedAnimations: Animation[] }).recordedAnimations = seen;
+        const animate = paper.animate.bind(paper);
+        paper.animate = (...args: Parameters<HTMLElement['animate']>) => {
+          const animation = animate(...args);
+          seen.push(animation);
+          return animation;
+        };
+      });
+    const recorded = (page: Page) =>
+      page.evaluate(() => (window as unknown as { recordedAnimations: Animation[] }).recordedAnimations.map((a) => a.playState));
+    const runningOnPaper = (page: Page) =>
+      page.locator('[data-numeral-paper]').evaluate((paper) => paper.getAnimations().length);
+
+    /** Presses the primary mouse button over a button, and holds it */
+    const mouseDownOn = async (page: Page, button: ReturnType<typeof zoomIn>) => {
+      const box = (await button.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+    };
+
+    /**
+     * The 99-tier numeral at its middle, then the clock, paused, so timers run only through
+     * `runFor`, and every paper animation recorded
+     */
+    async function setUp(page: Page) {
+      const errors: Error[] = [];
+      page.on('pageerror', (error) => errors.push(error));
+      await showLargeAtMiddle(page);
+      await page.clock.install();
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+      await recordAnimations(page);
+      return errors;
+    }
+
+    /*
+     * The reduced-motion regression (UI-13, slice 6 refinement): the global reduced-motion rule
+     * gave the zoom wrapper a 0.01 ms width transition, so a zoom's anchored scroll position was
+     * measured on the previous level's layout, and clamped to it, once the numeral was wider than
+     * the stage (at 1280 × 800, from the 99-tier numeral's middle: 0, 72 and 201 px of horizontal
+     * scroll at 200%, 300% and 400% instead of 36, 211 and 386).
+     */
+    test.describe('with reduced motion, at levels wider than the stage', () => {
+      test.beforeEach(async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+      });
+
+      /**
+       * Zooms with a button click or a key, run in the page, and reads, once React has laid out
+       * the new level (the wrapper's inline width changed): the wrapper's running animations and
+       * its transition property, before any frame passes
+       */
+      const zoomAndInspect = (page: Page, how: 'button' | 'key') =>
+        page.evaluate(
+          (how) =>
+            new Promise<{ animations: string[]; transitionProperty: string; paper: number }>((resolve) => {
+              const image = document.querySelector<HTMLElement>('[data-numeral-image]')!;
+              const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+              new MutationObserver((_, observer) => {
+                observer.disconnect();
+                resolve({
+                  animations: image.getAnimations().map((a) => `${a.constructor.name}:${(a as CSSTransition).transitionProperty ?? ''}`),
+                  transitionProperty: getComputedStyle(image).transitionProperty,
+                  paper: paper.getAnimations().length,
+                });
+              }).observe(image, { attributes: true, attributeFilter: ['style'] });
+              if (how === 'button') document.querySelector<HTMLButtonElement>('button[aria-label="Zoom in"]')!.click();
+              else {
+                document
+                  .querySelector('[data-numeral-stage]')!
+                  .dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true, cancelable: true }));
+              }
+            }),
+          how
+        );
+
+      /** The stage's horizontal scroll position, and its largest */
+      const scrollX = (page: Page) =>
+        page.locator('[data-numeral-stage]').evaluate((el) => ({ left: el.scrollLeft, max: el.scrollWidth - el.clientWidth }));
+
+      for (const how of ['button', 'key'] as const) {
+        test(`keeps the anchor both ways, with no width transition, zooming in with the ${how}`, async ({ page }) => {
+          await showLargeAtMiddle(page);
+          const point = await layoutCentre(page);
+          expect(point.x).toBeCloseTo(175, 0);
+          // 100% → 125% and 150% (still fitting), then 200%, 300% and 400%, each wider than the stage
+          for (const [level, expectedLeft] of [['125%', 0], ['150%', 0], ['200%', 36], ['300%', 211], ['400%', 386]] as const) {
+            const inspected = await zoomAndInspect(page, how);
+            expect(inspected, level).toEqual({ animations: [], transitionProperty: 'none', paper: 0 });
+            await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+            const zoom = parseInt(level) / 100;
+            const centre = await layoutCentre(page);
+            expect(Math.abs(centre.x - point.x) * zoom, `${level}: horizontally`).toBeLessThanOrEqual(1);
+            expect(Math.abs(centre.y - point.y) * zoom, `${level}: vertically`).toBeLessThanOrEqual(1);
+            const { left, max } = await scrollX(page);
+            // The reported positions, at this viewport, where the stage is 684 px wide
+            expect(Math.abs(left - expectedLeft), `${level}: scrollLeft ${left}`).toBeLessThanOrEqual(1);
+            if (level !== '125%' && level !== '150%') expect(left, level).toBeLessThan(max);
+          }
+        });
+      }
+
+      test('keeps the anchor zooming out too, each step instant, with no width transition', async ({ page }) => {
+        await showLargeAtMiddle(page);
+        const point = await layoutCentre(page);
+        for (const level of ['125%', '150%', '200%', '300%', '400%']) {
+          await zoomIn(page).click();
+          await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+        }
+        for (const [level, width] of [['300%', 1050], ['200%', 700], ['150%', 525], ['125%', 437.5], ['100%', 350]] as const) {
+          await zoomOut(page).click();
+          await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+          // The final width at once, laid out: no transition on the zoom wrapper
+          const wrapper = await page.locator('[data-numeral-image]').evaluate((el) => ({
+            style: el.style.width,
+            box: el.getBoundingClientRect().width,
+            animations: el.getAnimations().length,
+            transitionProperty: getComputedStyle(el).transitionProperty,
+          }));
+          expect(wrapper, level).toEqual({ style: `${width}px`, box: width, animations: 0, transitionProperty: 'none' });
+          expect(await runningOnPaper(page), level).toBe(0);
+          const centre = await layoutCentre(page);
+          const zoom = parseInt(level) / 100;
+          expect(Math.abs(centre.x - point.x) * zoom, `${level}: horizontally`).toBeLessThanOrEqual(1);
+          expect(Math.abs(centre.y - point.y) * zoom, `${level}: vertically`).toBeLessThanOrEqual(1);
+        }
+      });
+    });
+
+    test('changes exactly one level for a click, with nothing repeated after it', async ({ page }) => {
+      const errors = await setUp(page);
+      await zoomIn(page).click();
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await settleZoom(page);
+      await zoomOut(page).click();
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('100%');
+      await settleZoom(page);
+      expect(await recorded(page)).toEqual(['finished', 'finished']);
+      expect(errors).toEqual([]);
+    });
+
+    test('does not zoom on press, however long the button is held: one level, from its click', async ({ page }) => {
+      const errors = await setUp(page);
+      await mouseDownOn(page, zoomIn(page));
+      // Nothing on pointerdown, and nothing while it is held
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('100%');
+      expect(await recorded(page)).toEqual([]);
+      await page.mouse.up(); // the click
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await settleZoom(page);
+      expect(await recorded(page)).toEqual(['finished']);
+      expect(errors).toEqual([]);
+    });
+
+    test('does not zoom for a press released outside the button, and leaves nothing pending for the next click', async ({ page }) => {
+      await setUp(page);
+      await mouseDownOn(page, zoomOut(page));
+      await page.mouse.move(5, 5);
+      await page.mouse.up(); // no click on the button
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('100%');
+      expect(await recorded(page)).toEqual([]);
+      // The next activation, by the mouse or the keyboard, is a step
+      await zoomOut(page).click();
+      await expect(zoomLevel(page)).toHaveText('75%');
+      await zoomOut(page).focus();
+      await page.keyboard.press('Enter');
+      await expect(zoomLevel(page)).toHaveText('50%');
+    });
+
+    test('stops at the limits, without errors or further animations, and the other button then works', async ({ page }) => {
+      const errors = await setUp(page);
+      for (const level of ['125%', '150%', '200%', '300%', '400%']) {
+        await zoomIn(page).click();
+        await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+        await settleZoom(page);
+      }
+      await expect(zoomLevel(page)).toHaveText('400% (maximum zoom)');
+      expect(await recorded(page)).toHaveLength(5);
+      // At the limit, a press and its click do nothing
+      await mouseDownOn(page, zoomIn(page));
+      await page.clock.runFor(3000);
+      await page.mouse.up();
+      await expect(zoomLevel(page)).toHaveText('400% (maximum zoom)');
+      expect(await recorded(page)).toHaveLength(5);
+      expect(await runningOnPaper(page)).toBe(0);
+      // The other button, as usual, and down to the minimum
+      for (const level of ['300%', '200%', '150%', '125%', '100%', '75%', '50%', '25%']) {
+        await zoomOut(page).click();
+        await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+        await settleZoom(page);
+      }
+      await expect(zoomLevel(page)).toHaveText('25% (minimum zoom)');
+      await mouseDownOn(page, zoomOut(page));
+      await page.clock.runFor(3000);
+      await page.mouse.up();
+      await expect(zoomLevel(page)).toHaveText('25% (minimum zoom)');
+      expect(await recorded(page)).toHaveLength(13);
+      expect(errors).toEqual([]);
+    });
+
+    test('keeps one level per Enter or Space on a button, and the viewer’s shortcuts', async ({ page }) => {
+      await setUp(page);
+      await zoomIn(page).focus();
+      await page.keyboard.press('Enter');
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await page.keyboard.press('Space');
+      await expect(zoomLevel(page)).toHaveText('150%');
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('150%');
+      await expect(zoomIn(page)).toBeFocused();
+      const viewer = page.getByRole('group', { name: 'Numeral viewer' });
+      await viewer.focus();
+      await page.keyboard.press('+');
+      await expect(zoomLevel(page)).toHaveText('200%');
+      await page.keyboard.press('-');
+      await expect(zoomLevel(page)).toHaveText('150%');
+      await page.keyboard.press('0');
+      await expect(zoomLevel(page)).toHaveText('100%');
+    });
+
+    test('zooms one level for a held + or - shortcut: the key repeating is ignored', async ({ page }) => {
+      await setUp(page);
+      await page.getByRole('group', { name: 'Numeral viewer' }).focus();
+      await page.evaluate(() => {
+        const w = window as unknown as { keydowns: boolean[] };
+        w.keydowns = [];
+        document.querySelector('[data-numeral-stage]')!.addEventListener('keydown', (e) => w.keydowns.push((e as KeyboardEvent).repeat));
+      });
+      // A key held down: the first keydown, then repeated ones (Playwright sends a keydown for a key
+      // already down with `repeat` set, as the operating system's auto-repeat does)
+      const hold = async (key: string) => {
+        for (let i = 0; i < 6; i++) await page.keyboard.down(key);
+        await page.keyboard.up(key);
+      };
+      await hold('+');
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await page.clock.runFor(3000);
+      await expect(zoomLevel(page)).toHaveText('125%');
+      // Released and pressed again: a new key press
+      await hold('+');
+      await expect(zoomLevel(page)).toHaveText('150%');
+      await hold('-');
+      await expect(zoomLevel(page)).toHaveText('125%');
+      await hold('-');
+      await expect(zoomLevel(page)).toHaveText('100%');
+      const keydowns = await page.evaluate(() => (window as unknown as { keydowns: boolean[] }).keydowns);
+      expect(keydowns.filter((repeat) => !repeat)).toHaveLength(4);
+      expect(keydowns.filter((repeat) => repeat)).toHaveLength(20);
+      await settleZoom(page);
+      // One animation for each key press, none for a repeat (a press may retarget the one before)
+      const states = await recorded(page);
+      expect(states).toHaveLength(4);
+      expect(states.at(-1)).toBe('finished');
+    });
+
+    test.describe('with touch', () => {
+      test.use({ hasTouch: true });
+
+      /** One finger, through Chromium's touch input: touch(type, at) starts, moves or lifts it */
+      const finger = async (page: Page) => {
+        const cdp = await page.context().newCDPSession(page);
+        return (type: 'touchStart' | 'touchMove' | 'touchEnd', at?: { x: number; y: number }) =>
+          cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [{ x: at.x, y: at.y }] : [] });
+      };
+      const centreOf = async (button: ReturnType<typeof zoomIn>) => {
+        const box = (await button.boundingBox())!;
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+
+      test('changes exactly one level for a tap, its click included', async ({ page }) => {
+        await setUp(page);
+        await zoomIn(page).tap();
+        await expect(zoomLevel(page)).toHaveText('125%');
+        await page.clock.runFor(3000);
+        await expect(zoomLevel(page)).toHaveText('125%');
+        await settleZoom(page);
+        expect(await recorded(page)).toEqual(['finished']);
+      });
+
+      test('does not zoom when a touch begins on a button and the browser takes it over to scroll', async ({ page }) => {
+        await setUp(page);
+        const touch = await finger(page);
+        const at = await centreOf(zoomIn(page));
+        await page.evaluate(() => {
+          const w = window as unknown as { cancelledPointer?: string };
+          window.addEventListener('pointercancel', (e) => (w.cancelledPointer = e.pointerType), { once: true });
+        });
+        await touch('touchStart', at);
+        // Nothing on the touch itself, nor while the finger rests on the button
+        await page.clock.runFor(3000);
+        await expect(zoomLevel(page)).toHaveText('100%');
+        // A drag from the button: the page pans, which cancels the pointer, and sends no click
+        for (let dy = 20; dy <= 200; dy += 20) await touch('touchMove', { x: at.x, y: at.y + dy });
+        await expect.poll(() => page.evaluate(() => (window as unknown as { cancelledPointer?: string }).cancelledPointer)).toBe('touch');
+        await touch('touchEnd');
+        await page.clock.runFor(3000);
+        await expect(zoomLevel(page)).toHaveText('100%');
+        expect(await recorded(page)).toEqual([]);
+      });
+    });
+  });
+});
+
+/*
+ * UI-13: while the annotation gutters are shown, the stage content and the paper have no
+ * horizontal padding, under the gutters' own container query (`@min-[31rem]`): the gutters take
+ * its place. They sit flush with the stage's edges at every scroll position, and the paper's
+ * edge is the numeral image's. Where the stage is narrower than 31rem the gutters are hidden and
+ * both paddings are as without annotations; vertical padding is never removed.
+ */
+test.describe('annotation gutter geometry (UI-13)', () => {
+  /** Chooses the 15th of the calendar's month in Date mode and waits for its numeral */
+  async function showDate(page: Page) {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 15/ })).toBeVisible();
+  }
+
+  async function withAnnotations(page: Page, width: number) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.reload();
+  }
+
+  const annotationSwitch = (page: Page) => page.getByRole('switch', { name: 'Show Tier Annotations:' });
+
+  /** The stage's, the stage content's, the paper's and the gutters' geometry, as laid out */
+  const geometry = (page: Page) =>
+    page.evaluate(() => {
+      const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+      const content = document.querySelector<HTMLElement>('[data-numeral-stage-content]')!;
+      const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+      const image = document.querySelector<HTMLElement>('[data-numeral-image]')!;
+      const r = stage.getBoundingClientRect();
+      const padding = (el: HTMLElement) => {
+        const s = getComputedStyle(el);
+        return [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].map(parseFloat);
+      };
+      const gutter = (side: string) => {
+        const g = document.querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`);
+        if (!g) return null;
+        const b = g.getBoundingClientRect();
+        return { display: getComputedStyle(g).display, left: b.left, right: b.right, width: b.width };
+      };
+      const box = (el: HTMLElement) => {
+        const b = el.getBoundingClientRect();
+        return { left: b.left, right: b.right };
+      };
+      return {
+        clientWidth: stage.clientWidth,
+        edges: { left: r.left + stage.clientLeft, right: r.left + stage.clientLeft + stage.clientWidth },
+        fits: stage.scrollWidth <= stage.clientWidth,
+        maxScroll: stage.scrollWidth - stage.clientWidth,
+        contentPadding: padding(content),
+        paperPadding: padding(paper),
+        paper: box(paper),
+        image: box(image),
+        start: gutter('start'),
+        end: gutter('end'),
+      };
+    });
+
+  const twoFrames = (page: Page) =>
+    page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+  for (const mode of ['number', 'date'] as const) {
+    test(`keeps both gutters flush with the stage's edges at every scroll position, at 200% and 400% (${mode})`, async ({ page }) => {
+      await withAnnotations(page, 1280);
+      if (mode === 'number') await showNumber(page, '3047620');
+      else await showDate(page);
+      const viewer = page.getByRole('group', { name: 'Numeral viewer' });
+      await viewer.scrollIntoViewIfNeeded();
+      await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+      const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+
+      for (const [level, clicks] of [['200%', 3], ['400%', 2]] as const) {
+        for (let i = 0; i < clicks; i++) await zoomIn.click();
+        await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+        await settleZoom(page);
+        const { maxScroll, fits } = await geometry(page);
+        expect(fits, level).toBe(false);
+        for (const [where, fraction] of [['leftmost', 0], ['middle', 0.5], ['rightmost', 1]] as const) {
+          await viewer.evaluate((el, left) => el.scrollTo({ left, behavior: 'instant' }), Math.round(maxScroll * fraction));
+          await twoFrames(page);
+          const g = await geometry(page);
+          const at = `${mode}, ${level}, ${where}`;
+          expect(g.start!.display, at).toBe('flex');
+          expect(g.end!.display, at).toBe('flex');
+          // Symmetric, also in Date mode, whose end gutter is empty
+          expect(g.start!.width, at).toBeCloseTo(48, 1);
+          expect(g.end!.width, at).toBeCloseTo(48, 1);
+          expect(Math.abs(g.start!.left - g.edges.left), `${at}: start flush`).toBeLessThanOrEqual(0.5);
+          expect(Math.abs(g.edges.right - g.end!.right), `${at}: end flush`).toBeLessThanOrEqual(0.5);
+          // Vertical padding kept, horizontal padding gone
+          expect(g.contentPadding, at).toEqual([16, 0, 16, 0]);
+          expect(g.paperPadding, at).toEqual([12, 0, 12, 0]);
+        }
+      }
+    });
+  }
+
+  test('removes the horizontal padding only while the gutters are shown: not below 31rem, nor without annotations', async ({ page }) => {
+    // At 600 px the stage is wider than 31rem (496 px) and the gutters are shown; at 540 px it is
+    // narrower, and they are hidden although the annotations are on
+    await withAnnotations(page, 600);
+    await showNumber(page, '3047620');
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+
+    const wide = await geometry(page);
+    expect(wide.clientWidth).toBeGreaterThanOrEqual(496);
+    expect([wide.start!.display, wide.end!.display]).toEqual(['flex', 'flex']);
+    expect(wide.contentPadding).toEqual([16, 0, 16, 0]);
+    expect(wide.paperPadding).toEqual([12, 0, 12, 0]);
+    // The numeral fits at 100% (350 + 96 = 446 px): the paper's edges are the image's, and each
+    // gutter touches the paper
+    expect(wide.fits).toBe(true);
+    expect(Math.abs(wide.paper.left - wide.image.left)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(wide.paper.right - wide.image.right)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(wide.paper.left - wide.start!.right)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(wide.end!.left - wide.paper.right)).toBeLessThanOrEqual(0.5);
+
+    await page.setViewportSize({ width: 540, height: 900 });
+    await twoFrames(page);
+    const narrow = await geometry(page);
+    expect(narrow.clientWidth).toBeLessThan(496);
+    expect([narrow.start!.display, narrow.end!.display]).toEqual(['none', 'none']);
+    expect(narrow.contentPadding).toEqual([16, 16, 16, 16]);
+    expect(narrow.paperPadding).toEqual([12, 12, 12, 12]);
+
+    // Back above the threshold, then without annotations: the padding as it always was
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await twoFrames(page);
+    expect((await geometry(page)).contentPadding).toEqual([16, 0, 16, 0]);
+    await annotationSwitch(page).click();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(0);
+    const plain = await geometry(page);
+    expect(plain.contentPadding).toEqual([16, 16, 16, 16]);
+    expect(plain.paperPadding).toEqual([12, 12, 12, 12]);
+  });
+
+  test('keeps the point at the centre when annotations are toggled at an overflowing zoom with reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await withAnnotations(page, 1280);
+    const viewer = await showNumber(page, '3047620');
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    // The stage content and the paper are out of the global 0.01 ms reduced-motion transition, so
+    // their padding is final when the kept view is measured (src/index.css)
+    const transitions = await page.evaluate(() =>
+      ['[data-numeral-stage-content]', '[data-numeral-paper]'].map((s) => getComputedStyle(document.querySelector(s)!).transitionProperty)
+    );
+    expect(transitions).toEqual(['none', 'none']);
+
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+    await expect(zoomLevel(page)).toHaveText(/^200%/);
+    const { fits, maxScroll } = await geometry(page);
+    expect(fits).toBe(false);
+    // The user scrolls away from the start, to the middle of the sideways range: a point that
+    // stays reachable without the gutters, whose layout is narrower (towards either end the
+    // browser would clamp it, and the viewer keeps it as the intended view, by design)
+    await viewer.evaluate((el, left) => el.scrollTo({ left, top: 60, behavior: 'instant' }), Math.round(maxScroll / 2));
+    await twoFrames(page);
+
+    /** The image point at the stage's centre, as fractions of the image, and the image's size */
+    const centre = () =>
+      page.evaluate(() => {
+        const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+        const image = document.querySelector<HTMLElement>('[data-numeral-image]')!.getBoundingClientRect();
+        const r = stage.getBoundingClientRect();
+        const x = r.left + stage.clientLeft + stage.clientWidth / 2;
+        const y = r.top + stage.clientTop + stage.clientHeight / 2;
+        return { fx: (x - image.left) / image.width, fy: (y - image.top) / image.height, width: image.width, height: image.height };
+      });
+    const offBy = (a: Awaited<ReturnType<typeof centre>>, b: Awaited<ReturnType<typeof centre>>) =>
+      Math.max(Math.abs(a.fx - b.fx) * a.width, Math.abs(a.fy - b.fy) * a.height);
+
+    const point = await centre();
+    for (const [shown, label] of [[false, 'hidden'], [true, 'shown again']] as const) {
+      await annotationSwitch(page).click();
+      await expect(page.locator('[data-numeral-annotations]')).toHaveCount(shown ? 2 : 0);
+      await twoFrames(page);
+      const g = await geometry(page);
+      expect(g.contentPadding, label).toEqual(shown ? [16, 0, 16, 0] : [16, 16, 16, 16]);
+      expect(offBy(await centre(), point), `annotations ${label}`).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+/*
+ * UI-13: the paper's side bleed under the annotation gutters. The paper's edge and a gutter's meet
+ * exactly (the geometry tests above), but each is antialiased on its own where that edge falls on
+ * a fraction of a device pixel: while a zoom animates, and at rest at fractional display scaling.
+ * Without the bleed, the paper's dark ring and the stage's dark backdrop showed through that
+ * seam; the bleed, two offset shadows of the gutters' colour under the gutters, covers it. Checked
+ * on rendered pixels, since every bounding rect already matches. In the dark theme, where the
+ * ring and the backdrop differ most from the paper; the colour expected is the gutters' own.
+ */
+test.describe('paper side bleed under the annotation gutters (UI-13)', () => {
+  test.use({ colorScheme: 'dark' });
+
+  /** Marks the paper as without the bleed, or with it again, in the page only (React keeps it) */
+  const setBleed = (page: Page, on: boolean) =>
+    page.evaluate((on) => {
+      const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+      if (on) paper.setAttribute('data-numeral-gutter-bleed', '');
+      else paper.removeAttribute('data-numeral-gutter-bleed');
+    }, on);
+
+  const frames = (page: Page) =>
+    page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+  /**
+   * How far the seams between the paper and the gutters depart from the gutters' colour, as drawn
+   * now: for a narrow strip around each of the paper's drawn edges (±4 CSS px, over the paper's
+   * middle 60%), each device-pixel column's median of the largest channel difference from the
+   * start gutter's computed background (0 to 255), and the worst column of both seams
+   */
+  async function seamDeparture(page: Page) {
+    const { paper, colour } = await page.evaluate(() => {
+      const p = document.querySelector('[data-numeral-paper]')!.getBoundingClientRect();
+      const bg = getComputedStyle(document.querySelector('[data-numeral-annotations="start"]')!).backgroundColor;
+      return { paper: { left: p.left, right: p.right, top: p.top, height: p.height }, colour: bg.match(/[\d.]+/g)!.slice(0, 3).map(Number) };
+    });
+    const y = Math.ceil(paper.top + 0.2 * paper.height);
+    const height = Math.floor(0.6 * paper.height);
+    let worst = 0;
+    for (const edge of [paper.left, paper.right]) {
+      const png = await page.screenshot({ clip: { x: Math.floor(edge) - 4, y, width: 9, height } });
+      const departure = await page.evaluate(
+        async ({ data, colour }) => {
+          const image = new Image();
+          image.src = `data:image/png;base64,${data}`;
+          await image.decode();
+          const canvas = document.createElement('canvas');
+          [canvas.width, canvas.height] = [image.width, image.height];
+          const context = canvas.getContext('2d')!;
+          context.drawImage(image, 0, 0);
+          const pixels = context.getImageData(0, 0, image.width, image.height).data;
+          let worstColumn = 0;
+          for (let x = 0; x < image.width; x++) {
+            const column: number[] = [];
+            for (let row = 0; row < image.height; row++) {
+              const k = 4 * (row * image.width + x);
+              column.push(Math.max(...[0, 1, 2].map((c) => Math.abs(pixels[k + c] - colour[c]))));
+            }
+            column.sort((a, b) => a - b);
+            worstColumn = Math.max(worstColumn, column[Math.floor(column.length / 2)]);
+          }
+          return worstColumn;
+        },
+        { data: png.toString('base64'), colour }
+      );
+      worst = Math.max(worst, departure);
+    }
+    return worst;
+  }
+
+  /**
+   * Zooms one step and measures the seams with the zoom animation paused part-way (the paper's
+   * and both gutters', at the same time), then ends it; returns the worst departure of all frames
+   */
+  async function zoomSeams(page: Page, button: 'Zoom in' | 'Zoom out') {
+    await page.getByRole('button', { name: button }).click();
+    let worst = 0;
+    for (const time of [40, 100, 160]) {
+      const animations = await page.evaluate((time) => {
+        const all = ['[data-numeral-paper]', '[data-numeral-annotations="start"]', '[data-numeral-annotations="end"]'].flatMap((s) =>
+          document.querySelector(s)!.getAnimations()
+        );
+        for (const a of all) {
+          a.pause();
+          a.currentTime = time;
+        }
+        return all.length;
+      }, time);
+      expect(animations, `${button} at ${time} ms: animated`).toBe(3);
+      await frames(page);
+      worst = Math.max(worst, await seamDeparture(page));
+    }
+    await page.evaluate(() => document.querySelector('[data-numeral-paper]')!.getAnimations().forEach((a) => a.finish()));
+    await settleZoom(page);
+    return worst;
+  }
+
+  /** Each channel within this of the gutters' colour: no seam (measured 0 with the bleed) */
+  const SEAMLESS = 4;
+
+  async function showAnnotated(page: Page, width: number) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript(() => localStorage.setItem('mayastack:showTierAnnotations', 'true'));
+    await page.reload();
+    const viewer = await showNumber(page, '3047620');
+    await viewer.scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+    return viewer;
+  }
+
+  for (const deviceScaleFactor of [1, 1.5]) {
+    test.describe(`at a device scale factor of ${deviceScaleFactor}`, () => {
+      test.use({ deviceScaleFactor });
+
+      test('shows no seam between the paper and the gutters while zooming out and in, nor once settled', async ({ page }) => {
+        // At 1600 px the layout fits from 25% to 150%: each gutter touches the paper
+        await showAnnotated(page, 1600);
+        const seams: Record<string, number> = {};
+        for (const bleed of [false, true]) {
+          await setBleed(page, bleed);
+          const label = bleed ? 'with the bleed' : 'without';
+          seams[`${label}: settled`] = await seamDeparture(page);
+          seams[`${label}: 100% → 75%`] = await zoomSeams(page, 'Zoom out');
+          seams[`${label}: 75% → 100%`] = await zoomSeams(page, 'Zoom in');
+        }
+        const all = JSON.stringify(seams);
+        // The measurement sees the seam: without the bleed it shows while animating, both ways,
+        // and settled too at fractional scaling
+        expect(seams['without: 100% → 75%'], all).toBeGreaterThan(SEAMLESS);
+        expect(seams['without: 75% → 100%'], all).toBeGreaterThan(SEAMLESS);
+        if (!Number.isInteger(deviceScaleFactor)) expect(seams['without: settled'], all).toBeGreaterThan(SEAMLESS);
+        // With it, nowhere
+        for (const key of ['with the bleed: settled', 'with the bleed: 100% → 75%', 'with the bleed: 75% → 100%']) {
+          expect(seams[key], `${key}: ${all}`).toBeLessThanOrEqual(SEAMLESS);
+        }
+        // Also down to the smallest zoom level and back
+        for (const [step, button] of [['100% → 75%', 'Zoom out'], ['75% → 50%', 'Zoom out'], ['50% → 25%', 'Zoom out'], ['25% → 50%', 'Zoom in']] as const) {
+          expect(await zoomSeams(page, button), step).toBeLessThanOrEqual(SEAMLESS);
+        }
+        expect(await seamDeparture(page), '50%, settled').toBeLessThanOrEqual(SEAMLESS);
+      });
+    });
+  }
+
+  /** The paper's computed box-shadow, its and the gutters' boxes, and the stage's scroll geometry */
+  const paperState = (page: Page) =>
+    page.evaluate(() => {
+      const stage = document.querySelector<HTMLElement>('[data-numeral-stage]')!;
+      const paper = document.querySelector<HTMLElement>('[data-numeral-paper]')!;
+      const rect = (el: Element | null) => {
+        if (!el) return null;
+        const b = el.getBoundingClientRect();
+        return [b.left, b.top, b.width, b.height];
+      };
+      const start = document.querySelector('[data-numeral-annotations="start"]');
+      return {
+        boxShadow: getComputedStyle(paper).boxShadow,
+        gutterColour: start ? getComputedStyle(start).backgroundColor : null,
+        rects: [rect(paper), rect(start), rect(document.querySelector('[data-numeral-annotations="end"]'))],
+        scroll: [stage.scrollWidth, stage.scrollHeight, stage.clientWidth, stage.scrollLeft, stage.scrollTop],
+        fits: stage.scrollWidth <= stage.clientWidth,
+      };
+    });
+
+  test('adds the bleed before the paper’s ring and shadow, keeping both, only while the gutters are shown, and moves nothing', async ({ page }) => {
+    const viewer = await showAnnotated(page, 1600);
+    const annotationSwitch = page.getByRole('switch', { name: 'Show Tier Annotations:' });
+
+    // The paper as without annotations: its ring (1 px, no blur) and `shadow-sm` (two blurred shadows)
+    await annotationSwitch.click();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(0);
+    const plain = (await paperState(page)).boxShadow;
+    expect(plain).toMatch(/ 0px 0px 0px 1px/);
+    expect(plain).toMatch(/ 0px 1px 3px 0px/);
+    expect(plain).toMatch(/ 0px 1px 2px -1px/);
+    await annotationSwitch.click();
+    await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+
+    // Fitting (100%) and overflowing (200%, scrolled to the middle)
+    for (const [level, clicks, fits] of [['100%', 0, true], ['200%', 3, false]] as const) {
+      for (let i = 0; i < clicks; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+      await expect(zoomLevel(page)).toHaveText(new RegExp(`^${level}`));
+      await settleZoom(page);
+      if (!fits) await viewer.evaluate((el) => el.scrollTo({ left: Math.round((el.scrollWidth - el.clientWidth) / 2), behavior: 'instant' }));
+      await frames(page);
+      const shown = await paperState(page);
+      expect(shown.fits, level).toBe(fits);
+      // The gutters' own colour on both sides, then exactly the shadows the paper has without it
+      const colour = shown.gutterColour!;
+      expect(shown.boxShadow, level).toBe(`${colour} -8px 0px 0px 0px, ${colour} 8px 0px 0px 0px, ${plain}`);
+      // A box-shadow is no layout: the same boxes and scroll geometry without the bleed
+      await setBleed(page, false);
+      await frames(page);
+      const without = await paperState(page);
+      expect(without.boxShadow, level).toBe(plain);
+      expect(without.rects, level).toEqual(shown.rects);
+      expect(without.scroll, level).toEqual(shown.scroll);
+      await setBleed(page, true);
+    }
+
+    // Below 31rem the gutters are hidden, and the paper is as without annotations
+    await page.setViewportSize({ width: 540, height: 900 });
+    await frames(page);
+    const narrow = await paperState(page);
+    expect(narrow.rects[1]).toEqual([0, 0, 0, 0]);
+    expect(narrow.boxShadow).toBe(plain);
+  });
 });

@@ -14,7 +14,9 @@ export default function DisplaySettings() {
     showPlaceTierGuides,
     setShowPlaceTierGuides,
     showTierHairlines,
-    setShowTierHairlines
+    setShowTierHairlines,
+    showTierAnnotations,
+    setShowTierAnnotations
   } = useDisplaySettings();
   const viewerGuidesHintId = useId();
 
@@ -52,7 +54,7 @@ export default function DisplaySettings() {
       <fieldset className="space-y-2" aria-describedby={viewerGuidesHintId}>
         <legend className="text-sm font-medium text-fg-muted">Viewer guides</legend>
         <p id={viewerGuidesHintId} className="text-sm text-fg-muted">
-          Shown on screen only, not included in exports.
+          Shown on screen only, not included in exports. Tier annotations are hidden on narrow viewer widths.
         </p>
         <div className="flex flex-wrap items-center gap-4">
           <ToggleSwitch
@@ -64,6 +66,11 @@ export default function DisplaySettings() {
             label="Show Dividing Hairlines:"
             value={showTierHairlines}
             onChange={setShowTierHairlines}
+          />
+          <ToggleSwitch
+            label="Show Tier Annotations:"
+            value={showTierAnnotations}
+            onChange={setShowTierAnnotations}
           />
         </div>
       </fieldset>

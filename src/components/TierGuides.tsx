@@ -17,9 +17,7 @@ interface GuideProps {
 }
 
 interface PlaceTierGuidesProps extends GuideProps {
-  /** The numeral's background colour, which this layer paints in place of the SVG's own */
-  background: RgbaColor;
-  /** The guides' colours for that background (getGuideColors) */
+  /** The guides' colours for the numeral's background as the viewer shows it (getGuideColors) */
   colors: Pick<GuideColors, 'card' | 'cardHover' | 'cardHoverShadow'>;
   /**
    * The viewer that scrolls the numeral (NumeralViewport's scroller): while the pointer stays
@@ -36,17 +34,18 @@ const bandKey = (groupIndex: number, exponent: number) => `${groupIndex}-${expon
  * under a mouse or pen pointer a little stronger, with a shadow.
  *
  * An HTML layer placed before the numeral's SVG in the viewer's zoom wrapper (NumeralViewport's
- * `underlay`), never part of the SVG, so it is never exported. While it is shown, a screen-only
- * rule in `src/index.css` makes the SVG's background rectangle transparent and lifts the SVG
- * above this layer, which paints the same background itself, then the cards. The glyphs and the
- * grid are therefore drawn over the cards exactly as over the background: their pixels are not
- * changed, whatever their colour or alpha.
+ * `underlay`), never part of the SVG, so it is never exported. The layer paints only the cards:
+ * the viewer's paper paints the numeral's background behind it, once (NumeralViewport), and a
+ * screen-only rule in `src/index.css` makes the SVG's own background rectangle transparent in
+ * the viewer and, while this layer is shown, lifts the SVG above it. The glyphs and the grid are
+ * therefore drawn over the cards exactly as over the background: their pixels are not changed,
+ * whatever their colour or alpha.
  *
  * The layer is hidden from assistive technology and never takes the pointer: the hovered card
  * is found from the pointer's position over the zoom wrapper, by geometry, and kept up to date
  * while the viewer (`scrollerRef`) scrolls under a still pointer. Touch shows no hover.
  */
-export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, layout, background, colors, scrollerRef }) => {
+export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, layout, colors, scrollerRef }) => {
   const bands = useMemo(() => getPlaceTierBands(digitGroups, layout), [digitGroups, layout]);
   const layerRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -97,7 +96,6 @@ export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, l
       className="absolute inset-0 pointer-events-none"
       data-numeral-underlay
       data-place-tier-guides
-      style={{ backgroundColor: rgbaToCss(background) }}
     >
       {bands.map(({ groupIndex, exponent, top, height, left, width }) => {
         const isHovered = hovered === bandKey(groupIndex, exponent);
@@ -112,8 +110,10 @@ export const PlaceTierGuides: React.FC<PlaceTierGuidesProps> = ({ digitGroups, l
             style={{
               top: `${top * 100}%`,
               height: `${height * 100}%`,
+              // From the group's left edge to its right edge: in Number mode's single group,
+              // left 0% and right 0%, the whole numeral image (UI-13)
               left: `${left * 100}%`,
-              width: `${width * 100}%`,
+              right: `${(1 - left - width) * 100}%`,
               backgroundColor: isHovered ? cardHover : card,
               boxShadow: isHovered ? colors.cardHoverShadow : 'none',
             }}
@@ -153,8 +153,10 @@ export const TierHairlines: React.FC<TierHairlinesProps> = ({ digitGroups, layou
           data-boundary={boundary}
           style={{
             top: `${top * 100}%`,
+            // From the group's left edge to its right edge, as the bands: in Number mode's single
+            // group, left 0% and right 0%, the whole numeral image (UI-13)
             left: `${left * 100}%`,
-            width: `${width * 100}%`,
+            right: `${(1 - left - width) * 100}%`,
             backgroundColor: lineColor,
           }}
         />

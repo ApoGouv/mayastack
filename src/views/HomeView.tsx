@@ -6,8 +6,8 @@ import MayanRenderer from '@components/MayanRenderer';
 import MayanExportPanel from '@components/MayanExportPanel';
 import Base20Display from '@components/Base20Display';
 import Base20Expansion, { TierBadge } from '@components/Base20Expansion';
+import { Functions } from '@components/icons/Functions';
 import { Layers } from '@components/icons/Layers';
-import { ViewAgenda } from '@components/icons/ViewAgenda';
 import RenderModeSelector from '@/components/inputs/RenderModeSelector';
 import type { RenderMode } from '@/components/inputs/RenderModeSelector';
 import DisplaySettings from '@components/DisplaySettings';
@@ -16,9 +16,14 @@ import NumeralViewport from '@components/NumeralViewport';
 import DateInput from '@components/inputs/DateInput';
 import type { DateParts } from '@components/inputs/DateInput';
 import { PlaceTierGuides, TierHairlines } from '@components/TierGuides';
+import TierAnnotations from '@components/TierAnnotations';
+import TierOrientation from '@components/TierOrientation';
+import GlyphKey from '@components/GlyphKey';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { getNumeralSize, type NumeralLayout } from '@utils/tierGuides';
+import { getNumeralSize, getTierCount, type NumeralLayout } from '@utils/tierGuides';
+import { getTierAnnotationRows } from '@utils/tierAnnotations';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
+import { rgbaToCss } from '@utils/colors';
 
 type DigitGroup = { label: string; digits: number[] };
 
@@ -56,7 +61,8 @@ export default function HomeView() {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   // The numeral viewer's scroller, which the place tier guides follow while it scrolls
   const viewerScrollerRef = useRef<HTMLDivElement>(null);
-  const { showPlaceTierGuides, showTierHairlines, backgroundColor, resolvedTheme } = useDisplaySettings();
+  const { showPlaceTierGuides, showTierHairlines, showTierAnnotations, backgroundColor, resolvedTheme } =
+    useDisplaySettings();
 
   // Derived values: the exact bigint value, or null while the input is empty or invalid
   // (NumberInput shows the validation message from the same validateNumberInput)
@@ -108,8 +114,13 @@ export default function HomeView() {
     [backgroundColor, resolvedTheme]
   );
   const digitGroups = useMemo(() => mayanData?.digitGroups.map((g) => g.digits) ?? [], [mayanData]);
-  // The numeral's width in SVG units, shown at 1 CSS px per unit at 100% zoom
-  const numeralWidth = getNumeralSize(digitGroups, numeralLayout).width;
+  // The numeral's size in SVG units, shown at 1 CSS px per unit at 100% zoom
+  const numeralSize = getNumeralSize(digitGroups, numeralLayout);
+  // The tier annotation rows, shared by both gutters; not calculated while the annotations are off
+  const annotationRows = useMemo(
+    () => (showTierAnnotations ? getTierAnnotationRows(digitGroups, numeralLayout) : []),
+    [showTierAnnotations, digitGroups, numeralLayout]
+  );
 
   // What the viewer and the base-20 card say while there is no result to show
   const emptyMessages: { viewer: string; base20: string } =
@@ -129,11 +140,12 @@ export default function HomeView() {
     setDateInputRaw(raw);
   };
 
-  // The viewer card's heading, the same with and without a result. Its icon (stacked bars) differs
-  // from the base-20 card's (Layers)
+  // The viewer card's heading, the same with and without a result. Its icon (Layers, stacked
+  // tiers) differs from the base-20 card's (Functions, Σ for the positional sum). It never wraps
+  // (it fits at 320 px), so the header cluster is never narrower than the whole heading
   const viewerHeading = (
-    <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
-      <ViewAgenda className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
+    <h2 className="font-heading text-lg font-semibold flex items-center gap-2 whitespace-nowrap">
+      <Layers className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
       Mayan Numeral Stack
     </h2>
   );
@@ -151,7 +163,9 @@ export default function HomeView() {
           left (5 of 12 columns) and the numeral viewer on the right (7 of 12), spanning all three
           rows. Below lg, one column in source order: input, viewer, base-20, settings. The last row
           takes the viewer's extra height (1fr), so the left cards stay directly under each other.
-          Every card stays in place without a valid input; only their results need one. */}
+          Every card stays in place without a valid input; only their results need one. Items
+          start at the top of their areas (`items-start`), so the viewer card is only as tall as
+          its content, and its area leaves it room to stick (UI-13, slice 5e). */}
       <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12 lg:grid-rows-[auto_auto_1fr]">
         {/* Input Section: Render Mode + Input */}
         <section className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none space-y-4 lg:col-span-5">
@@ -170,8 +184,16 @@ export default function HomeView() {
           )}
         </section>
 
-        {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result */}
-        <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3">
+        {/* Right: Results Section. Only the numeral, its viewer controls and Export need a result.
+            On desktop screens tall enough for all of it (the `sticky-viewer` variant, src/index.css),
+            it sticks 1rem below the top of the screen while the page scrolls (UI-13, slice 5e):
+            within its grid area, which spans all three rows, so it moves only while the left
+            column is taller than the card, and stops at the column's end, above the footer. The
+            stage keeps its own scrolling */}
+        <div
+          data-viewer-card
+          className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-span-3 sticky-viewer:sticky sticky-viewer:top-4"
+        >
           {/* The heading leads the viewer's header row, beside its zoom controls; without a result,
               it stands alone */}
           {hasValidinput && mayanData ? (
@@ -179,21 +201,49 @@ export default function HomeView() {
             <MayanExportPanel filename={mayanData?.filename ?? ''}>
               {(ref) =>
                 <NumeralViewport
-                  numeralWidth={numeralWidth}
+                  numeralWidth={numeralSize.width}
+                  numeralHeight={numeralSize.height}
+                  // The numeral's background, as MayanRenderer fills it: the viewer's paper
+                  // paints it on screen, once, around and behind the numeral
+                  background={rgbaToCss(backgroundColor)}
+                  // The annotation gutters' background (UI-13): the paper's colour as the viewer
+                  // shows it, opaque (a translucent background over the theme's canvas), which
+                  // the guides' colours already follow, so the gutters and the paper are one sheet
+                  annotationBackground={rgbaToCss({ ...guideColors.background, a: 1 })}
                   label={mayanData.label}
                   resetKey={mayanData.key}
                   scrollerRef={viewerScrollerRef}
-                  header={viewerHeading}
+                  header={
+                    // The heading and the tier-direction indicator (UI-13, slice 5b), outside the
+                    // heading so its name is unchanged. The cluster wraps first: its basis is 0, so
+                    // the zoom controls go under it only where even the heading leaves no room
+                    // beside them, and otherwise it takes the rest of the row, with the indicator
+                    // beside the heading or under it. From the tallest group, also in Date mode
+                    <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                      {viewerHeading}
+                      <TierOrientation tiers={getTierCount(digitGroups)} />
+                    </div>
+                  }
+                  // The glyph key (UI-13, slice 5c), under the stage, outside the numeral and its
+                  // export; only with a result, like the stage it explains
+                  footer={<GlyphKey />}
                   underlay={
                     showPlaceTierGuides && (
                       <PlaceTierGuides
                         digitGroups={digitGroups}
                         layout={numeralLayout}
-                        background={backgroundColor}
                         colors={guideColors}
                         scrollerRef={viewerScrollerRef}
                       />
                     )
+                  }
+                  // Screen-only tier annotations (UI-10), in gutters beside the paper, outside the
+                  // SVG. Powers of 20 at the start; at the end, Number mode's digit of each tier.
+                  // Date mode has none: its end slot stays empty, but the gutter is still laid out
+                  // (the start slot is given), so the paper stays centred
+                  annotationsStart={showTierAnnotations && <TierAnnotations rows={annotationRows} kind="power" />}
+                  annotationsEnd={
+                    showTierAnnotations && mode === 'number' && <TierAnnotations rows={annotationRows} kind="digit" />
                   }
                   overlay={
                     showTierHairlines && (
@@ -225,7 +275,7 @@ export default function HomeView() {
             under the heading where there is no room); the content takes a full line below them */}
         <div className="bg-surface rounded-lg p-4 shadow-sm dark:shadow-none flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:col-span-5 lg:col-start-1 lg:row-start-2">
           <h2 className="font-heading text-lg font-semibold flex items-center gap-2">
-            <Layers className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
+            <Functions className="w-5 h-5 shrink-0 text-accent-fg" aria-hidden="true" />
             Base-20 Representation
           </h2>
           {hasValidNumberInput && mayanData && <TierBadge tiers={mayanData.digitGroups[0].digits.length} />}

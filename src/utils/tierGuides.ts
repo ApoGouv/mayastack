@@ -48,11 +48,14 @@ export interface PlaceTierBand {
 export const PLACE_TIER_BAND_INSET = 2;
 
 /**
- * The fraction of a group's width left clear at each side of its guides, both bands and
- * hairlines: they are 94% as wide as the group, centred in it. Glyphs are at most 46 units wide
- * (four dots), well within 94% of the narrowest group (100 units).
+ * The tier count of a numeral: its tallest group's, the tiers the SVG is tall, as groups are
+ * aligned at the bottom. 0 for no groups.
+ *
+ * @param digitGroups - Each group's base-20 digits, highest place value first
  */
-export const TIER_GUIDE_SIDE_INSET = 0.03;
+export function getTierCount(digitGroups: number[][]): number {
+  return Math.max(0, ...digitGroups.map((digits) => digits.length));
+}
 
 /** The numeral's logical size, as MayanRenderer gives its SVG (width, height and viewBox) */
 export function getNumeralSize(
@@ -62,18 +65,19 @@ export function getNumeralSize(
   const groups = digitGroups.length;
   return {
     width: groups > 0 ? widthPerGroup * groups + spacing * (groups - 1) : 0,
-    height: Math.max(0, ...digitGroups.map((digits) => digits.length)) * heightPerGlyphStack,
+    height: getTierCount(digitGroups) * heightPerGlyphStack,
   };
 }
 
 const isPositive = (value: number) => Number.isFinite(value) && value > 0;
 
-// A group's guides, from the left of the numeral, as fractions of its width
+// A group's guides, bands and hairlines alike, from the left of the numeral, as fractions of its
+// width: the group's full width, with no side inset (UI-13: the viewer's paper gives the numeral
+// its own margin), never over the spacing between groups
 function guideSpan(groupIndex: number, { widthPerGroup, spacing }: NumeralLayout, totalWidth: number) {
-  const inset = widthPerGroup * TIER_GUIDE_SIDE_INSET;
   return {
-    left: (groupIndex * (widthPerGroup + spacing) + inset) / totalWidth,
-    width: (widthPerGroup - 2 * inset) / totalWidth,
+    left: (groupIndex * (widthPerGroup + spacing)) / totalWidth,
+    width: widthPerGroup / totalWidth,
   };
 }
 
@@ -88,9 +92,10 @@ function assertValidLayout({ heightPerGlyphStack, widthPerGroup, spacing }: Nume
 
 /**
  * The Dividing Hairlines of a numeral: for each group of n tiers, n − 1 lines at its tier
- * boundaries, as wide as the group less TIER_GUIDE_SIDE_INSET at each side. A single tier has none, and no line is ever at the outer
- * top or bottom edge. Positions are ratios of whole numbers, so they do not accumulate
- * rounding errors.
+ * boundaries, exactly as wide as the group, as its bands (in Number mode's single group, the whole
+ * numeral; changed in UI-13 from 94% of the group, centred in it). A single tier has none, and
+ * no line is ever at the outer top or bottom edge. Positions are ratios of whole numbers, so
+ * they do not accumulate rounding errors.
  *
  * @param digitGroups - Each group's base-20 digits, highest place value first
  * @param layout - The layout MayanRenderer is given
@@ -103,7 +108,7 @@ export function getTierHairlines(digitGroups: number[][], layout: NumeralLayout)
 
   const { width: totalWidth } = getNumeralSize(digitGroups, layout);
   // The tallest group's tier count: the SVG is this many tiers tall
-  const maxTiers = Math.max(...digitGroups.map((digits) => digits.length));
+  const maxTiers = getTierCount(digitGroups);
 
   const lines: TierHairline[] = [];
   digitGroups.forEach((digits, groupIndex) => {
@@ -117,8 +122,9 @@ export function getTierHairlines(digitGroups: number[][], layout: NumeralLayout)
 }
 
 /**
- * The Place Tier Guides of a numeral: one band per actual tier of each group, as wide as the
- * group less TIER_GUIDE_SIDE_INSET at each side (as the hairlines), and as tall as the tier's
+ * The Place Tier Guides of a numeral: one band per actual tier of each group, exactly as wide as
+ * the group (in Number mode's single group, the whole numeral; changed in UI-13 from 94% of the
+ * group, centred in it), and as tall as the tier's
  * cell less `inset` at its top and bottom. A group shorter than
  * the tallest has no band above its own tiers, so no band suggests a place it does not have.
  *
@@ -142,7 +148,7 @@ export function getPlaceTierBands(
   if (digitGroups.length === 0) return [];
 
   const { width: totalWidth, height: totalHeight } = getNumeralSize(digitGroups, layout);
-  const maxTiers = Math.max(...digitGroups.map((digits) => digits.length));
+  const maxTiers = getTierCount(digitGroups);
   const height = (heightPerGlyphStack - 2 * inset) / totalHeight;
 
   const bands: PlaceTierBand[] = [];

@@ -24,17 +24,15 @@ const percent = (value: string) => parseFloat(value);
  */
 function renderCards({
   digitGroups = DATE_GROUPS,
-  background = WHITE,
   scroller = true,
   stage = true,
-}: { digitGroups?: number[][]; background?: RgbaColor; scroller?: boolean; stage?: boolean } = {}) {
+}: { digitGroups?: number[][]; scroller?: boolean; stage?: boolean } = {}) {
   const scrollerRef = createRef<HTMLDivElement>();
   const wrapperContent = (
     <div data-testid="wrapper">
       <PlaceTierGuides
         digitGroups={digitGroups}
         layout={LAYOUT}
-        background={background}
         colors={COLORS}
         scrollerRef={scroller ? scrollerRef : { current: null }}
       />
@@ -78,30 +76,52 @@ function renderHairlines(digitGroups: number[][], color: RgbaColor = COLORS.hair
 }
 
 describe('PlaceTierGuides', () => {
-  it('is a screen-only layer before the SVG that paints the background, hidden from assistive technology', () => {
+  it('is a screen-only layer before the SVG, hidden from assistive technology, that paints no background of its own', () => {
     const { container, layer } = renderCards();
     expect(layer.nextElementSibling?.tagName.toLowerCase()).toBe('svg');
     expect(layer.hasAttribute('data-numeral-underlay')).toBe(true);
     expect(layer.getAttribute('aria-hidden')).toBe('true');
     expect(layer.className.split(' ')).toEqual(expect.arrayContaining(['absolute', 'inset-0', 'pointer-events-none']));
-    expect(layer.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+    // Changed deliberately in UI-13: the viewer's paper paints the background, once, so the
+    // layer adds only the cards, and a translucent background is not painted twice
+    expect(layer.style.backgroundColor).toBe('');
+    expect(layer.className).not.toMatch(/\bbg-/);
     expect(container.querySelectorAll('[data-place-tier-guides] svg, [data-place-tier-guides] [tabindex]')).toHaveLength(0);
     expect(layer.textContent).toBe('');
   });
 
-  it('places a card on each actual tier of each group, inset at the sides, nothing above a shorter group', () => {
+  it('places a card on each actual tier of each group, across the group, nothing above a shorter group', () => {
     const { cards } = renderCards();
     expect(cards().map((card) => [card.dataset.groupIndex, card.dataset.exponent])).toEqual([
       ['0', '0'], ['0', '1'],
       ['1', '0'],
       ['2', '0'], ['2', '1'], ['2', '2'],
     ]);
-    // The year's top tier: the top 80 of 240 units less 2 at each end, 3 units in at each side
+    // The year's top tier: the top 80 of 240 units less 2 at each end. Changed deliberately in
+    // UI-13: across the year's whole 100 units (250 to 350), no longer 3 units in at each side
     const top = cards()[5];
     expect(percent(top.style.top)).toBeCloseTo((2 / 240) * 100, 10);
     expect(percent(top.style.height)).toBeCloseTo((76 / 240) * 100, 10);
-    expect(percent(top.style.left)).toBeCloseTo((253 / 350) * 100, 10);
-    expect(percent(top.style.width)).toBeCloseTo((94 / 350) * 100, 10);
+    expect(percent(top.style.left)).toBeCloseTo((250 / 350) * 100, 10);
+    expect(percent(top.style.right)).toBeCloseTo(0, 10);
+    expect(top.style.width).toBe('');
+    // The day's: from the numeral's left edge to 250 units from its right
+    expect(percent(cards()[0].style.left)).toBe(0);
+    expect(percent(cards()[0].style.right)).toBeCloseTo((250 / 350) * 100, 10);
+  });
+
+  it('spans the whole numeral image with each card in Number mode, from its left edge to its right (UI-13)', () => {
+    const { cards } = renderCards({ digitGroups: [[1, 0, 0]] });
+    expect(cards()).toHaveLength(3);
+    for (const card of cards()) {
+      expect(card.style.left).toBe('0%');
+      expect(card.style.right).toBe('0%');
+      expect(card.style.width).toBe('');
+    }
+    // The vertical geometry is unchanged: 80-unit cells less 2 units at each end
+    expect(cards().map((card) => [percent(card.style.top), percent(card.style.height)].map((v) => Math.round((v * 240) / 100)))).toEqual([
+      [162, 76], [82, 76], [2, 76],
+    ]);
   });
 
   it('uses the card colour at rest, without a shadow, and a short transition only without reduced motion', () => {
@@ -185,7 +205,7 @@ describe('PlaceTierGuides', () => {
 });
 
 describe('TierHairlines', () => {
-  it('draws a hairline between each pair of tiers of each group, inset as the cards', () => {
+  it('draws a hairline between each pair of tiers of each group, across the group as the cards', () => {
     const { lines } = renderHairlines(DATE_GROUPS);
     expect(lines.map((line) => [line.dataset.groupIndex, line.dataset.boundary])).toEqual([
       ['0', '1'],
@@ -195,8 +215,14 @@ describe('TierHairlines', () => {
     // Positioned in percentages of the numeral, 1 px thick and centred on the boundary
     const year = lines[2];
     expect(percent(year.style.top)).toBeCloseTo(100 / 3, 10);
-    expect(percent(year.style.left)).toBeCloseTo((253 / 350) * 100, 10);
-    expect(percent(year.style.width)).toBeCloseTo((94 / 350) * 100, 10);
+    // Changed deliberately in UI-13: across the year's whole 100 units (250 to 350), no longer
+    // 3 units in at each side, from left to right as the cards
+    expect(percent(year.style.left)).toBeCloseTo((250 / 350) * 100, 10);
+    expect(percent(year.style.right)).toBeCloseTo(0, 10);
+    expect(year.style.width).toBe('');
+    // The day's: from the numeral's left edge to 250 units from its right, clear of the spacing
+    expect(percent(lines[0].style.left)).toBe(0);
+    expect(percent(lines[0].style.right)).toBeCloseTo((250 / 350) * 100, 10);
     expect(year.className.split(' ')).toEqual(expect.arrayContaining(['absolute', 'h-px', '-translate-y-1/2']));
   });
 
@@ -210,6 +236,18 @@ describe('TierHairlines', () => {
 
   it('draws the colour it is given', () => {
     expect(renderHairlines([[1, 0]], { r: 34, g: 22, b: 0, a: 0.551 }).lines[0].style.backgroundColor).toBe('rgba(34, 22, 0, 0.551)');
+  });
+
+  it('spans the whole numeral image with each hairline in Number mode, from its left edge to its right (UI-13)', () => {
+    const { lines } = renderHairlines([[1, 0, 0]]);
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line.style.left).toBe('0%');
+      expect(line.style.right).toBe('0%');
+      expect(line.style.width).toBe('');
+    }
+    // Still between the tiers only: 80 and 160 of 240 units down
+    expect(lines.map((line) => Math.round((percent(line.style.top) * 240) / 100))).toEqual([160, 80]);
   });
 
   it('draws no hairline for a single tier', () => {

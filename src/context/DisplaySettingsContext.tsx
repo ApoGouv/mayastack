@@ -15,6 +15,7 @@ const BACKGROUND_COLOR_KEY = 'mayastack:backgroundColor';
 const GLYPH_COLOR_KEY = 'mayastack:glyphColor';
 const SHOW_PLACE_TIER_GUIDES_KEY = 'mayastack:showPlaceTierGuides';
 const SHOW_TIER_HAIRLINES_KEY = 'mayastack:showTierHairlines';
+const SHOW_TIER_ANNOTATIONS_KEY = 'mayastack:showTierAnnotations';
 
 // Colours change continuously while a picker is dragged, so a colour is saved only once it
 // has stayed the same this long (ms)
@@ -64,6 +65,7 @@ const saveTheme = (theme: ColorTheme) => writeStored(THEME_KEY, theme !== 'syste
 const saveShowGrid = (show: boolean) => writeStored(SHOW_GRID_KEY, String(show));
 const saveShowPlaceTierGuides = (show: boolean) => writeStored(SHOW_PLACE_TIER_GUIDES_KEY, String(show));
 const saveShowTierHairlines = (show: boolean) => writeStored(SHOW_TIER_HAIRLINES_KEY, String(show));
+const saveShowTierAnnotations = (show: boolean) => writeStored(SHOW_TIER_ANNOTATIONS_KEY, String(show));
 
 // Saves a setting each time it changes, but not on first render: a setting is saved when it
 // is changed, not just because the app was opened. The ref holds the value last started from
@@ -92,6 +94,7 @@ const defaultGlyphColor: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }; // black
 const defaultShowGrid = false; // Hide grid by default
 const defaultShowPlaceTierGuides = false; // Hide the place tier guides by default
 const defaultShowTierHairlines = false; // Hide the dividing hairlines by default
+const defaultShowTierAnnotations = false; // Hide the tier annotations by default
 
 /**
  * Provides shared display settings state to the application via React Context.
@@ -122,6 +125,9 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
   );
   const [showTierHairlines, setShowTierHairlines] = useState<boolean>(() =>
     readSavedBoolean(SHOW_TIER_HAIRLINES_KEY, defaultShowTierHairlines)
+  );
+  const [showTierAnnotations, setShowTierAnnotations] = useState<boolean>(() =>
+    readSavedBoolean(SHOW_TIER_ANNOTATIONS_KEY, defaultShowTierAnnotations)
   );
 
   // Colours waiting to be saved, by key (the latest value of each), and the timer that saves them
@@ -206,6 +212,7 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
   useSaveOnChange(showGrid, saveShowGrid);
   useSaveOnChange(showPlaceTierGuides, saveShowPlaceTierGuides);
   useSaveOnChange(showTierHairlines, saveShowTierHairlines);
+  useSaveOnChange(showTierAnnotations, saveShowTierAnnotations);
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -231,7 +238,9 @@ export const DisplaySettingsProvider: React.FC<{ children: React.ReactNode }> = 
         showPlaceTierGuides,
         setShowPlaceTierGuides,
         showTierHairlines,
-        setShowTierHairlines
+        setShowTierHairlines,
+        showTierAnnotations,
+        setShowTierAnnotations
       }}
     >
       {children}

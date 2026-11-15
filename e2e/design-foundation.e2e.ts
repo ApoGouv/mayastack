@@ -490,6 +490,57 @@ test.describe('design system on the components', () => {
       expect(await states(page.getByRole('button', { name: /^Export SVG image/ }))).toEqual(expected);
     });
 
+    test(`draws the zoom controls as a canvas tray, with surface-active hover and fg-disabled at the limits in the ${theme} theme`, async ({ page }) => {
+      await openWithTheme(page, theme);
+      await page.getByLabel('Decimal integer').fill('20');
+      const [canvas, surfaceActive, fgMuted, fgDisabled] = await Promise.all(
+        ['canvas', 'surface-active', 'fg-muted', 'fg-disabled'].map((name) => token(page, name)));
+      const transparent = 'rgba(0, 0, 0, 0)';
+      const group = page.getByRole('group', { name: 'Zoom controls' });
+      const zoomOut = page.getByRole('button', { name: 'Zoom out' });
+      const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+      const reset = page.getByRole('button', { name: 'Reset' });
+      const look = async (target: ReturnType<Page['locator']>) => {
+        await settle(page);
+        return target.evaluate((el) => {
+          const s = getComputedStyle(el); const b = el.getBoundingClientRect();
+          return { bg: s.backgroundColor, color: s.color, border: s.borderTopWidth, width: b.width, height: b.height };
+        });
+      };
+
+      // The tray, and borderless buttons on it at rest: 28 × 28 px steps, Reset as tall
+      expect((await look(group)).bg).toBe(canvas);
+      for (const button of [zoomOut, zoomIn, reset]) {
+        const at = await look(button);
+        expect({ bg: at.bg, color: at.color, border: at.border, height: at.height }).toEqual({ bg: transparent, color: fgMuted, border: '0px', height: 28 });
+        expect(contrast(hex(at.color), hex(canvas))).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const button of [zoomOut, zoomIn]) expect((await look(button)).width).toBe(28);
+
+      // Hovered and pressed (released elsewhere, so not clicked): surface-active, which stays
+      // distinct from the canvas tray, unlike surface-hover in the light theme
+      await zoomIn.hover();
+      expect((await look(zoomIn)).bg).toBe(surfaceActive);
+      await page.mouse.down();
+      expect((await look(zoomIn)).bg).toBe(surfaceActive);
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+      await expect(group.locator('[aria-live]')).toHaveText('100%');
+
+      // At the minimum: fg-disabled, with no hover or press fill
+      for (let i = 0; i < 3; i++) await zoomOut.click();
+      await expect(zoomOut).toHaveAttribute('aria-disabled', 'true');
+      await page.mouse.move(0, 0);
+      expect((await look(zoomOut)).color).toBe(fgDisabled);
+      await zoomOut.hover();
+      expect(await look(zoomOut)).toMatchObject({ bg: transparent, color: fgDisabled });
+      await page.mouse.down();
+      expect(await look(zoomOut)).toMatchObject({ bg: transparent, color: fgDisabled });
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+      await expect(group.locator('[aria-live]')).toHaveText('25% (minimum zoom)');
+    });
+
     test(`marks the selected input type in forced-colours mode in the ${theme} theme`, async ({ page }) => {
       // Forced colours replace the segments' gold and the dot's fill with the background, so
       // only the dot, filled in the system text colour, still tells the modes apart

@@ -3,6 +3,20 @@
 /** @see https://tailwindcss.com/docs/dark-mode#toggling-dark-mode-manually */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* The sticky desktop viewer (UI-13, slice 5e): from lg (64rem, the two-column workspace) and only
+   on screens at least 40rem tall. The viewer card then sticks 1rem below the top of the screen,
+   and all of it must fit: from lg its stage is at least 28rem (448 px, `numeral-stage-height`),
+   and the card's header, glyph key and padding add a little over 100 px, so the card is under
+   600 px below 45rem of screen height, and grows with the stage, 100svh − 17.5rem, above it,
+   always ending above the screen's bottom. Below either threshold the card stays in the flow.
+   The threshold follows the provisional stage height: re-evaluate it if the stage sizing
+   changes (slice 5d, deferred). */
+@custom-variant sticky-viewer {
+  @media (width >= 64rem) and (height >= 40rem) {
+    @slot;
+  }
+}
+
 /* Design system: see docs/DESIGN_SYSTEM.md for the token roles, contrast checks and rules. */
 
 /* Heading font: the unmodified official Playfair Display variable font, self-hosted with its
@@ -209,15 +223,63 @@
   color: #000000;
 }
 
+/* The viewer's paper (UI-13): it paints the numeral's background once, across its padding and
+   behind the numeral, so on screen the SVG's own background rectangle (always its first child)
+   is transparent, and a translucent background is never composited twice. Only inside the
+   paper: page styles never reach an export, which serializes the SVG's markup, so the exported
+   artwork, background included, is unchanged. */
+[data-numeral-paper] svg.mep-svg > rect:first-child {
+  fill: transparent;
+}
+
+/* The paper's side bleed under the annotation gutters (UI-13, see GUTTER_BLEED_PROPERTY in
+   NumeralViewport): two horizontal offset shadows in the gutters' colour, 8 px beside each side,
+   hidden under the opaque gutters but painted with the paper, so its antialiased edge never lets
+   the paper's ring or the stage's backdrop show between it and a gutter. Only while the gutters
+   are shown: the paper is marked while there are annotations, and the scroller, then a container,
+   is at least 31rem wide, the gutters' own `@min-[31rem]:flex`. The shadows come first, over the
+   ring's sides (also under the gutters); then Tailwind's own composition of `ring-1` and
+   `shadow-sm` (v4: its registered variables, `0 0 #0000` when unset), in its own order, so both
+   are kept. Offset only, no spread: the ring's top and bottom are not covered. */
+@container (width >= 31rem) {
+  [data-numeral-paper][data-numeral-gutter-bleed] {
+    box-shadow:
+      -8px 0 0 0 var(--numeral-gutter-bleed),
+      8px 0 0 0 var(--numeral-gutter-bleed),
+      var(--tw-inset-shadow, 0 0 #0000),
+      var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000),
+      var(--tw-shadow, 0 0 #0000);
+  }
+}
+
+/* The viewer's numeral image (the zoom wrapper, UI-13): with reduced motion, the global rule
+   above gives every element a 0.01 ms transition, and, `transition-property` being `all` by
+   default, the wrapper's zoomed width would become one, kept at the previous level's until the
+   next frame. The zoom's anchored scroll position is measured in the same frame, so it must see
+   the final width: the wrapper has no transitions. Only this element; the rule is unchanged.
+   Likewise the annotation gutters' label box (UI-13): its inline height, the numeral's at this
+   zoom, sets the gutters' and so the centred group's height, which the anchored scroll position
+   is measured against. Its fade back in is `motion-safe:` only, so nothing else is lost.
+   Likewise the stage content and the paper (UI-13): their horizontal padding is removed while
+   annotation gutters are shown, so showing or hiding them, or the stage crossing the gutters'
+   width threshold, changes it, and the scroll position kept is measured in the same frame. They
+   have no transitions of their own; the zoom animation is a Web Animation, which this rule does
+   not affect. */
+@media (prefers-reduced-motion: reduce) {
+  [data-numeral-image],
+  [data-numeral-annotations-box],
+  [data-numeral-stage-content],
+  [data-numeral-paper] {
+    transition-property: none;
+  }
+}
+
 /* Screen-only Place Tier Guides (UI-09): while their layer precedes the numeral's SVG in the
-   viewer, the layer paints the background and the cards, and the SVG is drawn over it with its
-   own background rectangle (always its first child) transparent. Page styles never reach an
-   export, which serializes the SVG's markup, so the exported artwork is unchanged. */
+   viewer, the SVG is lifted above it, so the glyphs and the grid are drawn over the cards. */
 [data-numeral-underlay] ~ svg.mep-svg {
   position: relative;
-}
-[data-numeral-underlay] ~ svg.mep-svg > rect:first-child {
-  fill: transparent;
 }
 
 

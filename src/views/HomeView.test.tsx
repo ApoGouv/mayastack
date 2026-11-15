@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DisplaySettingsProvider } from '@/context/DisplaySettingsContext';
+import type { DisplaySettingsContextType } from '@/context/DisplaySettingsContextTypes';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { MAX_DIGITS_IN_FILENAME, prepareSvgCloneForExport } from '@utils/exportUtils';
 import { toBase20, toBase20Formula } from '@utils/base20';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
@@ -155,6 +157,40 @@ describe('HomeView numeral viewport', () => {
     ).toBeTruthy();
   });
 
+  it('marks the viewer card, and only it, and leaves the exported SVG without the viewer’s DOM names (UI-13)', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    // Marked with or without a result, as the card is always there
+    const marked = () => [...document.querySelectorAll<HTMLElement>('[data-viewer-card]')];
+    expect(marked()).toEqual([card('Mayan Numeral Stack')]);
+    enter('8000');
+    expect(marked()).toEqual([card('Mayan Numeral Stack')]);
+    const [viewerCard] = marked();
+    expect(viewerCard.contains(screen.getByRole('group', { name: 'Numeral viewer' }))).toBe(true);
+    expect(viewerCard.contains(screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' }))).toBe(false);
+    // The SVG artwork keeps its own markup: none of the viewer's data attributes, nor any ARIA
+    const svg = numeralSvg();
+    expect(svg.parentElement!.hasAttribute('data-numeral-image')).toBe(true);
+    expect([...svg.attributes].map((a) => a.name).filter((name) => name.startsWith('data-') || name.startsWith('aria-') || name === 'role')).toEqual([]);
+  });
+
+  it('makes the viewer card, and only it, sticky on tall desktop screens, with or without a result (UI-13, slice 5e)', () => {
+    const { enter } = renderHomeView();
+    const viewerCard = () => document.querySelector<HTMLElement>('[data-viewer-card]')!;
+    const stickyClasses = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter((c) => /(^|:)(sticky|top-\d)/.test(c));
+    for (const input of ['', '8000', '9'.repeat(128)]) {
+      enter(input);
+      // Only under the `sticky-viewer` variant (src/index.css: lg and at least 40rem tall), never
+      // unconditionally or from a width alone
+      expect(stickyClasses(viewerCard()), input).toEqual(['sticky-viewer:sticky', 'sticky-viewer:top-4']);
+      // Its sibling cards in the workspace grid, and nothing else on the page, take no sticky class
+      const others = [...document.querySelectorAll('[class]')].filter((el) => el !== viewerCard());
+      expect(others.filter((el) => stickyClasses(el).some((c) => c.startsWith('sticky-viewer:'))), input).toEqual([]);
+      const siblings = [...viewerCard().parentElement!.children].filter((el) => el !== viewerCard());
+      expect(siblings.length, input).toBe(3);
+      for (const sibling of siblings) expect(stickyClasses(sibling), input).toEqual([]);
+    }
+  });
+
   it('describes the largest number by its length, inside the bounded viewer', () => {
     const { enter } = renderHomeView();
     enter('9'.repeat(128));
@@ -222,26 +258,153 @@ describe('HomeView numeral viewport', () => {
     expectNoResult('Choose a date to see its Mayan numerals.', 'Choose a date to see it in base 20.');
   });
 
-  // UI-13, slice 5a: the heading leads the viewer's header row, beside the zoom controls
+  // UI-13, slice 5a: the heading leads the viewer's header row, beside the zoom controls. Its icon
+  // is Layers (stacked tiers), and the base-20 card's is Functions (Σ, the positional sum)
   it('names the viewer "Mayan Numeral Stack", with its own decorative icon, with and without a result', () => {
     const { enter } = renderHomeView();
     const heading = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' });
+    const base20Heading = () => screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' });
     const iconPath = (h: HTMLElement) => h.querySelector('svg[aria-hidden="true"] > path')?.getAttribute('d');
-    const base20Icon = iconPath(screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' }));
 
     for (const text of ['123', '', '12.5', '7']) {
       enter(text);
       const result = text === '123' || text === '7';
       expect(heading().textContent, text).toBe('Mayan Numeral Stack');
-      // Not the base-20 card's Layers
-      expect(iconPath(heading()), text).toMatch(/^M19 13H5/);
-      expect(iconPath(heading())).not.toBe(base20Icon);
-      // With a result, in the same row as the zoom controls; without one, there are none
+      expect(iconPath(heading()), text).toMatch(/^m11\.99 18\.54/);
+      expect(iconPath(base20Heading()), text).toMatch(/^M18 4H6/);
+      // With a result, in the same row as the zoom controls; without one, there are none.
+      // Changed deliberately in UI-13 (slice 5b): in the row's heading cluster, beside the tier
+      // indicator, rather than directly in the row
       const controls = screen.queryByRole('group', { name: 'Zoom controls' });
-      if (result) expect(heading().parentElement, text).toBe(controls!.parentElement);
+      if (result) expect(heading().parentElement!.parentElement, text).toBe(controls!.parentElement);
       else expect(controls, text).toBeNull();
       expect(card('Mayan Numeral Stack').contains(heading())).toBe(true);
     }
+  });
+
+  // UI-13, slice 5b: the tier-direction indicator beside the heading
+  describe('tier-direction indicator', () => {
+    const heading = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' });
+    /** The indicator in the viewer card, found by its visible text, or null */
+    const indicator = () =>
+      within(card('Mayan Numeral Stack')).queryByText(/^(Top: 20|1 tier · 20⁰$)/)?.parentElement ?? null;
+
+    it('shows the numeral’s orientation beside the heading, outside it and outside the numeral', () => {
+      const { enter, numeralSvg } = renderHomeView();
+      for (const [text, shown, spoken] of [
+        ['7', '1 tier · 20⁰', 'One tier, 20 to the power of 0'],
+        ['123', 'Top: 20¹ ↓ Bottom: 20⁰', 'Top tier 20 to the power of 1, down to the bottom tier, 20 to the power of 0'],
+        ['9'.repeat(128), 'Top: 20⁹⁸ ↓ Bottom: 20⁰', 'Top tier 20 to the power of 98, down to the bottom tier, 20 to the power of 0'],
+      ]) {
+        enter(text);
+        expect(visibleText(indicator()!), text).toBe(shown);
+        expect(spokenText(indicator()!), text).toBe(spoken);
+        // The heading's name is unchanged; the indicator is in the header, not the numeral or its export
+        expect(heading().textContent, text).toBe('Mayan Numeral Stack');
+        expect(heading().contains(indicator()), text).toBe(false);
+        expect(numeralSvg().contains(indicator()), text).toBe(false);
+        expect(screen.getByRole('group', { name: 'Numeral viewer' }).contains(indicator()), text).toBe(false);
+        expect(exportedMarkup(numeralSvg()), text).not.toMatch(/Top:|tier/);
+        // The heading cluster, before the zoom controls in the header row
+        const cluster = heading().parentElement!;
+        expect([...cluster.children], text).toEqual([heading(), indicator()]);
+        expect(cluster.nextElementSibling, text).toBe(screen.getByRole('group', { name: 'Zoom controls' }));
+      }
+    });
+
+    it('follows the tallest group in Date mode', () => {
+      renderHomeView();
+      fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+      fireEvent.click(screen.getByLabelText('Date input'));
+      fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+
+      // Day 15 and the month have one tier each; every year from 400 to 7999 has three
+      expect(visibleText(indicator()!)).toBe('Top: 20² ↓ Bottom: 20⁰');
+      expect(spokenText(indicator()!)).toBe('Top tier 20 to the power of 2, down to the bottom tier, 20 to the power of 0');
+    });
+
+    it('is not shown without a result, where the heading stands alone', () => {
+      const { enter } = renderHomeView();
+      for (const text of ['', '12.5']) {
+        enter(text);
+        expect(indicator(), text).toBeNull();
+        expect(cardText('Mayan Numeral Stack'), text).not.toMatch(/tier|Top:/);
+      }
+      fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+      expect(indicator()).toBeNull();
+    });
+
+    it('leaves the base-20 card’s heading and ascending tier badge unchanged', () => {
+      const { enter } = renderHomeView();
+      enter('123');
+      const base20 = card('Base-20 Representation');
+      expect(within(base20).getByRole('heading', { level: 2 }).textContent).toBe('Base-20 Representation');
+      expect(visibleText(base20)).toContain('2 tiers · 20⁰–20¹');
+      expect(spokenText(base20)).toContain('2 tiers, powers of 20 from 0 to 1');
+      expect(visibleText(base20)).not.toMatch(/Top:|↓/);
+    });
+  });
+
+  // UI-13, slice 5c: the glyph key under the stage
+  describe('glyph key', () => {
+    const key = () => screen.queryByRole('list', { name: 'Glyph key' });
+    const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+
+    it('lists the glyphs under the stage, in the viewer card, outside the numeral and its export', () => {
+      const { enter, numeralSvg } = renderHomeView();
+      for (const text of ['0', '26', '9'.repeat(128)]) {
+        enter(text);
+        const list = key()!;
+        expect(within(list).getAllByRole('listitem').map((item) => item.textContent), text).toEqual(['Shell = 0', 'Dot = 1', 'Bar = 5']);
+        // Directly under the stage, in the same card, never in the header row
+        expect(viewer().nextElementSibling, text).toBe(list);
+        expect(card('Mayan Numeral Stack').contains(list), text).toBe(true);
+        expect(screen.getByRole('group', { name: 'Zoom controls' }).parentElement!.contains(list), text).toBe(false);
+        // Outside the viewer and the numeral's SVG, the source of SVG and PNG export
+        expect(viewer().contains(list), text).toBe(false);
+        expect(numeralSvg().contains(list), text).toBe(false);
+        expect(list.closest('svg'), text).toBeNull();
+        expect(exportedMarkup(numeralSvg()), text).not.toMatch(/Shell|Dot|Bar|Glyph key/);
+      }
+    });
+
+    it('adds no glyphs to the numeral or its export', () => {
+      const { enter, numeralSvg } = renderHomeView();
+      // 26 = 1 × 20¹ + 6 × 20⁰: a dot, then a bar and a dot. The key draws one more dot, outside
+      enter('26');
+      const exported = exportedMarkup(numeralSvg());
+      expect(exported.match(/<circle/g)).toHaveLength(2);
+      expect(numeralSvg().querySelectorAll('circle')).toHaveLength(2);
+      expect(key()!.querySelectorAll('circle')).toHaveLength(1);
+      expect(exported).toContain('width="350" height="160" viewBox="0 0 350 160"');
+      // 0: the one shell, its five paths; the key's shell is outside the SVG
+      enter('0');
+      expect(numeralSvg().querySelectorAll('path')).toHaveLength(5);
+      expect(exportedMarkup(numeralSvg())).toContain('width="350" height="80" viewBox="0 0 350 80"');
+    });
+
+    it('stays in Date mode, and is not shown without a result', () => {
+      const { enter } = renderHomeView();
+      for (const text of ['', '12.5']) {
+        enter(text);
+        expect(key(), text).toBeNull();
+        expect(cardText('Mayan Numeral Stack'), text).not.toMatch(/Shell|Dot|Bar/);
+      }
+      fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+      expect(key()).toBeNull();
+      fireEvent.click(screen.getByLabelText('Date input'));
+      fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+      expect(viewer().nextElementSibling).toBe(key());
+      expect(within(key()!).getAllByRole('listitem')).toHaveLength(3);
+    });
+
+    it('is never focusable, so the viewer card’s tab order is unchanged', () => {
+      renderHomeView();
+      expect(key()!.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0);
+      const focusable = [...card('Mayan Numeral Stack').querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
+      expect(focusable.slice(0, 4).map((el) => el.getAttribute('aria-label') ?? el.textContent))
+        .toEqual(['Zoom out', 'Zoom in', 'Reset', 'Numeral viewer']);
+    });
   });
 
   it('exports the same complete SVG before and after zooming and scrolling', () => {
@@ -270,6 +433,25 @@ describe('HomeView date mode', () => {
 
     const image = screen.getByRole('img', { name: /^Mayan numerals for day 15, month \d{1,2} and year \d{4}$/ });
     expect(screen.getByRole('group', { name: 'Numeral viewer' }).contains(image)).toBe(true);
+  });
+
+  // UI-13: the same zoom levels in both modes; Date mode's three groups are 350 units wide too
+  it('zooms the date numerals through 125% and 150% at exact widths', () => {
+    renderHomeView();
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+
+    const image = screen.getByRole('img', { name: /^Mayan numerals for day 15, month \d{1,2} and year \d{4}$/ });
+    const zoomText = () => screen.getByRole('group', { name: 'Zoom controls' }).textContent;
+    expect([zoomText(), image.style.width]).toEqual(['−100%+Reset', '350px']);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect([zoomText(), image.style.width]).toEqual(['−125%+Reset', '437.5px']);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect([zoomText(), image.style.width]).toEqual(['−150%+Reset', '525px']);
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect([zoomText(), image.style.width]).toEqual(['−100%+Reset', '350px']);
   });
 
   it('shows the base-20 representation of the day, month and year', () => {
@@ -777,6 +959,7 @@ describe('HomeView tier guides', () => {
 
   const bandsSwitch = () => screen.getByRole('switch', { name: 'Show Place Tier Guides:' });
   const hairlinesSwitch = () => screen.getByRole('switch', { name: 'Show Dividing Hairlines:' });
+  const annotationsSwitch = () => screen.getByRole('switch', { name: 'Show Tier Annotations:' });
   const gridSwitch = () => screen.getByRole('switch', { name: 'Show Grid:' });
   const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
   const cardLayer = () => viewer().querySelector<HTMLElement>('[data-place-tier-guides]');
@@ -784,7 +967,7 @@ describe('HomeView tier guides', () => {
   const hairlines = () => [...viewer().querySelectorAll<HTMLElement>('[data-tier-hairline]')];
   const bands = () => [...viewer().querySelectorAll<HTMLElement>('[data-place-tier-band]')];
 
-  it('offers both guides in the settings panel, under Viewer guides, off by default, with no guides shown', () => {
+  it('offers the guides and the tier annotations in the settings panel, under Viewer guides, off by default, with none shown', () => {
     renderHomeView();
     const panel = screen.getByRole('group', { name: 'Stela Material & Glyph Settings' });
     const exported = within(panel).getByRole('group', { name: 'Exported appearance' });
@@ -797,24 +980,28 @@ describe('HomeView tier guides', () => {
     expect(exported.contains(screen.getByText('Background color:'))).toBe(true);
     expect(exported.contains(screen.getByText('Glyph color:'))).toBe(true);
     expect(within(exported).getAllByRole('switch')).toEqual([gridSwitch()]);
-    expect(within(guides).getAllByRole('switch')).toEqual([bandsSwitch(), hairlinesSwitch()]);
+    expect(within(guides).getAllByRole('switch')).toEqual([bandsSwitch(), hairlinesSwitch(), annotationsSwitch()]);
 
-    // The hint says they are not exported, and describes the group
-    const hint = within(guides).getByText('Shown on screen only, not included in exports.');
+    // The hint says they are not exported, and that the annotations are hidden when narrow; it describes the group
+    const hint = within(guides).getByText(
+      'Shown on screen only, not included in exports. Tier annotations are hidden on narrow viewer widths.'
+    );
     expect(guides.getAttribute('aria-describedby')).toBe(hint.id);
 
     // Off by default, and no longer in the viewer
     expect(bandsSwitch().getAttribute('aria-checked')).toBe('false');
     expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(viewer().querySelector('[data-numeral-annotations], [data-tier-annotations]')).toBeNull();
     expect(card('Mayan Numeral Stack').querySelectorAll('[role="switch"]')).toHaveLength(0);
     expect(screen.queryByRole('switch', { name: /^Show Tier Guides/ })).toBeNull();
     expect(cardLayer()).toBeNull();
     expect(lineLayer()).toBeNull();
   });
 
-  it('follows the grid in the panel’s focus order: grid, place tier guides, then hairlines', () => {
+  it('follows the grid in the panel’s focus order: grid, place tier guides, hairlines, then tier annotations', () => {
     renderHomeView();
-    const order = [gridSwitch(), bandsSwitch(), hairlinesSwitch()];
+    const order = [gridSwitch(), bandsSwitch(), hairlinesSwitch(), annotationsSwitch()];
     const inDocument = [...document.querySelectorAll<HTMLElement>('[role="switch"]')].filter((el) => order.includes(el));
     expect(inDocument).toEqual(order);
     order.forEach((toggle) => expect(toggle.tagName).toBe('BUTTON'));
@@ -850,10 +1037,12 @@ describe('HomeView tier guides', () => {
     expect(bands()).toHaveLength(4);
     expect(hairlines()).toHaveLength(0);
     expect(lineLayer()).toBeNull();
-    // Behind the SVG, painting its background, which the SVG itself still has for export
+    // Behind the SVG. Changed deliberately in UI-13: the viewer's paper paints the background,
+    // once, not the cards' layer; the SVG itself still has it for export
     expect(cardLayer()!.nextElementSibling).toBe(numeralSvg());
     expect(cardLayer()!.hasAttribute('data-numeral-underlay')).toBe(true);
-    expect(cardLayer()!.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+    expect(cardLayer()!.style.backgroundColor).toBe('');
+    expect(viewer().querySelector<HTMLElement>('[data-numeral-paper]')!.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
     expect(numeralSvg().querySelector('rect')!.getAttribute('fill')).toBe('rgba(255, 255, 255, 1)');
     expect(numeralSvg().contains(cardLayer())).toBe(false);
     expect(viewer().querySelectorAll('svg')).toHaveLength(1);
@@ -867,9 +1056,17 @@ describe('HomeView tier guides', () => {
     enter('8000'); // 1 × 20³: 4 tiers, 350 × 320 units
     fireEvent.click(bandsSwitch());
     const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
-    // The zoom wrapper sits in the stage box, not directly in the viewer
-    expect(image.parentElement!.hasAttribute('data-numeral-stage')).toBe(true);
-    expect(image.parentElement!.parentElement).toBe(viewer());
+    // The numeral image sits in the paper, in the centred group (UI-10, slice 2.1), in the stage
+    // content (UI-13), not directly in the viewer
+    expect(image.hasAttribute('data-numeral-image')).toBe(true);
+    const paper = image.parentElement!;
+    expect(paper.hasAttribute('data-numeral-paper')).toBe(true);
+    const group = paper.parentElement!;
+    expect(group.hasAttribute('data-numeral-group')).toBe(true);
+    const content = group.parentElement!;
+    expect(content.hasAttribute('data-numeral-stage-content')).toBe(true);
+    expect(viewer().hasAttribute('data-numeral-stage')).toBe(true);
+    expect(content.parentElement).toBe(viewer());
 
     // happy-dom lays nothing out: the wrapper is 350 × 320 px at (0, top)
     let top = 0;
@@ -942,6 +1139,40 @@ describe('HomeView tier guides', () => {
     expect(off).not.toMatch(/tier-(guide|band|hairline)|underlay/);
   });
 
+  it('paints the chosen background once, on the viewer’s paper, with the guides on or off, and exports the SVG unchanged (UI-13)', () => {
+    // A translucent background: painted once, by the paper alone
+    const background = { r: 20, g: 40, b: 90, a: 0.35 };
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000');
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    const paper = image.parentElement!;
+    const css = rgbaToCss(background);
+    const painted = () =>
+      [...viewer().querySelectorAll<HTMLElement>('*')].filter((el) => el.style.backgroundColor === css);
+
+    for (const [bandsOn, hairlinesOn] of [[false, false], [true, false], [true, true], [false, true]]) {
+      if ((bandsSwitch().getAttribute('aria-checked') === 'true') !== bandsOn) fireEvent.click(bandsSwitch());
+      if ((hairlinesSwitch().getAttribute('aria-checked') === 'true') !== hairlinesOn) fireEvent.click(hairlinesSwitch());
+      const what = `cards ${bandsOn}, hairlines ${hairlinesOn}`;
+      expect(paper.hasAttribute('data-numeral-paper'), what).toBe(true);
+      // The paper alone, in the viewer, has the background: not the cards' layer, the zoom wrapper or the scroller
+      expect(painted(), what).toEqual([paper]);
+      expect(image.style.backgroundColor, what).toBe('');
+      // The SVG keeps its own background rectangle for export, outside the paper's markup
+      expect(numeralSvg().firstElementChild!.getAttribute('fill'), what).toBe(css);
+      expect(paper.contains(numeralSvg()), what).toBe(true);
+    }
+
+    // The export is the SVG's markup alone: the same with the guides on or off, without the paper
+    const exported = exportedMarkup(numeralSvg());
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect(exportedMarkup(numeralSvg())).toBe(exported);
+    expect(exported).not.toMatch(/numeral-paper|ring-|shadow|padding/);
+    expect(exported).toContain(`fill="${css}"`);
+  });
+
   it('colours both guides from the viewer background, never from the glyph colour', () => {
     localStorage.setItem('mayastack:showPlaceTierGuides', 'true');
     localStorage.setItem('mayastack:showTierHairlines', 'true');
@@ -958,7 +1189,9 @@ describe('HomeView tier guides', () => {
       const { enter } = renderHomeView();
       enter('400');
       expect(colours()).toEqual({ line: rgbaToCss(expected.hairline), card: rgbaToCss(expected.card) });
-      expect(cardLayer()!.style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+      // Changed deliberately in UI-13: the paper paints the background, not the cards' layer
+      expect(viewer().querySelector<HTMLElement>('[data-numeral-paper]')!.style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+      expect(cardLayer()!.style.backgroundColor).toBe('');
       cleanup();
     }
 
@@ -994,7 +1227,8 @@ describe('HomeView tier guides', () => {
       return hairlines().map((line) => ({
         group: Number(line.dataset.groupIndex),
         y: round((parseFloat(line.style.top) / 100) * height),
-        x: range(line.style.left, line.style.width, width),
+        // From the left edge to the right edge, given as their distances from the numeral's sides
+        x: [round((parseFloat(line.style.left) / 100) * width), round((1 - parseFloat(line.style.right) / 100) * width)],
       }));
     };
     /** Each band in SVG units */
@@ -1004,7 +1238,8 @@ describe('HomeView tier guides', () => {
         group: Number(band.dataset.groupIndex),
         exponent: Number(band.dataset.exponent),
         y: range(band.style.top, band.style.height, height),
-        x: range(band.style.left, band.style.width, width),
+        // From the left edge to the right edge, given as their distances from the numeral's sides
+        x: [round((parseFloat(band.style.left) / 100) * width), round((1 - parseFloat(band.style.right) / 100) * width)],
       }));
     };
     /** The exponents the SVG renders: one per digit stack */
@@ -1013,16 +1248,18 @@ describe('HomeView tier guides', () => {
 
     // Number mode, 3 tiers in 240 units: boundaries 80 and 160 units down, across all 350 units
     enter('800'); // 2 × 20² + 0 × 20 + 0
-    // Both 3% of the group's width in from each side: 10.5 of 350 units
+    // The hairlines across the whole numeral, as the bands. Changed deliberately in UI-13, from
+    // 3% of the group's width in from each side (10.5 of 350 units)
     expect(hairlinesInSvgUnits()).toEqual([
-      { group: 0, y: 160, x: [10.5, 339.5] },
-      { group: 0, y: 80, x: [10.5, 339.5] },
+      { group: 0, y: 160, x: [0, 350] },
+      { group: 0, y: 80, x: [0, 350] },
     ]);
-    // One band per rendered tier, each its 80-unit cell less 2 units at each end
+    // One band per rendered tier, each its 80-unit cell less 2 units at each end. Changed
+    // deliberately in UI-13: across the whole numeral, with no side inset
     expect(bandsInSvgUnits()).toEqual([
-      { group: 0, exponent: 0, y: [162, 238], x: [10.5, 339.5] },
-      { group: 0, exponent: 1, y: [82, 158], x: [10.5, 339.5] },
-      { group: 0, exponent: 2, y: [2, 78], x: [10.5, 339.5] },
+      { group: 0, exponent: 0, y: [162, 238], x: [0, 350] },
+      { group: 0, exponent: 1, y: [82, 158], x: [0, 350] },
+      { group: 0, exponent: 2, y: [2, 78], x: [0, 350] },
     ]);
     expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
 
@@ -1031,21 +1268,383 @@ describe('HomeView tier guides', () => {
     fireEvent.click(screen.getByLabelText('Date input'));
     fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 25th, \d{4}$/ })[0]);
     expect(numeralSvg().getAttribute('viewBox')).toBe('0 0 350 240');
-    // 3 of each group's 100 units in from each side
+    // The hairlines across each group's whole 100 units, as its bands, never over the spacing
+    // between groups (changed deliberately in UI-13, from 3 units in at each side)
     expect(hairlinesInSvgUnits()).toEqual([
-      { group: 0, y: 160, x: [3, 97] },
-      { group: 2, y: 160, x: [253, 347] },
-      { group: 2, y: 80, x: [253, 347] },
+      { group: 0, y: 160, x: [0, 100] },
+      { group: 2, y: 160, x: [250, 350] },
+      { group: 2, y: 80, x: [250, 350] },
     ]);
-    // Bands for each group's own tiers only: nothing above the day's 2 tiers or the month's 1
+    // Bands for each group's own tiers only: nothing above the day's 2 tiers or the month's 1,
+    // each across its group's whole 100 units (UI-13), never over the spacing between groups
     expect(bandsInSvgUnits()).toEqual([
-      { group: 0, exponent: 0, y: [162, 238], x: [3, 97] },
-      { group: 0, exponent: 1, y: [82, 158], x: [3, 97] },
-      { group: 1, exponent: 0, y: [162, 238], x: [128, 222] },
-      { group: 2, exponent: 0, y: [162, 238], x: [253, 347] },
-      { group: 2, exponent: 1, y: [82, 158], x: [253, 347] },
-      { group: 2, exponent: 2, y: [2, 78], x: [253, 347] },
+      { group: 0, exponent: 0, y: [162, 238], x: [0, 100] },
+      { group: 0, exponent: 1, y: [82, 158], x: [0, 100] },
+      { group: 1, exponent: 0, y: [162, 238], x: [125, 225] },
+      { group: 2, exponent: 0, y: [162, 238], x: [250, 350] },
+      { group: 2, exponent: 1, y: [82, 158], x: [250, 350] },
+      { group: 2, exponent: 2, y: [2, 78], x: [250, 350] },
     ]);
     expect(bandsInSvgUnits().map(({ exponent }) => exponent).sort()).toEqual(renderedExponents());
+  });
+});
+
+describe('HomeView tier annotations (UI-10)', () => {
+  // Switching a setting saves it, and later tests start from the defaults
+  afterEach(() => localStorage.clear());
+
+  const annotationsSwitch = () => screen.getByRole('switch', { name: 'Show Tier Annotations:' });
+  const bandsSwitch = () => screen.getByRole('switch', { name: 'Show Place Tier Guides:' });
+  const hairlinesSwitch = () => screen.getByRole('switch', { name: 'Show Dividing Hairlines:' });
+  const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+  const gutter = (side: 'start' | 'end') => viewer().querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`);
+  const gutters = () => viewer().querySelectorAll('[data-numeral-annotations]');
+  /**
+   * The labels of a gutter, bottom tier first (the order of the rows): a power reads as "20" and
+   * its exponent, a digit as itself in brackets, e.g. "[7]" (UI-13)
+   */
+  const labels = (side: 'start' | 'end') =>
+    [...(gutter(side)?.querySelectorAll<HTMLElement>('[data-tier-annotation]') ?? [])].map((el) => el.textContent);
+  const chooseDate = () => {
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+  };
+
+  it('is off by default: no gutters and no annotation layers', () => {
+    const { enter } = renderHomeView();
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(gutters()).toHaveLength(0);
+    enter('8000');
+    expect(gutters()).toHaveLength(0);
+    expect(viewer().querySelector('[data-tier-annotations]')).toBeNull();
+  });
+
+  it('is in the Viewer guides group, as the last of its three switches', () => {
+    renderHomeView();
+    const guides = within(screen.getByRole('group', { name: 'Stela Material & Glyph Settings' })).getByRole('group', {
+      name: 'Viewer guides',
+    });
+    expect(guides.contains(annotationsSwitch())).toBe(true);
+    expect(within(guides).getAllByRole('switch').at(-1)).toBe(annotationsSwitch());
+  });
+
+  it('shows powers at the start and digits at the end in Number mode, bottom tier first', () => {
+    const { enter } = renderHomeView();
+    enter('8000'); // 1 × 20³: digits 1, 0, 0, 0
+    fireEvent.click(annotationsSwitch());
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(gutters()).toHaveLength(2);
+    expect(gutter('start')!.querySelector('[data-tier-annotations="power"]')).not.toBeNull();
+    expect(gutter('end')!.querySelector('[data-tier-annotations="digit"]')).not.toBeNull();
+    expect(labels('start')).toEqual(['200', '201', '202', '203']);
+    expect(labels('end')).toEqual(['[0]', '[0]', '[0]', '[1]']);
+  });
+
+  it('shows the digits of a number, zero digits as 0', () => {
+    const { enter } = renderHomeView();
+    enter('7219'); // 18 × 20² + 0 × 20 + 19
+    expect(toBase20(7219n)).toEqual([18, 0, 19]);
+    fireEvent.click(annotationsSwitch());
+    expect(labels('end')).toEqual(['[19]', '[0]', '[18]']);
+    expect(labels('start')).toEqual(['200', '201', '202']);
+  });
+
+  it('shows the zero glyph’s single tier for the initial 0', () => {
+    renderHomeView();
+    fireEvent.click(annotationsSwitch());
+    expect(labels('start')).toEqual(['200']);
+    expect(labels('end')).toEqual(['[0]']);
+  });
+
+  it('shows powers only in Date mode, keeping an empty end gutter', () => {
+    renderHomeView();
+    chooseDate();
+    fireEvent.click(annotationsSwitch());
+    expect(gutters()).toHaveLength(2);
+    expect(gutter('start')!.querySelector('[data-tier-annotations="power"]')).not.toBeNull();
+    expect(labels('start')[0]).toBe('200');
+    expect(gutter('end')!.querySelector('[data-tier-annotation], [data-tier-annotations]')).toBeNull();
+    expect(gutter('end')!.textContent).toBe('');
+  });
+
+  it('updates the end gutter when the mode changes, keeping the preference', () => {
+    const { enter } = renderHomeView();
+    enter('400');
+    fireEvent.click(annotationsSwitch());
+    expect(labels('end')).toEqual(['[0]', '[0]', '[1]']);
+
+    chooseDate();
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(gutters()).toHaveLength(2);
+    expect(gutter('end')!.querySelector('[data-tier-annotation]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Number (Decimal)' }));
+    expect(labels('end')).toEqual(['[0]', '[0]', '[1]']);
+  });
+
+  it('saves the preference without changing the other display settings', () => {
+    renderHomeView();
+    fireEvent.click(annotationsSwitch());
+    expect(localStorage.getItem('mayastack:showTierAnnotations')).toBe('true');
+    expect(localStorage.getItem('mayastack:showPlaceTierGuides')).toBeNull();
+    expect(localStorage.getItem('mayastack:showTierHairlines')).toBeNull();
+    expect(localStorage.getItem('mayastack:showGrid')).toBeNull();
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(annotationsSwitch());
+    expect(localStorage.getItem('mayastack:showTierAnnotations')).toBe('false');
+    expect(gutters()).toHaveLength(0);
+  });
+
+  it('starts from a saved preference, shown on the initial numeral', () => {
+    localStorage.setItem('mayastack:showTierAnnotations', 'true');
+    const { enter } = renderHomeView();
+    expect(annotationsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(labels('start')).toEqual(['200']);
+    enter('400');
+    expect(labels('start')).toEqual(['200', '201', '202']);
+  });
+
+  it('is independent of the place tier guides and the dividing hairlines', () => {
+    const { enter } = renderHomeView();
+    enter('8000');
+    const guideLayers = () => viewer().querySelectorAll('[data-place-tier-guides], [data-tier-hairlines]').length;
+
+    fireEvent.click(annotationsSwitch());
+    expect(guideLayers()).toBe(0);
+
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect(guideLayers()).toBe(2);
+    expect(gutters()).toHaveLength(2);
+
+    fireEvent.click(annotationsSwitch());
+    expect(gutters()).toHaveLength(0);
+    expect(guideLayers()).toBe(2);
+    expect(bandsSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(hairlinesSwitch().getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(annotationsSwitch());
+    fireEvent.click(bandsSwitch());
+    fireEvent.click(hairlinesSwitch());
+    expect(guideLayers()).toBe(0);
+    expect(gutters()).toHaveLength(2);
+  });
+
+  it('keeps the annotations outside the SVG, and exports the same SVG with them on or off', () => {
+    const { enter, numeralSvg } = renderHomeView();
+    enter('8000');
+    const off = exportedMarkup(numeralSvg());
+    fireEvent.click(annotationsSwitch());
+
+    const layers = viewer().querySelectorAll('[data-tier-annotations]');
+    expect(layers).toHaveLength(2);
+    // Not in the numeral image either: they sit beside the paper
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    layers.forEach((layer) => {
+      expect(numeralSvg().contains(layer)).toBe(false);
+      expect(image.contains(layer)).toBe(false);
+    });
+    expect(viewer().querySelectorAll('svg')).toHaveLength(1);
+
+    const on = exportedMarkup(numeralSvg());
+    expect(on).toBe(off);
+    expect(on).not.toMatch(/annotation/);
+  });
+
+  it('uses the compact labels at 25% in both modes, with the labels still shown, and the default ones from 50% (slice 4b)', () => {
+    const { enter } = renderHomeView();
+    enter('8000');
+    fireEvent.click(annotationsSwitch());
+    const compact = () =>
+      [...viewer().querySelectorAll<HTMLElement>('[data-numeral-annotations-box]')].filter((box) =>
+        box.className.split(' ').includes('[&_[data-tier-annotation]]:text-[10px]')
+      ).length;
+    const zoomOut = () => fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(compact()).toBe(0);
+    for (let i = 0; i < 3; i++) zoomOut();
+    expect(compact()).toBe(2);
+    expect(labels('start')).toEqual(['200', '201', '202', '203']);
+    expect(labels('end')).toEqual(['[0]', '[0]', '[0]', '[1]']);
+
+    // Date mode: its viewer starts at 100% (the Number viewer is gone until a date is chosen), then the
+    // same at 25%: powers at the start, the empty end gutter, both compact
+    chooseDate();
+    expect(compact()).toBe(0);
+    for (let i = 0; i < 3; i++) zoomOut();
+    expect(compact()).toBe(2);
+    expect(labels('start').length).toBeGreaterThan(0);
+    expect(gutter('end')!.querySelector('[data-tier-annotation]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(compact()).toBe(0);
+  });
+
+  it('leaves the zoom and the numeral image’s width as they are, and mirrors the numeral’s height in the gutters', () => {
+    const { enter } = renderHomeView();
+    enter('8000'); // 4 tiers: 350 × 320 units
+    const image = screen.getByRole('img', { name: /^Mayan numeral for 8000/ });
+    const zoomText = () => screen.getByRole('group', { name: 'Zoom controls' }).textContent;
+    const boxHeight = (side: 'start' | 'end') =>
+      gutter(side)!.querySelector<HTMLElement>('[data-numeral-annotations-box]')!.style.height;
+
+    fireEvent.click(annotationsSwitch());
+    expect([zoomText(), image.style.width]).toEqual(['−100%+Reset', '350px']);
+    expect([boxHeight('start'), boxHeight('end')]).toEqual(['320px', '320px']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect([zoomText(), image.style.width]).toEqual(['−125%+Reset', '437.5px']);
+    expect([boxHeight('start'), boxHeight('end')]).toEqual(['400px', '400px']);
+
+    fireEvent.click(annotationsSwitch());
+    expect(image.style.width).toBe('437.5px');
+  });
+});
+
+describe('HomeView annotation gutters on the paper’s colour (UI-13, slice 3b)', () => {
+  /** Hands the settings, as components get them, to the test after every render */
+  function SettingsProbe({ onSettings }: { onSettings: (settings: DisplaySettingsContextType) => void }) {
+    onSettings(useDisplaySettings());
+    return null;
+  }
+
+  /**
+   * Stands in for the OS colour-scheme query (the default theme follows it), starting light, and
+   * for every other media query as not matching (no reduced motion). Returns a function that
+   * changes the scheme and tells the provider, as an OS change does.
+   */
+  function fakeSystemScheme() {
+    const listeners = new Set<() => void>();
+    const scheme = { dark: false };
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (media: string) =>
+        ({
+          media,
+          get matches() {
+            return media.includes('prefers-color-scheme: dark') && scheme.dark;
+          },
+          addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+          removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+        }) as unknown as MediaQueryList
+    );
+    return (dark: boolean) => {
+      scheme.dark = dark;
+      act(() => listeners.forEach((listener) => listener()));
+    };
+  }
+
+  /** HomeView with the tier annotations on, a five-tier number shown, and the settings at hand */
+  function renderAnnotated() {
+    localStorage.setItem('mayastack:showTierAnnotations', 'true');
+    let settings!: DisplaySettingsContextType;
+    render(
+      <DisplaySettingsProvider>
+        <HomeView />
+        <SettingsProbe onSettings={(s) => (settings = s)} />
+      </DisplaySettingsProvider>
+    );
+    fireEvent.change(screen.getByLabelText('Decimal integer'), { target: { value: '3047620' } });
+    const viewer = () => screen.getByRole('group', { name: 'Numeral viewer' });
+    const gutters = () => [...viewer().querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+    const paper = () => viewer().querySelector<HTMLElement>('[data-numeral-paper]')!;
+    return { settings: () => settings, viewer, gutters, paper };
+  }
+
+  /** The opaque colour the viewer shows for a background, over the theme's canvas, as CSS */
+  const shown = (background: { r: number; g: number; b: number; a: number }, theme: 'light' | 'dark') =>
+    rgbaToCss({ ...getGuideColors(background, VIEWER_BACKDROP[theme]).background, a: 1 });
+
+  afterEach(() => localStorage.clear());
+
+  it('gives both gutters the default white paper’s colour, as the paper has it', () => {
+    fakeSystemScheme();
+    const v = renderAnnotated();
+    expect(v.gutters()).toHaveLength(2);
+    expect(v.paper().style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+    for (const gutter of v.gutters()) {
+      expect(gutter.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+      // Its place, layer and fallback colour as they were
+      expect(gutter.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'z-10', 'w-12', 'bg-canvas']));
+    }
+  });
+
+  it('gives both gutters a custom opaque paper colour exactly as the paper has it', () => {
+    fakeSystemScheme();
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify({ r: 20, g: 40, b: 90, a: 1 }));
+    const v = renderAnnotated();
+    expect(v.paper().style.backgroundColor).toBe('rgba(20, 40, 90, 1)');
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual(['rgba(20, 40, 90, 1)', 'rgba(20, 40, 90, 1)']);
+  });
+
+  it('gives both gutters a translucent paper’s colour as shown over the canvas, opaque, not the colour as set', () => {
+    fakeSystemScheme();
+    const background = { r: 20, g: 40, b: 90, a: 0.35 };
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+    const v = renderAnnotated();
+    const expected = shown(background, 'light');
+    // The paper keeps the translucent colour, painted over the canvas; the gutters, the result
+    expect(v.paper().style.backgroundColor).toBe(rgbaToCss(background));
+    expect(expected).not.toBe(rgbaToCss(background));
+    expect(expected).toMatch(/, 1\)$/);
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual([expected, expected]);
+  });
+
+  it('updates both gutters when the paper colour or the theme changes', () => {
+    const setDark = fakeSystemScheme();
+    const v = renderAnnotated();
+    const colours = () => v.gutters().map((g) => g.style.backgroundColor);
+    expect(colours()).toEqual(['rgba(255, 255, 255, 1)', 'rgba(255, 255, 255, 1)']);
+
+    const translucent = { r: 200, g: 120, b: 30, a: 0.5 };
+    act(() => v.settings().setBackgroundColor(translucent));
+    expect(colours()).toEqual([shown(translucent, 'light'), shown(translucent, 'light')]);
+
+    // The theme, and so the canvas a translucent paper is shown over
+    setDark(true);
+    expect(v.settings().resolvedTheme).toBe('dark');
+    expect(colours()).toEqual([shown(translucent, 'dark'), shown(translucent, 'dark')]);
+    expect(shown(translucent, 'dark')).not.toBe(shown(translucent, 'light'));
+
+    // An opaque colour is the same in both themes
+    act(() => v.settings().setBackgroundColor({ r: 5, g: 6, b: 7, a: 1 }));
+    expect(colours()).toEqual(['rgba(5, 6, 7, 1)', 'rgba(5, 6, 7, 1)']);
+    setDark(false);
+    expect(colours()).toEqual(['rgba(5, 6, 7, 1)', 'rgba(5, 6, 7, 1)']);
+  });
+
+  it('keeps the gutters’ colour through zooming, and leaves the export unchanged', () => {
+    fakeSystemScheme();
+    const background = { r: 20, g: 40, b: 90, a: 0.35 };
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify(background));
+    const v = renderAnnotated();
+    const svg = () => v.viewer().querySelector<SVGSVGElement>('svg.mep-svg')!;
+    const exported = exportedMarkup(svg());
+    const expected = shown(background, 'light');
+    for (const button of ['Zoom in', 'Zoom out', 'Zoom out', 'Zoom out', 'Zoom out'] as const) {
+      fireEvent.click(screen.getByRole('button', { name: button }));
+      expect(v.gutters().map((g) => g.style.backgroundColor), button).toEqual([expected, expected]);
+      // No zooming class, background or otherwise, on the gutters
+      for (const gutter of v.gutters()) expect(gutter.className, button).not.toContain('[zooming');
+    }
+    // The SVG, the source of the exports, has nothing of the gutters' colour
+    expect(exportedMarkup(svg())).toBe(exported);
+    expect(exported).not.toContain(expected);
+  });
+
+  it('shows no gutters, and nothing breaks, without annotations, and in Date mode keeps both coloured', () => {
+    fakeSystemScheme();
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify({ r: 20, g: 40, b: 90, a: 1 }));
+    const v = renderAnnotated();
+    act(() => v.settings().setShowTierAnnotations(false));
+    expect(v.gutters()).toHaveLength(0);
+    act(() => v.settings().setShowTierAnnotations(true));
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual(['rgba(20, 40, 90, 1)', 'rgba(20, 40, 90, 1)']);
+    // Date mode: the end gutter is empty, but laid out and coloured like the other
+    fireEvent.click(screen.getByRole('radio', { name: 'Date' }));
+    fireEvent.click(screen.getByLabelText('Date input'));
+    fireEvent.click(screen.getAllByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ })[0]);
+    expect(v.gutters().map((g) => g.style.backgroundColor)).toEqual(['rgba(20, 40, 90, 1)', 'rgba(20, 40, 90, 1)']);
   });
 });
