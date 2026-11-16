@@ -22,6 +22,9 @@ Explore and convert numbers or dates into Mayan numeral glyphs. MayaStack brings
 - Number mode starts at 0, shown with the shell zero glyph. A count shows the number's significant digits, and while the input has focus the Up and Down arrow keys add or subtract 1, from 0 up to the 128-digit maximum. Leading zeros typed or pasted before a whole number are removed, so typing 5 after the initial 0 gives 5
 - Number input actions: Random fills in a random whole number of 1 to 10 digits, Copy copies the number to the clipboard, Clear empties the field and Zero sets it to 0. The quick steps +1, +5, +20 and +400 add to the number, as long as the result stays within 128 digits
 - Interactive visual stacks using dots, bars, and shells
+- Numeral viewer with zoom from 25% to 400% (with the buttons, or with `+` and `-`, and `0` to reset, while the viewer has focus) and a key to the glyphs: Shell = 0, Dot = 1, Bar = 5
+- Optional on-screen viewer guides, never included in exports: Place Tier Guides shading each tier, Dividing Hairlines between tiers, and Tier Annotations labelling each tier with its power of 20 and, in Number mode, its base-20 digit (hidden when the viewer is narrow)
+- In Number mode, a base-20 breakdown showing the number as a sum of powers of 20, with Copy Formula and an optional table of each tier's contribution
 - Export numeral stacks as SVG or PNG for sharing or printing
 - SVG export works at every size. PNG export is limited to 32,767 px in width and height and 8,192 × 8,192 pixels in total, because larger images fail or need too much memory in some browsers; sizes beyond that are marked unavailable. A PNG within these limits can still fail on some browsers or devices (notably mobile), in which case the app says so and suggests a smaller size or SVG
 - Supports custom export sizes and flexible display options
