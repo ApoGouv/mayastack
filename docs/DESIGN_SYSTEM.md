@@ -8,6 +8,7 @@ This document describes MayaStack's visual foundation: semantic colour tokens, c
 |---|---|
 | Tokens, `color-scheme`, focus utility, reduced motion, heading font | Implemented (Stage 1: UI-02, PR #14) |
 | Existing components use the tokens | Implemented (Stage 1: UI-03) |
+| Material selector, Custom Material dialog, material contrast rules, settings-panel header (UI-15) | Approved design (revised 2026-11-18), not implemented. Sections 4, 5, 6 and 9 mark these parts; the current application still has the two colour pickers, with alpha, and the white and black default |
 
 The existing components, the third-party widgets (date picker, toasts, colour picker) and the brand mark use the tokens and the shared focus ring. The earlier Tailwind colours and the `ms-*` brand tokens have been removed. Section 9 records the decisions that were applied.
 
@@ -65,6 +66,14 @@ Each token is available as a Tailwind colour (`bg-surface`, `text-fg`, `border-l
 
 The annotation labels are therefore drawn over a colour the user chooses, not over a theme surface (section 5).
 
+**Material colours (UI-15; approved design, not implemented).** A material is the pair of the numeral's background and glyph colours, which belong to the exported artwork, not to the interface theme (section 11, exceptions 1 and 2):
+
+- **Opaque only:** preset and custom material colours are fully opaque, with no alpha or opacity control; translucent settings are not preserved. Colours stay saved in the existing JSON RGBA format under the existing keys, written with `a: 1`; the material model may use opaque RGB internally, converted at the persistence boundary, with no new storage format or migration.
+- **Pair-level fallback:** the background and glyph colours are one pair. A complete, valid, opaque saved pair is kept. If one colour is saved and the other is missing, or either saved colour is invalid or translucent, the complete Limestone pair is used, never a saved colour mixed with a default, and a non-blocking, user-visible notice says that the saved material was unsupported and Limestone has been selected. Users with no saved colours receive Limestone without a notice. The current application still falls back per colour; the exact rules are in [the roadmap](plans/ui-redesign-roadmap.md) (UI-15).
+- **Theme-independent:** one catalogue serves both themes. Changing the theme never changes the selected material, its colours or their saved values.
+- **Presets:** Limestone (the default for users without saved colours), Dark Stela, Obsidian Basalt and Weathered Limestone; their colours and contrast are in section 5.
+- **Tiles:** each preset is a compact rectangular tile split diagonally from lower left to upper right, drawn with CSS: the upper-left triangle in the material's glyph colour, the lower-right triangle in its background colour, inside a visible border. The selected tile has an accent ring and a check indicator, so selection does not rely on colour alone. The Custom tile is a separate button (section 9).
+
 ## 5. Contrast
 
 The baseline is WCAG 2.2 AA: at least 4.5:1 for text, 3:1 for large text, and 3:1 for user interface boundaries, state indicators and focus indicators (non-text contrast).
@@ -93,7 +102,23 @@ Ratios for the main pairs, calculated from the values in `src/index.css` (light 
 
 `e2e/design-foundation.e2e.ts` re-checks a deliberate set of contrast-critical pairs from the browser's computed values in both themes. It also measures the colours as applied to the components ("design system on the components"): element contrast, the gold controls' borders, focus rings and the themed widgets. When a token changes, update the values in `src/index.css`, run that test, and update this table.
 
-**Tier annotation labels: contrast under investigation.** The ratios above are between theme tokens. The annotation labels (`fg-subtle` and `accent-fg`, section 4) are drawn over the annotation gutters, whose background is the user's paper colour, not a theme surface, so the table does not cover them. With some combinations of theme and paper colour the labels' contrast may fall below 4.5:1. This has not been measured or confirmed as an accessibility defect: it is under investigation, recorded for UI-14's final validation and relevant to UI-15's material presets (see [the roadmap](plans/ui-redesign-roadmap.md)). No colour change has been decided.
+**Tier annotation labels: contrast under investigation.** The ratios above are between theme tokens. The annotation labels (`fg-subtle` and `accent-fg`, section 4) are drawn over the annotation gutters, whose background is the user's paper colour, not a theme surface, so the table does not cover them. With some combinations of theme and paper colour the labels' contrast may fall below 4.5:1. This has not been measured or confirmed as an accessibility defect: it is under investigation, recorded for UI-14's final validation and relevant to UI-15's material presets (see [the roadmap](plans/ui-redesign-roadmap.md)). No colour change has been decided. Update (2026-11-18): UI-15's reconciliation report calculated potentially low label contrast in cross-polarity combinations of material and theme. Those figures are calculations, not browser measurements, and are not reproduced here. The browser verification is brought forward, after UI-11 and before UI-15 starts; if it confirms the issue, a separate, focused correction is made, not as part of UI-15. Until then the issue is neither confirmed nor fixed.
+
+**Material contrast (UI-15; approved design, not implemented).** These rules cover the contrast between a material's background and glyph colours only, not the interface, and make no claim of whole-application WCAG conformance:
+
+- **Presets** target at least 7:1. Calculated from their colours (WCAG 2.x formula):
+
+  | Preset | Background | Glyph | Contrast |
+  |---|---|---|---|
+  | Limestone (default) | `#FAF8F5` | `#14171D` | 16.93:1 |
+  | Dark Stela | `#1D2026` | `#F2CA50` | 10.37:1 |
+  | Obsidian Basalt | `#090B0E` | `#E8DFD1` | 14.92:1 |
+  | Weathered Limestone | `#C7BC9F` | `#101319` | 9.85:1 |
+
+- **Custom materials** need at least 3:1. Apply does not proceed while the unrounded ratio is below 3:1; there is no separate 4.5:1 advisory tier.
+- Neither colour is ever adjusted automatically to make a pair pass.
+- The ratio is shown truncated to two decimal places, never rounded up, so a pair just below 3:1 never reads as 3.00:1.
+- A failing ratio is explained in visible text, not by colour alone. Changes between pass and fail are announced to assistive technology; individual ratio updates while a colour is dragged are not.
 
 ## 6. Focus
 
@@ -104,6 +129,8 @@ Text fields with a `well` fill and a 1 px boundary (the number and date inputs) 
 The render-mode selector (`RenderModeSelector.tsx`) draws the same outer outline on the focused segment's label (`has-focus-visible:outline-2 outline-offset-2 outline-focus`), because its radio is only the small dot inside it. The radio suppresses its own outline (`focus:outline-none`), so there is one indicator, not two.
 
 Do not remove the outline (`outline-none`) without replacing it with `focus-ring`.
+
+**Material controls (UI-15; approved design, not implemented):** the preset tiles and the Custom tile use `focus-ring`, separate from the selected state's accent ring and check. In the Custom Material dialog, react-colorful's sliders get a visible focus indicator in the `focus` token, replacing the limitation below once implemented; each picker, the hex input and the groups of controls have visible, programmatically associated labels.
 
 Two library limitations remain. The colour picker's sliders keep react-colorful's own focus cue (an enlarged pointer). react-datepicker renders its clear button with `tabIndex={-1}`, so it is not in the Tab order and shows the ring only when focused another way. The date picker's month and year selects and its previous and next month buttons keep their existing library or browser focus styles; their focus appearance has not been verified separately.
 
@@ -154,6 +181,17 @@ Applied to the existing components (UI-03):
 - The main heading uses `fg` and the heading font. The "Stack" part of the wordmark uses `accent-fg`.
 - The `ms-*` brand tokens have been removed.
 
+**Panel headers.** The viewer and base-20 cards currently begin with an icon-and-title header: an `h2` in the heading font (`font-heading text-lg font-semibold`, `flex items-center gap-2`) holding a 20 px icon in `accent-fg`, hidden from assistive technology, followed by the title, as in the viewer's "Mayan Numeral Stack" (`Layers`) and the base-20 card's "Base-20 Representation" (`Functions`), both in `HomeView.tsx`. *Approved for UI-15, not implemented:* the settings panel follows the same pattern, beginning with a header that holds the tune/settings icon and the title "Stela Material & Glyph Settings". Today that title is the panel's `<legend>`, without an icon; restructuring it into the header must keep the settings `fieldset`'s accessible name.
+
+**Material selector and Custom Material dialog (UI-15; approved design, not implemented):**
+
+- **Selector:** the four presets (section 4) form a native radio group; arrow keys move between them. Custom is a separate button tile, not a radio, and arrow-key navigation never triggers it. When the current pair matches no preset, no radio is checked and the Custom tile shows that the current selection is Custom.
+- **Dialog:** a native `<dialog>`, opened modally, centred on desktop and a bottom sheet below `sm`. Closing it returns focus to the Custom tile. Escape behaves as Cancel.
+- **Draft state:** the dialog edits a draft. The applied viewer does not change while the draft is edited; Cancel discards every draft change, and Apply is the only action that updates the selected background and glyph pair, and only when the pair meets the custom minimum (section 5).
+- **Contents:** a labelled background colour picker and a labelled glyph colour picker (react-colorful, opaque only), a labelled hex input for exact entry, a live preview of the draft, the contrast ratio with its pass or fail explanation, and Apply and Cancel. Invalid hex input leaves the draft colour unchanged and shows a visible validation error; it is never silently coerced.
+- **Hex input:** the field keeps invalid text while the user edits, never strips or coerces characters into a different valid colour, and changes the draft colour only once a complete, valid hex value is entered. react-colorful's `HexColorInput` strips non-hex characters and resets invalid text on blur, so it must not be assumed suitable; the component is chosen in implementation (S5).
+- **Preview:** the existing renderer with the draft colours, at 100% scale, in a capped, scrollable area. It is not the export source (it does not receive the viewer's `exportRef`) and has no grid, even while the main viewer's Show Grid is on; how the renderer suppresses it (for example an optional grid-visibility prop) is defined in S4, and the preview never changes the main viewer's grid setting. The exported SVG's IDs and markup are unchanged, and no unique grid-pattern IDs are introduced.
+
 ## 10. Typography
 
 - **Interface text and numbers:** system fonts (Tailwind's `font-sans`), with `tabular-nums` where digits must line up.
@@ -179,8 +217,8 @@ Do not subset, convert (including to WOFF2), rename or otherwise modify the font
 
 UI colours (backgrounds, text, borders, outlines and rings, `accent-color`, placeholders) use the semantic tokens. Raw Tailwind palette colours and hex values are allowed only for these documented exceptions:
 
-1. **Exported artwork and its defaults:** the numeral renderer, glyph and SVG components, the `.mep-svg` rule, and the default background and glyph colours in `DisplaySettingsContext`. These belong to the exported SVG and PNG, not to the interface theme.
-2. **Colours the user chooses:** the colour-picker swatch's inline colour, and the black or white text that `utils/colors.ts` picks for it.
+1. **Exported artwork and its defaults:** the numeral renderer, glyph and SVG components, the `.mep-svg` rule, and the default background and glyph colours in `DisplaySettingsContext`. *Approved for UI-15, not implemented:* the material preset catalogue, wherever it is defined; its values are the approved material colours of the exported SVG and PNG (section 5). These belong to the exported SVG and PNG, not to the interface theme.
+2. **Colours the user chooses:** the colour-picker swatch's inline colour, and the black or white text that `utils/colors.ts` picks for it. *Approved for UI-15, not implemented:* the material tiles' inline background and glyph colours, and the Custom Material dialog's draft colours and preview colours.
 3. **Static files that cannot read CSS variables:** `favicon.svg`.
 4. **CSS keywords:** `transparent`, `currentColor` and `inherit`.
 5. **Test files.**
@@ -191,3 +229,5 @@ These commands must list only the exceptions above. The first lists nothing. It 
 git grep -nE '\b(bg|text|border|ring|ring-offset|outline|fill|stroke|accent|placeholder|divide|shadow|decoration|caret)-(white|black|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-[0-9]{2,3}|ms-[a-z-]+)' -- 'src/*.tsx' 'src/*.ts' ':!*.test.*'
 git grep -nE '#[0-9a-fA-F]{3,8}\b' -- 'src/*.tsx' 'src/*.ts' 'src/*.css' index.html favicon.svg ':!*.test.*' ':!src/index.css'
 ```
+
+Once UI-15 is implemented, the second command will also list the material preset catalogue's values, which exception 1 covers. Every other hex value it lists must still match one of the exceptions above.
