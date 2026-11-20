@@ -26,6 +26,7 @@ function renderViewport(
     underlay?: ReactNode;
     overlay?: ReactNode;
     annotationBackground?: string;
+    headerEnd?: ReactNode;
   } = {}
 ) {
   const result = render(
@@ -357,6 +358,39 @@ describe('NumeralViewport', () => {
       expect(screen.queryByRole('heading')).toBeNull();
       fireEvent.click(zoomIn);
       expect(zoomText()).toBe('125%');
+    });
+
+    // UI-11: the end slot, for the Export control where the viewer sticks
+    it('groups the given end content after the zoom controls, so they wrap together, in the tab order after Reset', () => {
+      const { viewer, zoomIn, zoomOut, reset } = renderViewport({
+        header: HEADING,
+        headerEnd: <button type="button">End</button>,
+      });
+      const heading = screen.getByRole('heading', { name: 'Mayan Numeral Stack' });
+      const controls = screen.getByRole('group', { name: 'Zoom controls' });
+      const end = screen.getByRole('button', { name: 'End' });
+      const row = heading.parentElement!;
+      const group = controls.parentElement!;
+
+      expect([...row.children]).toEqual([heading, group]);
+      expect([...group.children]).toEqual([controls, end]);
+      // The group neither wraps nor shrinks, like the controls
+      expect(group.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'shrink-0', 'items-center']));
+      expect(group.className).not.toContain('flex-wrap');
+      expect(row.contains(viewer)).toBe(false);
+      const focusable = [...document.querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
+      expect(focusable).toEqual([zoomOut, zoomIn, reset, end, viewer]);
+    });
+
+    it('leaves the zoom controls directly in the row without end content', () => {
+      for (const headerEnd of [undefined, null, false]) {
+        renderViewport({ header: HEADING, headerEnd });
+        const controls = screen.getByRole('group', { name: 'Zoom controls' });
+        expect(controls.parentElement!.firstElementChild, String(headerEnd)).toBe(
+          screen.getByRole('heading', { name: 'Mayan Numeral Stack' })
+        );
+        cleanup();
+      }
     });
 
     it('orders the controls Zoom out, the percentage, Zoom in, a decorative separator, then Reset', () => {

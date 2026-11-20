@@ -5,12 +5,19 @@
 
 /* The sticky desktop viewer (UI-13, slice 5e): from lg (64rem, the two-column workspace) and only
    on screens at least 40rem tall. The viewer card then sticks 1rem below the top of the screen,
-   and all of it must fit: from lg its stage is at least 28rem (448 px, `numeral-stage-height`),
-   and the card's header, glyph key and padding add a little over 100 px, so the card is under
-   600 px below 45rem of screen height, and grows with the stage, 100svh − 17.5rem, above it,
-   always ending above the screen's bottom. Below either threshold the card stays in the flow.
+   and all of it must fit, also at the end of the page, where the card stops at the end of its
+   grid area, 121 px above the screen's bottom (main's bottom padding and margin, and the
+   footer). From lg its stage is at least 24rem (384 px, `numeral-stage-height`), and the
+   card's header, glyph key and padding add 104 px (124 px from 64rem to 80rem wide, where
+   the header takes two lines), so the card is at most 508 px tall on the shortest screens:
+   at the end of the page, it is about 11 px from the top at exactly 40rem (640 px), with all
+   of its header in view, and keeps about its 1rem offset from 40.5rem (648 px) of screen
+   height up, in the measured cases (UI-11).
+   Above that, it grows with the stage, 100svh − 17.5rem, keeping its offset. Below either
+   threshold the card stays in the flow.
    The threshold follows the provisional stage height: re-evaluate it if the stage sizing
-   changes (slice 5d, deferred). */
+   changes (slice 5d, deferred). Script reads the same query (STICKY_VIEWER_QUERY,
+   src/hooks/useMediaQuery.ts, for the Export control's place, UI-11): keep the two the same. */
 @custom-variant sticky-viewer {
   @media (width >= 64rem) and (height >= 40rem) {
     @slot;
@@ -198,19 +205,21 @@
    same at every zoom level. svh keeps it steady as mobile browser bars show and hide; vh is the
    fallback where svh is unsupported, in @supports, since the minifier drops a plain duplicate
    declaration. From lg, the viewer card sits beside the other cards, so the stage takes the
-   screen's height less what is above and below it (17.5rem). */
+   screen's height less what is above and below it (17.5rem), and at least 24rem (UI-11): the
+   least that still shows a four-tier numeral at 100% without scrolling, and low enough that
+   the sticky card fits on short desktop screens (see `sticky-viewer`, above). */
 @utility numeral-stage-height {
   height: clamp(18rem, 60svh, 30rem);
 
   @media (width >= 64rem) {
-    height: clamp(28rem, calc(100svh - 17.5rem), 45rem);
+    height: clamp(24rem, calc(100svh - 17.5rem), 45rem);
   }
 
   @supports not (height: 1svh) {
     height: clamp(18rem, 60vh, 30rem);
 
     @media (width >= 64rem) {
-      height: clamp(28rem, calc(100vh - 17.5rem), 45rem);
+      height: clamp(24rem, calc(100vh - 17.5rem), 45rem);
     }
   }
 }

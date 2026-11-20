@@ -75,14 +75,15 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('bounded numeral viewport', () => {
   test('keeps the viewer and the numeral result bounded for 1 to 128 digits', async ({ page }) => {
-    // Changed deliberately in UI-13: the stage has the screen's height (448 px at 1280 × 720,
-    // the default), whatever the numeral's, instead of a 480 px maximum and a short numeral's own
+    // Changed deliberately in UI-13: the stage has the screen's height (440 px at 1280 × 720,
+    // the default, since UI-11 lowered the minimum to 24rem; 448 px before), whatever the
+    // numeral's, instead of a 480 px maximum and a short numeral's own
     const result = viewerCard(page);
     const heights: Record<string, { viewer: number; result: number }> = {};
     for (const digits of ['7', FIFTY_DIGITS, '9'.repeat(100), MAX_DIGITS]) {
       const viewer = await showNumber(page, digits);
       heights[digits.length] = { viewer: (await viewer.boundingBox())!.height, result: (await result.boundingBox())!.height };
-      expect(heights[digits.length].viewer, `${digits.length} digits`).toBe(448);
+      expect(heights[digits.length].viewer, `${digits.length} digits`).toBe(440);
     }
     // The result no longer grows with the number (the 128-digit SVG alone is 7,920 px tall)
     expect(heights[1].result).toBe(heights[50].result);
@@ -484,7 +485,9 @@ test.describe('numeral scale and position', () => {
 
   /** The approved screen sizes and the stage's expected height at each (UI-13, provisional) */
   const SCREENS = [
-    { width: 1280, height: 720, stage: 448 }, // the lg minimum, 28rem
+    // 100svh − 17.5rem. Changed deliberately in UI-11: the lg minimum is now 24rem (384 px), so
+    // the screen's height sets the stage here (448 px before, the old 28rem minimum)
+    { width: 1280, height: 720, stage: 440 },
     { width: 1280, height: 800, stage: 520 },
     { width: 1440, height: 900, stage: 620 },
     { width: 375, height: 667, stage: 400.2 }, // 60svh
@@ -512,6 +515,42 @@ test.describe('numeral scale and position', () => {
       if (screen.width >= 1024) expect(c.y + c.height, what).toBeLessThanOrEqual(screen.height);
       await page.getByRole('button', { name: 'Reset' }).click();
     }
+  });
+
+  test('gives the stage its 24rem minimum on short desktop screens, and shows four tiers at 100% there without scrolling', async ({ page }) => {
+    // UI-11: from lg, the stage is at least 24rem (384 px), lowered from 28rem so the sticky card
+    // fits short desktop screens; above it, 100svh − 17.5rem, as before
+    for (const screen of [
+      { width: 1024, height: 640, stage: 384 }, // the minimum
+      { width: 1024, height: 700, stage: 420 },
+      { width: 1280, height: 720, stage: 440 },
+      { width: 1024, height: 768, stage: 488 }, // unchanged
+    ]) {
+      await page.setViewportSize(screen);
+      const viewer = await showNumber(page, FIFTY_DIGITS);
+      expect((await viewer.boundingBox())!.height, `${screen.width} × ${screen.height}`).toBeCloseTo(screen.stage, 0);
+    }
+
+    // The minimum's usability floor, the reason it is not lower (23.5rem needs 2 px of scrolling):
+    // a four-tier numeral (159999, 19.19.19.19 in base 20) fits whole at 100% on the shortest
+    // sticky screen, its paper inside the stage, which does not scroll vertically
+    await page.setViewportSize({ width: 1024, height: 640 });
+    const viewer = await showNumber(page, '159999');
+    await expect(zoomLevel(page)).toHaveText('100%');
+    const fit = await viewer.evaluate((stage) => {
+      const s = stage.getBoundingClientRect();
+      const p = stage.querySelector('[data-numeral-paper]')!.getBoundingClientRect();
+      const inner = { top: s.top + stage.clientTop, bottom: s.top + stage.clientTop + stage.clientHeight };
+      return {
+        tiers: stage.querySelectorAll('g[data-digit-index]').length,
+        scrollHeight: stage.scrollHeight,
+        clientHeight: stage.clientHeight,
+        paperInside: p.top >= inner.top && p.bottom <= inner.bottom,
+      };
+    });
+    expect(fit.tiers).toBe(4);
+    expect(fit.scrollHeight, 'no vertical scrolling').toBeLessThanOrEqual(fit.clientHeight);
+    expect(fit.paperInside, 'the whole paper in view').toBe(true);
   });
 
   test('centres a short numeral both ways in the stage, in Number and Date modes, also while it is wider', async ({ page }) => {
@@ -629,7 +668,7 @@ test.describe('numeral scale and position', () => {
     for (const level of ['50%', '75%', '100%']) await step(level, 'y');
   });
 
-  test('keeps the zoom controls and stage above the floating Export trigger on phones, and the zoom controls and glyphs clear of it on desktop at 100% and 400%', async ({ page }) => {
+  test('keeps the zoom controls and stage above the floating Export trigger on phones, and Export in the header, above the stage and clear of the zoom controls and glyphs, on desktop at 100% and 400%', async ({ page }) => {
     // Seven screen and mode combinations, two zoom levels each on desktop
     test.slow();
     const exportButton = page.getByRole('button', { name: '📦 Export' });
@@ -650,9 +689,9 @@ test.describe('numeral scale and position', () => {
       for (const button of await zoomButtons()) expect(intersects(button, trigger)).toBe(false);
     }
 
-    // From lg it covers the stage's bottom-right corner (a known limitation, for UI-11). The
-    // trigger does not overlap the zoom controls or glyphs in the tested desktop configurations
-    // (100% and 400%, scrolled to the bottom-right corner); other zoom levels are not covered
+    // Changed deliberately in UI-11: where the viewer sticks (these desktop sizes), Export is in
+    // the viewer's header, above the stage, instead of floating over its bottom-right corner. It
+    // overlaps neither the zoom controls nor the glyphs, scrolled to the bottom-right corner
     for (const screen of [SCREENS[0], SCREENS[1]]) {
       await page.setViewportSize(screen);
       for (const mode of ['number', 'date'] as const) {
@@ -665,6 +704,8 @@ test.describe('numeral scale and position', () => {
           const glyphs = await viewer.locator('g[data-digit-index]').evaluateAll((gs) =>
             gs.map((g) => g.getBoundingClientRect()).filter((r) => r.height > 0).map(({ x, y, width, height }) => ({ x, y, width, height })));
           const what = `${screen.width} × ${screen.height}, ${mode} at ${level}`;
+          const stage = (await viewer.boundingBox())!;
+          expect(trigger.y + trigger.height, what).toBeLessThanOrEqual(stage.y);
           expect(glyphs.filter((g) => intersects(g, trigger)), what).toEqual([]);
           for (const button of await zoomButtons()) expect(intersects(button, trigger), what).toBe(false);
         }
@@ -717,7 +758,14 @@ test.describe('numeral scale and position', () => {
           return { tag: el.tagName.toLowerCase(), name: el.getAttribute('aria-label') ?? el.textContent!.trim(), x: b.x, y: b.y, width: b.width, height: b.height };
         }));
       const content = { left: card.x + 16, right: card.x + card.width - 16, width: card.width - 32 };
-      return { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind };
+      // The row's trailing group: the zoom controls, with Export after them where the viewer sticks
+      // (UI-11), or the controls alone where Export floats
+      const exportButton = page.getByRole('button', { name: '📦 Export' });
+      const exportInHeader = await exportButton.evaluate((button) =>
+        !!button.parentElement?.previousElementSibling?.matches('[role="group"][aria-label="Zoom controls"]'));
+      const trailing = exportInHeader ? (await controls(page).locator('xpath=..').boundingBox())! : c;
+      const exportBox = exportInHeader ? (await exportButton.boundingBox())! : null;
+      return { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind, trailing, exportBox };
     };
 
     // The six approved sizes, the lg boundary and a tablet width
@@ -729,11 +777,21 @@ test.describe('numeral scale and position', () => {
         const what = `${size.width} × ${size.height}`;
         await page.setViewportSize({ width: size.width, height: size.height });
         await showNumber(page, FIFTY_DIGITS);
-        const { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind } = await headerLayout(page);
+        const { card, content, heading: h, controls: c, stage, parts, cluster: cl, indicator: ind, trailing: t, exportBox } = await headerLayout(page);
+
+        // UI-11: Export is in the header exactly where the viewer sticks (64rem wide, 40rem tall):
+        // right after the zoom controls, 8 px from them, as tall as them and centred on them
+        expect(exportBox !== null, what).toBe(size.width >= 1024 && size.height >= 640);
+        if (exportBox) {
+          expect(exportBox.x - (c.x + c.width), what).toBeCloseTo(8, 0);
+          expect(exportBox.height, what).toBeCloseTo(c.height, 0);
+          expect(Math.abs(exportBox.y + exportBox.height / 2 - (c.y + c.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(exportBox.x + exportBox.width, what).toBeCloseTo(content.right, 0);
+        }
 
         // At the top of the card, within its content box, with no page-level overflow
         expect(Math.min(h.y, c.y) - card.y, what).toBeCloseTo(16, 0);
-        for (const box of [h, c, ind]) {
+        for (const box of [h, t, ind]) {
           expect(box.x, what).toBeGreaterThanOrEqual(content.left - 0.5);
           expect(box.x + box.width, what).toBeLessThanOrEqual(content.right + 0.5);
         }
@@ -744,14 +802,16 @@ test.describe('numeral scale and position', () => {
         // cluster with the tier-direction indicator, which wraps first, so the controls still go
         // under it only where the heading alone leaves no room; beside it, they are centred on
         // the cluster, which has two lines where the indicator is under the heading
-        const wraps = h.width + 12 + c.width > content.width;
+        // Changed deliberately in UI-11: where Export is in the header, the controls and Export
+        // (the trailing group, t) wrap and stand together
+        const wraps = h.width + 12 + t.width > content.width;
         if (wraps) {
-          expect(c.y, what).toBeGreaterThanOrEqual(cl.y + cl.height);
-          expect(c.x, what).toBeCloseTo(content.left, 0);
+          expect(t.y, what).toBeGreaterThanOrEqual(cl.y + cl.height);
+          expect(t.x, what).toBeCloseTo(content.left, 0);
         } else {
-          expect(Math.abs(c.y + c.height / 2 - (cl.y + cl.height / 2)), what).toBeLessThanOrEqual(1);
-          expect(c.x + c.width, what).toBeCloseTo(content.right, 0);
-          expect(cl.x + cl.width, what).toBeLessThanOrEqual(c.x - 12 + 0.5);
+          expect(Math.abs(t.y + t.height / 2 - (cl.y + cl.height / 2)), what).toBeLessThanOrEqual(1);
+          expect(t.x + t.width, what).toBeCloseTo(content.right, 0);
+          expect(cl.x + cl.width, what).toBeLessThanOrEqual(t.x - 12 + 0.5);
         }
         // Phones wrap; tablets and desktops stay on one row (the measured threshold, 462 px since
         // the compact toolbar, is recorded in the roadmap rather than asserted here, so font
@@ -760,7 +820,7 @@ test.describe('numeral scale and position', () => {
 
         // The indicator: beside the heading, centred on it, where it fits in the room the controls
         // leave; otherwise under the heading, at its start
-        const room = wraps ? content.width : content.width - 12 - c.width;
+        const room = wraps ? content.width : content.width - 12 - t.width;
         const indicatorWraps = h.width + 12 + ind.width > room;
         if (indicatorWraps) {
           expect(ind.y, what).toBeGreaterThanOrEqual(h.y + h.height);
@@ -788,7 +848,7 @@ test.describe('numeral scale and position', () => {
         }
 
         // The stage 12 px under the header row; its height is unchanged (17.5rem offset kept)
-        expect(stage.y - Math.max(cl.y + cl.height, c.y + c.height), what).toBeCloseTo(12, 0);
+        expect(stage.y - Math.max(cl.y + cl.height, t.y + t.height), what).toBeCloseTo(12, 0);
         // 1024 × 768: 100svh − 17.5rem; 768 × 1024: the 30rem maximum below lg
         const expected = 'stage' in size ? size.stage : size.width >= 1024 ? size.height - 280 : 480;
         expect(stage.height, what).toBeCloseTo(expected, 0);
@@ -2229,8 +2289,18 @@ test.describe('screen-only tier guides', () => {
 
   test('switch with the keyboard after Show Grid, and leave the viewer’s controls as they were', async ({ page }) => {
     const viewer = await showNumber(page, FIVE_TIERS);
-    // The viewer follows Reset directly again
-    await page.getByRole('button', { name: 'Reset' }).focus();
+    // Changed deliberately in UI-11: at this size (1280 × 720) the viewer sticks, so Export is in
+    // its header, between Reset and the viewer: Zoom out, Zoom in, Reset, Export, then the viewer
+    const exportButton = page.getByRole('button', { name: '📦 Export' });
+    expect(await exportButton.evaluate((b) =>
+      !!b.parentElement?.previousElementSibling?.matches('[role="group"][aria-label="Zoom controls"]'))).toBe(true);
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Reset', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(exportButton).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(viewer).toBeFocused();
 

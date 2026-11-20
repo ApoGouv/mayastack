@@ -14,10 +14,16 @@ const LARGEST_NUMBER = { width: 350, height: 7920, aspectRatio: 350 / 7920 };
 const UNMEASURED = { width: 0, height: 0, aspectRatio: 1 };
 
 /** Renders the open menu (for the largest number by default) and returns its controls */
-function renderMenu(format: ExportFormat, sizeOption: ExportSize, original = LARGEST_NUMBER) {
+function renderMenu(
+  format: ExportFormat,
+  sizeOption: ExportSize,
+  original = LARGEST_NUMBER,
+  placement?: 'floating' | 'header'
+) {
   const handleExport = vi.fn();
   const menu = (format: ExportFormat) => (
     <FloatingExportMenu
+      placement={placement}
       format={format}
       setFormat={vi.fn()}
       sizeOption={sizeOption}
@@ -242,6 +248,74 @@ describe('FloatingExportMenu panel focus', () => {
 
     fireEvent.mouseDown(document.body);
 
+    expect(panel()).toBeNull();
+    expect(document.activeElement).not.toBe(trigger());
+  });
+});
+
+// UI-11: floating in the corner of the screen, or in the viewer's header where the viewer sticks
+describe('FloatingExportMenu placement', () => {
+  const trigger = () => screen.getByRole('button', { name: '📦 Export' });
+  const panel = () => screen.queryByRole('dialog', { name: 'Export Options' });
+  const classes = (el: Element) => el.className.split(/\s+/).filter(Boolean);
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('floats by default exactly as before: the trigger fixed in the corner, the panel fixed above it', () => {
+    renderMenu('svg', 'original');
+    const wrapper = trigger().parentElement!;
+
+    expect(classes(wrapper)).toEqual(['fixed', 'bottom-4', 'sm:bottom-16', 'right-4', 'z-50']);
+    expect(classes(trigger())).toEqual(expect.arrayContaining(['px-3.75', 'py-1.75', 'shadow-lg', 'rounded-full', 'bg-accent']));
+    expect(classes(panel()!)).toEqual(expect.arrayContaining(['fixed', 'bottom-18', 'sm:bottom-30', 'right-4', 'z-40', 'max-w-[350px]', 'max-h-[80vh]', 'overflow-y-auto']));
+    expect(classes(panel()!)).not.toContain('absolute');
+    expect(panel()!.style.width).toBe('calc(100% - 2*var(--spacing) * 4)');
+    expect(panel()!.style.maxHeight).toBe('');
+  });
+
+  it('sits in the header flow with the zoom controls’ height, its panel below it at its right edge', () => {
+    renderMenu('svg', 'original', LARGEST_NUMBER, 'header');
+    const wrapper = trigger().parentElement!;
+
+    expect(classes(wrapper)).toEqual(['relative', 'shrink-0']);
+    // Gold, 32 px tall like the zoom controls (h-8), flat in the toolbar
+    expect(classes(trigger())).toEqual(expect.arrayContaining(['bg-accent', 'text-on-accent', 'border-accent-fg', 'rounded-full', 'h-8', 'px-3', 'text-sm']));
+    expect(classes(trigger())).not.toEqual(expect.arrayContaining(['shadow-lg']));
+    expect(classes(trigger()).some((c) => c.startsWith('py-'))).toBe(false);
+    // Below the trigger, right-aligned, not fixed, nor at the floating offsets
+    expect(classes(panel()!)).toEqual(expect.arrayContaining(['absolute', 'top-full', 'right-0', 'mt-2', 'z-40', 'max-w-[350px]', 'max-h-[80vh]', 'overflow-y-auto']));
+    expect(classes(panel()!).filter((c) => /^(fixed|(sm:)?bottom-)/.test(c))).toEqual([]);
+    // As wide as when floating, against the screen rather than the trigger
+    expect(panel()!.style.width).toBe('calc(100vw - 2*var(--spacing) * 4)');
+  });
+
+  it('limits the header panel to the room below the trigger, measured again as the page scrolls', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(720);
+    const bottom = { value: 200 };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => ({ top: bottom.value - 32, bottom: bottom.value, left: 0, right: 0, width: 0, height: 32, x: 0, y: 0 }) as DOMRect
+    );
+    renderMenu('svg', 'original', LARGEST_NUMBER, 'header');
+
+    // 720 − 200 − 8 (gap) − 16 (margin)
+    expect(panel()!.style.maxHeight).toBe('min(80vh, 496px)');
+    bottom.value = 300;
+    fireEvent.scroll(window);
+    expect(panel()!.style.maxHeight).toBe('min(80vh, 396px)');
+  });
+
+  it('keeps the dialog’s interactions in the header: Escape returns focus, an outside click does not take it', () => {
+    renderMenu('svg', 'original', LARGEST_NUMBER, 'header');
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    const format = screen.getByLabelText('Export Format');
+    format.focus();
+    fireEvent.keyDown(format, { key: 'Escape' });
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+
+    fireEvent.click(trigger());
+    screen.getByLabelText('Export Format').focus();
+    fireEvent.mouseDown(document.body);
     expect(panel()).toBeNull();
     expect(document.activeElement).not.toBe(trigger());
   });
