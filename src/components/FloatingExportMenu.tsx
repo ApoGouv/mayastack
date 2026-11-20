@@ -1,10 +1,15 @@
-import React, { useState, useRef, useId } from 'react';
+import React, { useState, useRef, useId, useLayoutEffect } from 'react';
 import type { ExportFormat, ExportSize, Dimensions } from '@/types/exportTypes';
 import type { SizePreset } from '@utils/exportPresets';
 import { useDismissOnOutsideOrEsc } from "@hooks/useDismissOnOutsideOrEsc";
 import { checkPngSize } from '@utils/exportUtils';
 
 interface FloatingExportMenuProps {
+  /**
+   * `floating` (the default): fixed in the bottom-right corner of the screen, the panel above it.
+   * `header`: in the viewer's header, in the flow, the panel opening below it (UI-11)
+   */
+  placement?: 'floating' | 'header';
   format: ExportFormat;
   sizeOption: ExportSize;
   sizePresets: Record<ExportSize, SizePreset>;
@@ -23,6 +28,10 @@ interface FloatingExportMenuProps {
 const MIN_CUSTOM_SIZE = 100;
 const MAX_CUSTOM_SIZE = 5000;
 
+/** In the header, the panel's gap below the trigger, and the least room it leaves below itself, in px */
+const HEADER_PANEL_GAP = 8;
+const HEADER_PANEL_MARGIN = 16;
+
 const CUSTOM_SIZE_RANGE = `${MIN_CUSTOM_SIZE.toLocaleString('en-US')} to ${MAX_CUSTOM_SIZE.toLocaleString('en-US')} px`;
 
 /** Why the text of a custom width or height can't be exported, or null if it can */
@@ -36,6 +45,7 @@ function customSizeError(text: string, dimension: 'Width' | 'Height'): string | 
 }
 
 const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
+  placement = 'floating',
   format,
   sizeOption,
   sizePresets,
@@ -55,6 +65,29 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   useDismissOnOutsideOrEsc(exportMenuRef, () => setIsOpen(false), isOpen, true);
+
+  const inHeader = placement === 'header';
+  // In the header, the panel opens downwards from the trigger, which moves with the page until the
+  // viewer sticks: its height is limited to the room below the trigger, measured before paint and
+  // again as the page scrolls or the window is resized, so all of it stays on screen (its own
+  // 80vh limit still applies), and its content scrolls where it is taller
+  const [headerRoomBelow, setHeaderRoomBelow] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!isOpen || !inHeader) return;
+    const measure = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const room = window.innerHeight - trigger.getBoundingClientRect().bottom - HEADER_PANEL_GAP - HEADER_PANEL_MARGIN;
+      setHeaderRoomBelow(Math.max(0, Math.floor(room)));
+    };
+    measure();
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+  }, [isOpen, inHeader]);
 
   // Escape closes the panel (above). Pressed inside the panel, it first returns focus to the
   // Export button, which would otherwise be lost when the panel is removed
@@ -124,14 +157,17 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
     `w-full p-2 border rounded bg-well text-fg focus-ring ${error ? 'border-danger' : 'border-line-strong'}`;
 
   return (
-    <div ref={exportMenuRef} className="fixed bottom-4 sm:bottom-16 right-4 z-50 ">
+    <div ref={exportMenuRef} className={inHeader ? 'relative shrink-0' : 'fixed bottom-4 sm:bottom-16 right-4 z-50 '}>
       <button
         ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls="floating-export-menu-panel"
-        className="cursor-pointer bg-accent text-on-accent border border-accent-fg px-3.75 py-1.75 rounded-full shadow-lg hover:bg-accent-hover active:bg-accent-active focus-ring transition duration-300"
+        // In the header, as tall as the zoom controls (32 px) and as flat, with their text size
+        className={`cursor-pointer bg-accent text-on-accent border border-accent-fg rounded-full hover:bg-accent-hover active:bg-accent-active focus-ring transition duration-300 ${
+          inHeader ? 'inline-flex h-8 items-center px-3 text-sm whitespace-nowrap' : 'px-3.75 py-1.75 shadow-lg'
+        }`}
       >
         📦 Export
       </button>
@@ -143,8 +179,21 @@ const FloatingExportMenu: React.FC<FloatingExportMenuProps> = ({
           role="dialog"
           aria-labelledby="export-menu-heading"
           onKeyDown={handlePanelKeyDown}
-          className="fixed bottom-18 sm:bottom-30 right-4 z-40 bg-surface-raised text-fg p-4 rounded-lg shadow-lg max-w-[350px] max-h-[80vh] overflow-y-auto"
-          style={{ width: 'calc(100% - 2*var(--spacing) * 4)' }}
+          // Floating: fixed above the trigger. In the header: below the trigger, aligned with its
+          // right edge, over the stage, in the viewer card's stacking context (z-40 is above the
+          // stage's annotation gutters, z-10); as wide as when floating, the screen's width being
+          // measured with 100vw, as 100% is now the trigger's
+          className={`${
+            inHeader ? 'absolute top-full right-0 mt-2' : 'fixed bottom-18 sm:bottom-30 right-4'
+          } z-40 bg-surface-raised text-fg p-4 rounded-lg shadow-lg max-w-[350px] max-h-[80vh] overflow-y-auto`}
+          style={
+            inHeader
+              ? {
+                  width: 'calc(100vw - 2*var(--spacing) * 4)',
+                  ...(headerRoomBelow !== null && { maxHeight: `min(80vh, ${headerRoomBelow}px)` }),
+                }
+              : { width: 'calc(100% - 2*var(--spacing) * 4)' }
+          }
         >
           <div className="flex flex-wrap gap-4">
             <h2 id="export-menu-heading" className="sr-only">Export Options</h2>

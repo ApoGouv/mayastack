@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import FloatingExportMenu from "@components/FloatingExportMenu";
 import { useDimensions } from "@hooks/useDimensions";
 import { useShiftKey } from "@hooks/useShiftKey";
+import { STICKY_VIEWER_QUERY, useMediaQuery } from "@hooks/useMediaQuery";
 import {
   prepareSvgCloneForExport,
   exportSvg,
@@ -19,6 +20,7 @@ import type {
 const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
   children,
   filename = "mayan-numeral",
+  exportPlacement = "floating",
 }) => {
   const exportPlaceholderRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<SVGSVGElement | null>(null);
@@ -82,29 +84,38 @@ const MayanExportPanel: React.FC<MayanExportPanelProps> = ({
     }
   };
 
+  // UI-11: in the viewer's header where the viewer sticks, so the fixed trigger never covers the
+  // stage; floating elsewhere, as before. One control either way: the same media query as the
+  // `sticky-viewer` variant decides where it is rendered, and it moves when that changes
+  const stickyViewer = useMediaQuery(STICKY_VIEWER_QUERY);
+  const inHeader = exportPlacement === "viewer-header" && stickyViewer;
+
+  const exportMenu = (
+    <FloatingExportMenu
+      placement={inHeader ? "header" : "floating"}
+      format={format}
+      setFormat={setFormat}
+      sizeOption={sizeOption}
+      setSizeOption={setSizeOption}
+      sizePresets={sizePresets}
+      shiftHeld={shiftHeld}
+      svgOriginalDimensions={svgOriginalDimensions}
+      customWidth={customWidth}
+      setCustomWidth={setCustomWidth}
+      customHeight={customHeight}
+      setCustomHeight={setCustomHeight}
+      handleExport={handleExport}
+    />
+  );
+
   return (
     <div className="flex justify-center">
-      {/* The viewer, which sets its own width */}
-      {children(exportRef)}
+      {/* The viewer, which sets its own width, and places the Export control while it is given */}
+      {children(exportRef, inHeader ? exportMenu : null)}
 
       {/* The panel only exists while there is a result to export, so Export is always offered,
-          wherever the page is scrolled */}
-      <div className="my-4 space-y-4">
-        <FloatingExportMenu
-          format={format}
-          setFormat={setFormat}
-          sizeOption={sizeOption}
-          setSizeOption={setSizeOption}
-          sizePresets={sizePresets}
-          shiftHeld={shiftHeld}
-          svgOriginalDimensions={svgOriginalDimensions}
-          customWidth={customWidth}
-          setCustomWidth={setCustomWidth}
-          customHeight={customHeight}
-          setCustomHeight={setCustomHeight}
-          handleExport={handleExport}
-        />
-      </div>
+          wherever the page is scrolled: floating, unless it is in the viewer's header */}
+      {!inHeader && <div className="my-4 space-y-4">{exportMenu}</div>}
 
       {/* Cloned SVG placeholder for eporting */}
       <div

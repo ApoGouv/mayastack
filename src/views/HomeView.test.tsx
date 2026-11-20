@@ -9,6 +9,7 @@ import { toBase20, toBase20Formula } from '@utils/base20';
 import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 import { rgbaToCss } from '@utils/colors';
 import { spokenText, visibleText } from '@/test/text';
+import { stubStickyViewer } from '@/test/stickyViewer';
 import HomeView from './HomeView';
 
 afterEach(() => {
@@ -261,6 +262,8 @@ describe('HomeView numeral viewport', () => {
   // UI-13, slice 5a: the heading leads the viewer's header row, beside the zoom controls. Its icon
   // is Layers (stacked tiers), and the base-20 card's is Functions (Σ, the positional sum)
   it('names the viewer "Mayan Numeral Stack", with its own decorative icon, with and without a result', () => {
+    // Where Export floats (UI-11): where the viewer sticks, it joins the zoom controls in a group
+    stubStickyViewer(false);
     const { enter } = renderHomeView();
     const heading = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' });
     const base20Heading = () => screen.getByRole('heading', { level: 2, name: 'Base-20 Representation' });
@@ -290,6 +293,8 @@ describe('HomeView numeral viewport', () => {
       within(card('Mayan Numeral Stack')).queryByText(/^(Top: 20|1 tier · 20⁰$)/)?.parentElement ?? null;
 
     it('shows the numeral’s orientation beside the heading, outside it and outside the numeral', () => {
+      // Where Export floats (UI-11): where the viewer sticks, it joins the zoom controls in a group
+      stubStickyViewer(false);
       const { enter, numeralSvg } = renderHomeView();
       for (const [text, shown, spoken] of [
         ['7', '1 tier · 20⁰', 'One tier, 20 to the power of 0'],
@@ -399,11 +404,20 @@ describe('HomeView numeral viewport', () => {
     });
 
     it('is never focusable, so the viewer card’s tab order is unchanged', () => {
-      renderHomeView();
-      expect(key()!.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0);
-      const focusable = [...card('Mayan Numeral Stack').querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
-      expect(focusable.slice(0, 4).map((el) => el.getAttribute('aria-label') ?? el.textContent))
-        .toEqual(['Zoom out', 'Zoom in', 'Reset', 'Numeral viewer']);
+      // Changed deliberately in UI-11: where the viewer sticks, Export follows Reset in the header
+      for (const [sticky, order] of [
+        [false, ['Zoom out', 'Zoom in', 'Reset', 'Numeral viewer']],
+        [true, ['Zoom out', 'Zoom in', 'Reset', '📦 Export', 'Numeral viewer']],
+      ] as const) {
+        stubStickyViewer(sticky);
+        renderHomeView();
+        expect(key()!.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0);
+        const focusable = [...card('Mayan Numeral Stack').querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
+        expect(focusable.slice(0, order.length).map((el) => el.getAttribute('aria-label') ?? el.textContent), String(sticky))
+          .toEqual(order);
+        cleanup();
+        vi.restoreAllMocks();
+      }
     });
   });
 
@@ -640,6 +654,71 @@ describe('HomeView base-20 expansion', () => {
     } finally {
       delete (navigator as { clipboard?: unknown }).clipboard;
     }
+  });
+});
+
+// UI-11: Export in the viewer's header where the viewer sticks, floating in the corner elsewhere
+describe('HomeView Export placement', () => {
+  const exportTriggers = () => screen.queryAllByRole('button', { name: '📦 Export' });
+  const headerRow = () => screen.getByRole('heading', { level: 2, name: 'Mayan Numeral Stack' }).parentElement!.parentElement!;
+
+  it('puts the one Export control after the zoom controls in the viewer’s header where the viewer sticks', () => {
+    stubStickyViewer(true);
+    const { enter } = renderHomeView();
+    for (const text of ['0', '123', '', '9'.repeat(128)]) {
+      enter(text);
+      if (text === '') {
+        expect(exportTriggers(), 'empty').toEqual([]);
+        continue;
+      }
+      expect(exportTriggers(), text).toHaveLength(1);
+      const [trigger] = exportTriggers();
+      const controls = screen.getByRole('group', { name: 'Zoom controls' });
+      // In the header row, grouped with the zoom controls, right after them; never fixed
+      expect(controls.parentElement!.parentElement, text).toBe(headerRow());
+      expect(controls.nextElementSibling, text).toBe(trigger.parentElement);
+      expect(trigger.closest('.fixed'), text).toBeNull();
+      expect(card('Mayan Numeral Stack').contains(trigger), text).toBe(true);
+    }
+  });
+
+  it('keeps the one Export control floating, outside the header, below the sticky-viewer layout', () => {
+    stubStickyViewer(false);
+    const { enter } = renderHomeView();
+    for (const text of ['0', '123', '9'.repeat(128)]) {
+      enter(text);
+      expect(exportTriggers(), text).toHaveLength(1);
+      const [trigger] = exportTriggers();
+      expect(headerRow().contains(trigger), text).toBe(false);
+      expect(trigger.parentElement!.className, text).toBe('fixed bottom-4 sm:bottom-16 right-4 z-50 ');
+    }
+  });
+
+  it('moves Export between the header and the corner as the screen crosses the threshold, keeping one', () => {
+    const setSticky = stubStickyViewer(false);
+    const { enter } = renderHomeView();
+    enter('26');
+    for (const sticky of [true, false, true]) {
+      setSticky(sticky);
+      expect(exportTriggers(), String(sticky)).toHaveLength(1);
+      expect(headerRow().contains(exportTriggers()[0]), String(sticky)).toBe(sticky);
+    }
+  });
+
+  it('exports the same SVG markup with Export in either place', () => {
+    const markup: Record<string, string[]> = {};
+    for (const sticky of [false, true]) {
+      stubStickyViewer(sticky);
+      const { enter, numeralSvg } = renderHomeView();
+      markup[String(sticky)] = ['0', '26', '9'.repeat(128)].map((text) => {
+        enter(text);
+        return exportedMarkup(numeralSvg());
+      });
+      cleanup();
+      vi.restoreAllMocks();
+    }
+    expect(markup.true).toEqual(markup.false);
+    expect(markup.true.every((m) => m.startsWith('<svg') && m.includes('mep-svg'))).toBe(true);
   });
 });
 

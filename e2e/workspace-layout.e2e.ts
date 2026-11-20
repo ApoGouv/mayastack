@@ -1431,6 +1431,73 @@ test.describe('sticky desktop viewer (UI-13 slice 5e)', () => {
     });
   }
 
+  // UI-11: at the end of the page the card stops at the end of its grid area, which ends 121 px
+  // above the screen's bottom (main's padding and margin, and the footer), so on short screens
+  // a taller card was pushed above the screen, its header and Export out of view (at 1024 × 640,
+  // the card's top was 53 px above it). The stage's 24rem minimum keeps it in view: at its 16 px
+  // offset from 648 px of screen height, and about 11 px from the top at exactly 640 px
+  for (const size of [
+    { width: 1024, height: 640 },
+    { width: 1024, height: 648 },
+    { width: 1024, height: 672 },
+    { width: 1024, height: 700 },
+    { width: 1280, height: 640 },
+    { width: 1280, height: 720 },
+  ]) {
+    test(`keeps the whole card, its header, Export and the zoom controls in view at the end of the page at ${size.width} × ${size.height}`, async ({ page }) => {
+      // The 128-digit number with the breakdown open (the tallest page), and the initial 0, whose
+      // header also takes two lines at 1024 px, once Export is in it
+      for (const [digits, breakdown] of [[MAX_NUMBER, true], ['0', false]] as const) {
+        const what = `${size.width} × ${size.height}, ${digits.length} digits`;
+        await showAt(page, size, digits);
+        if (breakdown) await openBreakdown(page);
+        await scrollPageTo(page, await page.evaluate(() => document.documentElement.scrollHeight));
+        const m = await page.evaluate(() => {
+          const box = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+          };
+          const card = document.querySelector('[data-viewer-card]')!;
+          const stage = card.querySelector('[data-numeral-stage]')!;
+          const zoom = card.querySelector('[role="group"][aria-label="Zoom controls"]')!;
+          const exportButton = [...card.querySelectorAll('button')].find((b) => b.textContent!.includes('Export'))!;
+          return {
+            atEnd: window.scrollY === document.documentElement.scrollHeight - window.innerHeight,
+            viewportHeight: window.innerHeight,
+            position: getComputedStyle(card).position,
+            card: box(card),
+            // The header row: the stage's first sibling, with the heading, zoom controls and Export
+            header: box(stage.parentElement!.firstElementChild!),
+            exportButton: box(exportButton),
+            exportInHeader: stage.parentElement!.firstElementChild!.contains(exportButton),
+            zoomButtons: [...zoom.querySelectorAll('button')].map(box),
+            zoomControls: box(zoom),
+          };
+        });
+        expect(m.atEnd, `${what}: at the end of the page`).toBe(true);
+        expect(m.position, what).toBe('sticky');
+        expect(m.exportInHeader, `${what}: Export in the header`).toBe(true);
+        const inView = (b: { top: number; bottom: number }, name: string) => {
+          expect(b.top, `${what}: ${name} top`).toBeGreaterThanOrEqual(0);
+          expect(b.bottom, `${what}: ${name} bottom`).toBeLessThanOrEqual(m.viewportHeight);
+        };
+        inView(m.card, 'card');
+        inView(m.header, 'header');
+        inView(m.exportButton, 'Export');
+        inView(m.zoomControls, 'zoom controls');
+        m.zoomButtons.forEach((b, i) => inView(b, `zoom button ${i + 1}`));
+        if (size.width === 1024 && size.height === 640) {
+          // Only at exactly 1024 × 640, the 384 px stage leaves the card (two header lines) about
+          // 11 px from the top, about 5 px above its offset: measured, accepted in UI-11
+          expect(m.card.top, `${what}: card top`).toBeGreaterThanOrEqual(10);
+        } else {
+          // At (about) its 16 px offset
+          expect(m.card.top, `${what}: card top`).toBeGreaterThanOrEqual(STICKY_TOP - 1);
+        }
+      }
+    });
+  }
+
   test('does not move when the page cannot scroll the viewer to its sticky offset', async ({ page }) => {
     // A one-digit number, the breakdown closed, on a tall screen: the page is barely taller than
     // the screen, so its maximum scroll is less than the scroll at which the card would reach the
@@ -1549,7 +1616,8 @@ test.describe('sticky desktop viewer (UI-13 slice 5e)', () => {
     expect(Math.abs(gutters.end)).toBeLessThanOrEqual(0.5);
   });
 
-  test('keeps the zoom controls and the glyphs clear of the floating Export trigger while stuck', async ({ page }) => {
+  // Changed deliberately in UI-11: while stuck, Export is in the viewer's header, not floating
+  test('keeps the zoom controls and the glyphs clear of the Export trigger while stuck', async ({ page }) => {
     const exportButton = page.getByRole('button', { name: '📦 Export' });
     const intersects = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
       a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -1568,8 +1636,10 @@ test.describe('sticky desktop viewer (UI-13 slice 5e)', () => {
       const label = `${size.width} × ${size.height}`;
       expect(Math.abs(stuck.top - STICKY_TOP), label).toBeLessThanOrEqual(1);
       const trigger = (await exportButton.boundingBox())!;
-      // Measured, not assumed: the space between the stuck card's bottom and the trigger's top
-      test.info().annotations.push({ type: 'export', description: `${label}: card bottom ${(stuck.top + stuck.height).toFixed(1)}, trigger top ${trigger.y.toFixed(1)}` });
+      // In the stuck card's header, above the stage
+      const stage = (await page.getByRole('group', { name: 'Numeral viewer' }).boundingBox())!;
+      expect(trigger.y, label).toBeGreaterThanOrEqual(stuck.top);
+      expect(trigger.y + trigger.height, label).toBeLessThanOrEqual(stage.y);
       for (const name of ['Zoom out', 'Zoom in', 'Reset']) {
         const button = (await page.getByRole('button', { name, exact: true }).boundingBox())!;
         expect(intersects(button, trigger), `${label}: ${name}`).toBe(false);
@@ -1580,6 +1650,358 @@ test.describe('sticky desktop viewer (UI-13 slice 5e)', () => {
       const glyphs = await viewer.locator('g[data-digit-index]').evaluateAll((gs) =>
         gs.map((g) => g.getBoundingClientRect()).filter((r) => r.height > 0).map(({ x, y, width, height }) => ({ x, y, width, height })));
       expect(glyphs.filter((g) => intersects(g, trigger)), label).toEqual([]);
+    }
+  });
+});
+
+// UI-11: where the viewer sticks, Export is in its header, after the zoom controls, its menu
+// opening below it; elsewhere it floats in the corner of the screen, as before
+test.describe('Export in the sticky viewer’s header (UI-11)', () => {
+  const STICKY_TOP = 16;
+  const MAX_NUMBER = '9'.repeat(128);
+  const LEVELS = ['25%', '50%', '75%', '100%', '125%', '150%', '200%', '300%', '400%'];
+  type Rect = { x: number; y: number; width: number; height: number };
+
+  const trigger = (page: Page) => page.getByRole('button', { name: '📦 Export' });
+  const menu = (page: Page) => page.getByRole('dialog', { name: 'Export Options' });
+  const viewer = (page: Page) => page.getByRole('group', { name: 'Numeral viewer' });
+  const intersects = (a: Rect, b: Rect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  /** The part of a rectangle within another, or null where they do not overlap */
+  const clip = (a: Rect, b: Rect): Rect | null => {
+    const x = Math.max(a.x, b.x);
+    const y = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
+    return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
+  };
+  /** Whether the trigger is in the viewer's header: right after the zoom controls */
+  const triggerInHeader = (page: Page) =>
+    trigger(page).evaluate((b) => !!b.parentElement?.previousElementSibling?.matches('[role="group"][aria-label="Zoom controls"]'));
+
+  /** Opens the app at a screen size, in a theme, with the grid and the tier annotations on or off */
+  async function open(page: Page, size: { width: number; height: number }, options: { theme?: Theme; annotations?: boolean; grid?: boolean } = {}) {
+    await page.setViewportSize(size);
+    const saved = {
+      'mayastack:theme': options.theme ?? 'light',
+      'mayastack:showTierAnnotations': String(!!options.annotations),
+      'mayastack:showGrid': String(!!options.grid),
+    };
+    await page.addInitScript((entries) => Object.entries(entries).forEach(([k, v]) => localStorage.setItem(k, v)), saved);
+    await page.goto('./');
+  }
+
+  async function showNumber(page: Page, digits: string) {
+    await page.getByRole('radio', { name: 'Number' }).check();
+    await page.getByLabel('Decimal integer').fill(digits);
+    await expect(viewer(page)).toBeVisible();
+  }
+
+  async function showDate(page: Page) {
+    await page.getByRole('radio', { name: 'Date' }).check();
+    await page.getByLabel('Date input').click();
+    await page.getByRole('gridcell', { name: /^Choose .* 15th, \d{4}$/ }).first().click();
+    await expect(page.getByRole('img', { name: /^Mayan numerals for day 15/ })).toBeVisible();
+  }
+
+  /** Steps the zoom to a level and waits for its animation to end */
+  async function zoomTo(page: Page, level: string) {
+    const status = page.getByRole('group', { name: 'Zoom controls' }).locator('[aria-live]');
+    for (;;) {
+      const current = (await status.textContent())!.split(' ')[0];
+      const steps = LEVELS.indexOf(level) - LEVELS.indexOf(current);
+      if (steps === 0) break;
+      await page.getByRole('button', { name: steps > 0 ? 'Zoom in' : 'Zoom out' }).click();
+      await expect(status).not.toHaveText(new RegExp(`^${current}`));
+    }
+    await page.evaluate(async () => {
+      const paper = document.querySelector('[data-numeral-paper]');
+      if (!paper) return;
+      for (let r = paper.getAnimations(); r.length > 0; r = paper.getAnimations()) {
+        await Promise.all(r.map((a) => a.finished.catch(() => undefined)));
+      }
+    });
+  }
+
+  /** Opens the 99-tier analytical breakdown, so the page scrolls far enough for the viewer to stick */
+  async function openBreakdown(page: Page) {
+    await page.getByRole('button', { name: 'Analytical breakdown' }).click();
+    await expect(page.getByRole('region', { name: 'Analytical breakdown' }).locator('tbody tr')).toHaveCount(99);
+  }
+
+  const scrollPageTo = (page: Page, top: number) =>
+    page.evaluate((top) => window.scrollTo({ top, left: 0, behavior: 'instant' }), top);
+
+  /** The page positions to test: the top, the viewer stuck, and the end of the page */
+  async function pagePositions(page: Page) {
+    await scrollPageTo(page, 0);
+    const { cardTop, max } = await page.evaluate(() => ({
+      cardTop: document.querySelector('[data-viewer-card]')!.getBoundingClientRect().top + scrollY,
+      max: document.documentElement.scrollHeight - innerHeight,
+    }));
+    return { top: 0, stuck: Math.min(max, cardTop - STICKY_TOP + 200), end: max };
+  }
+
+  /** The visible glyphs' boxes in the stage */
+  const glyphs = (page: Page) =>
+    viewer(page).locator('g[data-digit-index]').evaluateAll((gs) =>
+      gs.map((g) => g.getBoundingClientRect()).filter((r) => r.height > 0).map(({ x, y, width, height }) => ({ x, y, width, height })));
+
+  /** Checks Export where the viewer sticks: in the header, on screen, overlapping nothing it must not */
+  async function expectClearInHeader(page: Page, what: string) {
+    expect(await triggerInHeader(page), what).toBe(true);
+    const t = await box(trigger(page));
+    const screen = page.viewportSize()!;
+    expect(t.x, what).toBeGreaterThanOrEqual(0);
+    expect(t.y, what).toBeGreaterThanOrEqual(0);
+    expect(t.x + t.width, what).toBeLessThanOrEqual(screen.width);
+    expect(t.y + t.height, what).toBeLessThanOrEqual(screen.height);
+    expect(await onTopAtCentre(trigger(page)), what).toBe(true);
+    // Never over the stage: its content, scrollbars and scroll corner are all within its box
+    const stage = await box(viewer(page));
+    expect(intersects(t, stage), `${what}: stage`).toBe(false);
+    for (const name of ['Zoom out', 'Zoom in', 'Reset']) {
+      expect(intersects(t, await box(page.getByRole('button', { name, exact: true }))), `${what}: ${name}`).toBe(false);
+    }
+    expect(intersects(t, await box(page.getByRole('list', { name: 'Glyph key' }))), `${what}: glyph key`).toBe(false);
+    // The annotation gutters are inside the stage's scroll box, so their boxes may extend past
+    // the stage, which clips them: only the part within the stage is on screen to be covered
+    for (const gutter of await page.locator('[data-numeral-annotations]').all()) {
+      const g = await gutter.boundingBox();
+      if (!g || g.width <= 0) continue;
+      const visible = clip(g, stage);
+      if (!visible) continue;
+      const fmt = (r: Rect) => `x ${r.x.toFixed(1)}, y ${r.y.toFixed(1)}, ${r.width.toFixed(1)} × ${r.height.toFixed(1)}`;
+      expect(intersects(t, visible), `${what}: annotation gutter (visible ${fmt(visible)}; trigger ${fmt(t)})`).toBe(false);
+    }
+    expect((await glyphs(page)).filter((g) => intersects(g, t)), `${what}: glyphs`).toEqual([]);
+  }
+
+  /** Opens the menu, checks that all of it is on screen, on top, below the trigger at its right edge, and closes it */
+  async function expectMenuOnScreen(page: Page, what: string) {
+    await trigger(page).click();
+    await expect(menu(page)).toBeVisible();
+    const m = await box(menu(page));
+    const t = await box(trigger(page));
+    const screen = page.viewportSize()!;
+    expect(m.y, what).toBeGreaterThanOrEqual(t.y + t.height);
+    expect(Math.abs(m.x + m.width - (t.x + t.width)), what).toBeLessThanOrEqual(1);
+    expect(m.x, what).toBeGreaterThanOrEqual(0);
+    expect(m.y + m.height, what).toBeLessThanOrEqual(screen.height);
+    expect(m.x + m.width, what).toBeLessThanOrEqual(screen.width);
+    // Over the stage and its annotation gutters, not under them, and not clipped
+    for (const control of [page.getByLabel('Export Format'), page.getByRole('button', { name: /^Export (SVG|PNG) image/ })]) {
+      await control.scrollIntoViewIfNeeded();
+      expect(await onTopAtCentre(control), what).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(menu(page)).toBeHidden();
+    await expect(trigger(page)).toBeFocused();
+  }
+
+  test('no longer covers the glyph at the stage’s bottom-right corner in Date mode at 200% (the original overlap)', async ({ page }) => {
+    for (const size of [{ width: 1280, height: 720 }, { width: 1280, height: 800 }]) {
+      const what = `${size.width} × ${size.height}`;
+      await open(page, size);
+      await showDate(page);
+      await zoomTo(page, '200%');
+      await viewer(page).evaluate((el) => el.scrollTo(el.scrollWidth, el.scrollHeight));
+      await expectClearInHeader(page, what);
+    }
+  });
+
+  for (const annotations of [false, true]) {
+    test(`stays in the header, on screen and clear, at the top, stuck and at the end of the page, with annotations ${annotations ? 'on' : 'off'}`, async ({ page }) => {
+      test.slow();
+      for (const size of [
+        { width: 1280, height: 720 },
+        { width: 1280, height: 800 },
+        { width: 1440, height: 900 },
+        { width: 1920, height: 1080 },
+        { width: 1024, height: 768 },
+      ]) {
+        await open(page, size, { annotations });
+        await showNumber(page, MAX_NUMBER);
+        await openBreakdown(page);
+        if (annotations) await expect(page.locator('[data-numeral-annotations]')).toHaveCount(2);
+        for (const [where, top] of Object.entries(await pagePositions(page))) {
+          await scrollPageTo(page, top);
+          await viewer(page).evaluate((el) => el.scrollTo(el.scrollWidth, el.scrollHeight));
+          const what = `${size.width} × ${size.height}, ${where}`;
+          await expectClearInHeader(page, what);
+          await expectMenuOnScreen(page, what);
+        }
+      }
+    });
+  }
+
+  // At exactly the sticky threshold (64rem × 40rem) the stuck card is a little taller than the
+  // room above the footer, so at the very end of the page its top is about 5 px above its 16 px
+  // offset; its header stays wholly in view. Export must be wholly on screen, on top and usable
+  // there, as at the top and while stuck
+  test('stays on screen and usable at the top, stuck and at the end of the page at exactly 1024 × 640', async ({ page }) => {
+    const size = { width: 1024, height: 640 };
+    await open(page, size);
+    await showNumber(page, MAX_NUMBER);
+    await openBreakdown(page);
+    for (const [where, top] of Object.entries(await pagePositions(page))) {
+      await scrollPageTo(page, top);
+      const t = await box(trigger(page));
+      const m = await page.evaluate(() => ({
+        scrollY,
+        maxScroll: document.documentElement.scrollHeight - innerHeight,
+        card: (({ top, bottom }) => ({ top, bottom }))(document.querySelector('[data-viewer-card]')!.getBoundingClientRect()),
+      }));
+      const what =
+        `${size.width} × ${size.height}, ${where} (scrollY ${m.scrollY.toFixed(1)} of ${m.maxScroll.toFixed(1)}): ` +
+        `trigger x ${t.x.toFixed(1)}, y ${t.y.toFixed(1)}, ${t.width.toFixed(1)} × ${t.height.toFixed(1)}, ` +
+        `bottom ${(t.y + t.height).toFixed(1)}; card top ${m.card.top.toFixed(1)}, bottom ${m.card.bottom.toFixed(1)}`;
+      test.info().annotations.push({ type: 'export', description: what });
+      // In the header, wholly on screen (neither its top nor its bottom cut off), on top, and
+      // clear of the stage, the zoom controls, the glyph key and the glyphs
+      await expectClearInHeader(page, what);
+      // Usable: by pointer, its menu opening on screen and closing with Escape; by keyboard too
+      await expectMenuOnScreen(page, what);
+      await trigger(page).focus();
+      await page.keyboard.press('Enter');
+      await expect(menu(page), what).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu(page), what).toBeHidden();
+      await expect(trigger(page), what).toBeFocused();
+    }
+  });
+
+  test('stays clear in Number and Date modes at 100%, 200% and 400%, in both themes', async ({ page }) => {
+    test.slow();
+    for (const theme of ['light', 'dark'] as const) {
+      await open(page, { width: 1280, height: 800 }, { theme, annotations: true });
+      for (const mode of ['number', 'date'] as const) {
+        if (mode === 'number') await showNumber(page, MAX_NUMBER);
+        else await showDate(page);
+        for (const level of ['100%', '200%', '400%']) {
+          await zoomTo(page, level);
+          await viewer(page).evaluate((el) => el.scrollTo(el.scrollWidth, el.scrollHeight));
+          const what = `${theme}, ${mode} at ${level}`;
+          await expectClearInHeader(page, what);
+          await expectMenuOnScreen(page, what);
+        }
+      }
+    }
+  });
+
+  test('keeps the menu’s interactions: tab order, Escape, an outside click, and validation messages within reach', async ({ page }) => {
+    await open(page, { width: 1280, height: 720 });
+    await showNumber(page, MAX_NUMBER);
+
+    // Tab order: Reset, Export, then the viewer; while the menu is open, its controls after Export
+    await page.getByRole('button', { name: 'Reset' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(trigger(page)).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(viewer(page)).toBeFocused();
+    await trigger(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(menu(page)).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(page.getByLabel('Export Format')).toBeFocused();
+
+    // Escape closes it and returns focus to the trigger
+    await page.keyboard.press('Escape');
+    await expect(menu(page)).toBeHidden();
+    await expect(trigger(page)).toBeFocused();
+
+    // An outside click closes it without moving focus to the trigger
+    await trigger(page).click();
+    await page.getByLabel('Export Format').focus();
+    await page.getByRole('heading', { level: 1 }).click();
+    await expect(menu(page)).toBeHidden();
+    await expect(trigger(page)).not.toBeFocused();
+
+    // Validation messages: the menu at its tallest, still on screen, all of it reachable by scrolling it
+    await trigger(page).click();
+    await page.getByLabel('Export Format').selectOption('png');
+    await page.getByLabel('Size Preset').selectOption('custom');
+    await page.getByLabel('Width (px)').fill('5');
+    await page.getByLabel('Height (px)').fill('');
+    await expect(menu(page).getByText(/^Width must be from/)).toBeVisible();
+    await expect(menu(page).getByText(/^Enter a height/)).toBeVisible();
+    const m = await box(menu(page));
+    expect(m.y + m.height).toBeLessThanOrEqual(720);
+    for (const control of [page.getByText(/^Enter a height/), page.getByRole('button', { name: /^Export PNG image/ }), page.getByLabel('Export Format')]) {
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeInViewport();
+      expect(await onTopAtCentre(control)).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(menu(page)).toBeHidden();
+  });
+
+  test('keeps the floating trigger and its menu unchanged where the viewer does not stick', async ({ page }) => {
+    for (const size of [{ width: 1024, height: 600 }, { width: 768, height: 1024 }, { width: 375, height: 667 }]) {
+      const what = `${size.width} × ${size.height}`;
+      await open(page, size);
+      await showNumber(page, '8000400019');
+      expect(await page.locator('[data-viewer-card]').evaluate((card) => getComputedStyle(card).position), what).toBe('static');
+      await expect(trigger(page), what).toHaveCount(1);
+      expect(await triggerInHeader(page), what).toBe(false);
+      // Fixed in the bottom-right corner: 16 px from the right, 64 px (from sm) or 16 px from the bottom
+      expect(await trigger(page).evaluate((b) => getComputedStyle(b.parentElement!).position), what).toBe('fixed');
+      const t = await box(trigger(page));
+      expect(size.width - (t.x + t.width), what).toBeCloseTo(16, 0);
+      expect(size.height - (t.y + t.height), what).toBeCloseTo(size.width >= 640 ? 64 : 16, 0);
+      // The menu above it, on screen, and its interactions
+      await trigger(page).click();
+      const m = await box(menu(page));
+      expect(m.y + m.height, what).toBeLessThanOrEqual(t.y);
+      expect(m.x, what).toBeGreaterThanOrEqual(0);
+      expect(m.y, what).toBeGreaterThanOrEqual(0);
+      expect(m.x + m.width, what).toBeLessThanOrEqual(size.width);
+      await page.getByLabel('Export Format').focus();
+      await page.keyboard.press('Escape');
+      await expect(menu(page)).toBeHidden();
+      await expect(trigger(page)).toBeFocused();
+    }
+  });
+
+  test('moves the one trigger between the corner and the header as the screen crosses the threshold', async ({ page }) => {
+    await open(page, { width: 1280, height: 800 });
+    await showNumber(page, '26');
+    for (const size of [{ width: 1280, height: 600 }, { width: 1280, height: 800 }, { width: 900, height: 800 }, { width: 1024, height: 640 }]) {
+      await page.setViewportSize(size);
+      await expect(trigger(page)).toHaveCount(1);
+      await expect.poll(() => triggerInHeader(page), `${size.width} × ${size.height}`).toBe(size.width >= 1024 && size.height >= 640);
+    }
+  });
+
+  test('downloads the same SVG and PNG bytes from the header as from the floating trigger', async ({ page }) => {
+    test.slow();
+    /** Exports through the menu and returns the file, closing the menu after */
+    async function download(format: 'svg' | 'png') {
+      await trigger(page).click();
+      await page.getByLabel('Export Format').selectOption(format);
+      const [file] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('button', { name: new RegExp(`^Export ${format.toUpperCase()} image`) }).click(),
+      ]);
+      await page.keyboard.press('Escape');
+      return { name: file.suggestedFilename(), data: await readFile(await file.path()) };
+    }
+    const cases = [
+      ...['0', '26', MAX_NUMBER].flatMap((digits) => [false, true].map((grid) => ({ digits, grid }))),
+      { digits: null, grid: false },
+      { digits: null, grid: true },
+    ];
+    for (const { digits, grid } of cases) {
+      const what = `${digits === null ? 'date' : digits.length > 2 ? '128 digits' : digits}, grid ${grid ? 'on' : 'off'}`;
+      const files: Record<string, { name: string; data: Buffer }[]> = {};
+      for (const [placement, size] of [['floating', { width: 1024, height: 600 }], ['header', { width: 1280, height: 800 }]] as const) {
+        await open(page, size, { grid });
+        if (digits === null) await showDate(page);
+        else await showNumber(page, digits);
+        expect(await triggerInHeader(page), `${what}: ${placement}`).toBe(placement === 'header');
+        files[placement] = [await download('svg'), await download('png')];
+      }
+      expect(files.header.map((f) => f.name), what).toEqual(files.floating.map((f) => f.name));
+      for (const i of [0, 1]) expect(files.header[i].data.equals(files.floating[i].data), `${what}: ${files.header[i].name}`).toBe(true);
     }
   });
 });

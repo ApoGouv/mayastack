@@ -197,9 +197,11 @@ export default function HomeView() {
           {/* The heading leads the viewer's header row, beside its zoom controls; without a result,
               it stands alone */}
           {hasValidinput && mayanData ? (
-            /* MayanRenderer and ExportPanel */
-            <MayanExportPanel filename={mayanData?.filename ?? ''}>
-              {(ref) =>
+            /* MayanRenderer and ExportPanel. Where the viewer sticks (the `sticky-viewer` variant),
+               Export is in its header, after the zoom controls, so it never covers the stage
+               (UI-11); elsewhere it floats in the corner of the screen, as before */
+            <MayanExportPanel filename={mayanData?.filename ?? ''} exportPlacement="viewer-header">
+              {(ref, headerExport) =>
                 <NumeralViewport
                   numeralWidth={numeralSize.width}
                   numeralHeight={numeralSize.height}
@@ -224,6 +226,7 @@ export default function HomeView() {
                       <TierOrientation tiers={getTierCount(digitGroups)} />
                     </div>
                   }
+                  headerEnd={headerExport}
                   // The glyph key (UI-13, slice 5c), under the stage, outside the numeral and its
                   // export; only with a result, like the stage it explains
                   footer={<GlyphKey />}
