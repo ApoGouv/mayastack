@@ -6,7 +6,7 @@ import type { DisplaySettingsContextType } from '@/context/DisplaySettingsContex
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { MAX_DIGITS_IN_FILENAME, prepareSvgCloneForExport } from '@utils/exportUtils';
 import { toBase20, toBase20Formula } from '@utils/base20';
-import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
+import { ANNOTATION_LABEL_INKS, getAnnotationLabelColors, getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 import { rgbaToCss } from '@utils/colors';
 import { spokenText, visibleText } from '@/test/text';
 import { stubStickyViewer } from '@/test/stickyViewer';
@@ -1710,6 +1710,67 @@ describe('HomeView annotation gutters on the paper’s colour (UI-13, slice 3b)'
     // The SVG, the source of the exports, has nothing of the gutters' colour
     expect(exportedMarkup(svg())).toBe(exported);
     expect(exported).not.toContain(expected);
+  });
+
+  /** The inks each gutter carries for its labels, power and digit */
+  const inks = (gutter: HTMLElement) => [
+    gutter.style.getPropertyValue('--annotation-power-ink'),
+    gutter.style.getPropertyValue('--annotation-digit-ink'),
+  ];
+  const css = (c: { r: number; g: number; b: number }) => rgbaToCss({ ...c, a: 1 });
+
+  it('gives the labels the dark inks on the default white paper in the dark theme, not the dark theme’s light tokens', () => {
+    const setDark = fakeSystemScheme();
+    const v = renderAnnotated();
+    setDark(true);
+    expect(v.settings().resolvedTheme).toBe('dark');
+    // White paper: the light theme's fg-subtle and accent-fg, which reach 6.02:1 and 6.44:1 on it
+    const dark = [css(ANNOTATION_LABEL_INKS.dark.power), css(ANNOTATION_LABEL_INKS.dark.digit)];
+    expect(dark).toEqual(['rgba(107, 98, 80, 1)', 'rgba(115, 92, 0, 1)']);
+    expect(v.gutters()).toHaveLength(2);
+    for (const gutter of v.gutters()) {
+      expect(gutter.style.backgroundColor).toBe('rgba(255, 255, 255, 1)');
+      expect(inks(gutter)).toEqual(dark);
+    }
+    // The same in the light theme: the paper decides, not the theme
+    setDark(false);
+    for (const gutter of v.gutters()) expect(inks(gutter)).toEqual(dark);
+  });
+
+  it('follows the paper as shown: light inks on a dark paper, adjusted inks on a paper where the tokens fall short', () => {
+    fakeSystemScheme();
+    const v = renderAnnotated();
+    const expected = (paper: { r: number; g: number; b: number; a: number }) => {
+      const { power, digit } = getAnnotationLabelColors(getGuideColors(paper, VIEWER_BACKDROP.light).background);
+      return [css(power), css(digit)];
+    };
+    // Dark Stela: the dark theme's tokens, kept
+    act(() => v.settings().setBackgroundColor({ r: 0x1d, g: 0x20, b: 0x26, a: 1 }));
+    for (const gutter of v.gutters()) {
+      expect(inks(gutter)).toEqual([css(ANNOTATION_LABEL_INKS.light.power), css(ANNOTATION_LABEL_INKS.light.digit)]);
+    }
+    // Weathered Limestone: darker than the light theme's tokens, to reach 4.5:1
+    const weathered = { r: 0xc7, g: 0xbc, b: 0x9f, a: 1 };
+    act(() => v.settings().setBackgroundColor(weathered));
+    expect(expected(weathered)).toEqual(['rgba(82, 76, 62, 1)', 'rgba(93, 74, 0, 1)']);
+    for (const gutter of v.gutters()) expect(inks(gutter)).toEqual(expected(weathered));
+    // A translucent paper: the inks for its colour as shown, over the canvas
+    const translucent = { r: 20, g: 40, b: 90, a: 0.35 };
+    act(() => v.settings().setBackgroundColor(translucent));
+    for (const gutter of v.gutters()) expect(inks(gutter)).toEqual(expected(translucent));
+  });
+
+  it('keeps the inks out of the SVG, so the export is the same with the annotations on or off', () => {
+    fakeSystemScheme();
+    localStorage.setItem('mayastack:backgroundColor', JSON.stringify({ r: 0xc7, g: 0xbc, b: 0x9f, a: 1 }));
+    const v = renderAnnotated();
+    const svg = () => v.viewer().querySelector<SVGSVGElement>('svg.mep-svg')!;
+    const on = exportedMarkup(svg());
+    expect(v.gutters().every((g) => inks(g).every((ink) => ink !== ''))).toBe(true);
+    expect(on).not.toMatch(/annotation|rgba\(82, 76, 62|rgba\(93, 74, 0/);
+    act(() => v.settings().setShowTierAnnotations(false));
+    expect(v.gutters()).toHaveLength(0);
+    expect(exportedMarkup(svg())).toBe(on);
   });
 
   it('shows no gutters, and nothing breaks, without annotations, and in Date mode keeps both coloured', () => {

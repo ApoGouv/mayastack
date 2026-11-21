@@ -102,7 +102,28 @@ Ratios for the main pairs, calculated from the values in `src/index.css` (light 
 
 `e2e/design-foundation.e2e.ts` re-checks a deliberate set of contrast-critical pairs from the browser's computed values in both themes. It also measures the colours as applied to the components ("design system on the components"): element contrast, the gold controls' borders, focus rings and the themed widgets. When a token changes, update the values in `src/index.css`, run that test, and update this table.
 
-**Tier annotation labels: contrast under investigation.** The ratios above are between theme tokens. The annotation labels (`fg-subtle` and `accent-fg`, section 4) are drawn over the annotation gutters, whose background is the user's paper colour, not a theme surface, so the table does not cover them. With some combinations of theme and paper colour the labels' contrast may fall below 4.5:1. This has not been measured or confirmed as an accessibility defect: it is under investigation, recorded for UI-14's final validation and relevant to UI-15's material presets (see [the roadmap](plans/ui-redesign-roadmap.md)). No colour change has been decided. Update (2026-11-18): UI-15's reconciliation report calculated potentially low label contrast in cross-polarity combinations of material and theme. Those figures are calculations, not browser measurements, and are not reproduced here. The browser verification is brought forward, after UI-11 and before UI-15 starts; if it confirms the issue, a separate, focused correction is made, not as part of UI-15. Until then the issue is neither confirmed nor fixed.
+**Tier annotation labels: contrast defect confirmed, correction planned.** The ratios above are between theme tokens. The annotation labels (`fg-subtle` and `accent-fg`, section 4) are drawn over the annotation gutters, whose background is the user's paper colour, not a theme surface, so the table does not cover them.
+
+Measured in the browser on 2026-11-20, as the check brought forward from UI-14 (see [the roadmap](plans/ui-redesign-roadmap.md), UI-14's entry):
+
+- **Method:** Chromium (Playwright) at 1280 × 800 on the production build. The labels' computed `color` was compared with their gutter's computed `background-color`. Five cases were cross-checked against painted pixels, which matched exactly.
+- **Threshold:** the labels are 12 px normal text (10 px at 25%), so it is 4.5:1.
+
+Ratios are given as power / digit; values below 4.5:1 are in bold:
+
+| Paper (gutter) | Light theme | Dark theme |
+|---|---|---|
+| White `#FFFFFF` (the current default) | 6.02 / 6.44 | **2.78 / 1.74** |
+| Limestone `#FAF8F5` | 5.68 / 6.08 | **2.62 / 1.64** |
+| Weathered Limestone `#C7BC9F` | **3.19 / 3.41** | **1.47 / 1.09** |
+| Dark Stela `#1D2026` | **2.71 / 2.53** | 5.87 / 9.40 |
+| Obsidian Basalt `#090B0E` | **3.27 / 3.06** | 7.09 / 11.35 |
+| Black `#000000` | **3.49 / 3.26** | 7.56 / 12.10 |
+| Mid grey `#777777` | **1.34 / 1.44** | **1.61 / 2.58** |
+
+The defect exists today: the default white paper fails in the dark theme. It is not limited to combinations where the theme and the paper have opposite polarity, because Weathered Limestone also fails in the light theme. No single theme-token colour can pass on every paper.
+
+A separate correction was approved on 2026-11-21. It derives the label colours from the gutter's shown colour, independently of the theme, so that both labels reach at least 4.5:1 on every opaque background. It is not part of UI-15. **It is not implemented yet: the label colours above are unchanged.** Not measured: other browsers, forced-colours mode, and translucent backgrounds.
 
 **Material contrast (UI-15; approved design, not implemented).** These rules cover the contrast between a material's background and glyph colours only, not the interface, and make no claim of whole-application WCAG conformance:
 

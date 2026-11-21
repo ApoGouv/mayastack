@@ -8,6 +8,10 @@ afterEach(cleanup);
 
 const LAYOUT = { heightPerGlyphStack: 80, widthPerGroup: 350, spacing: 25 };
 
+// The labels' colours: their gutter's inks (getAnnotationLabelColors), or the theme's tokens without them
+const POWER_INK = 'text-[var(--annotation-power-ink,var(--color-fg-subtle))]';
+const DIGIT_INK = 'text-[var(--annotation-digit-ink,var(--color-accent-fg))]';
+
 /** Renders the annotations and returns the layer and its rows, bottom tier first */
 function renderAnnotations(rows: TierAnnotationRow[], kind: 'power' | 'digit') {
   const { container } = render(<TierAnnotations rows={rows} kind={kind} />);
@@ -159,12 +163,12 @@ describe('TierAnnotations', () => {
         const { brackets, label } = parts(row);
         expect(brackets).toHaveLength(2);
         for (const bracket of brackets) {
-          // No text colour class: the bracket inherits the row's text-accent-fg
+          // No text colour class: the bracket inherits the row's digit ink
           expect(bracket.className.split(' ').filter((c) => c.startsWith('text-'))).toEqual([]);
         }
-        // The digit itself has no colour of its own either: it is the row's text-accent-fg
+        // The digit itself has no colour of its own either: it is the row's digit ink
         expect(label.className).toBe('');
-        expect(row.className.split(' ')).toContain('text-accent-fg');
+        expect(row.className.split(' ')).toContain(DIGIT_INK);
       }
     });
 
@@ -195,7 +199,7 @@ describe('TierAnnotations', () => {
       for (const row of rowElements) {
         expect(row.querySelectorAll('[data-tier-annotation-bracket]')).toHaveLength(0);
         expect(row.textContent).not.toMatch(/[[\]]/);
-        expect(row.className.split(' ')).toContain('text-fg-subtle');
+        expect(row.className.split(' ')).toContain(POWER_INK);
       }
     });
 
@@ -207,10 +211,10 @@ describe('TierAnnotations', () => {
     });
   });
 
-  it('colours powers with the subtle text token and digits with the gold text token (UI-13)', () => {
+  it('colours powers with the gutter’s power ink and digits with its digit ink, the theme’s subtle and gold tokens without them', () => {
     for (const [kind, colour, other] of [
-      ['power', 'text-fg-subtle', 'text-accent-fg'],
-      ['digit', 'text-accent-fg', 'text-fg-subtle'],
+      ['power', POWER_INK, DIGIT_INK],
+      ['digit', DIGIT_INK, POWER_INK],
     ] as const) {
       const { rowElements } = renderAnnotations(rows, kind);
       expect(rowElements).toHaveLength(3);
@@ -219,8 +223,10 @@ describe('TierAnnotations', () => {
         expect(classes, kind).toContain(colour);
         expect(classes, kind).not.toContain(other);
         expect(classes, kind).not.toContain('text-fg-muted');
-        // One text colour only, and the size and figures as they were
-        expect(classes.filter((c) => /^text-(fg|accent)/.test(c)), kind).toEqual([colour]);
+        // One text colour only, no fixed token beside it, and the size and figures as they were
+        expect(classes.filter((c) => /^text-(fg|accent|\[)/.test(c)), kind).toEqual([colour]);
+        expect(classes, kind).not.toContain('text-fg-subtle');
+        expect(classes, kind).not.toContain('text-accent-fg');
         expect(classes, kind).toEqual(expect.arrayContaining(['text-xs', 'tabular-nums']));
       }
       cleanup();

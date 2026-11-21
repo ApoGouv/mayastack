@@ -37,10 +37,14 @@ export const TierAnnotations: React.FC<TierAnnotationsProps> = ({ rows, kind }) 
       return (
         <div
           key={exponent}
-          // Powers, the tiers' structure, in the quieter subtle text colour; digits, the numeral's
-          // values, in the gold text colour (UI-13). Both theme tokens, legible on the gutters' canvas
+          // Powers, the tiers' structure, in the quieter subtle ink; digits, the numeral's values,
+          // in the gold ink (UI-13). The inks come from the gutter, whose colour is the paper's:
+          // its `--annotation-power-ink` and `--annotation-digit-ink` (getAnnotationLabelColors,
+          // at least 4.5:1 on any paper, whatever the theme). Without them, the theme's tokens
           className={`absolute inset-x-0 flex items-center justify-center whitespace-nowrap text-xs tabular-nums ${
-            kind === 'power' ? 'text-fg-subtle' : 'text-accent-fg'
+            kind === 'power'
+              ? 'text-[var(--annotation-power-ink,var(--color-fg-subtle))]'
+              : 'text-[var(--annotation-digit-ink,var(--color-accent-fg))]'
           }`}
           data-tier-annotation
           data-exponent={exponent}
@@ -52,7 +56,7 @@ export const TierAnnotations: React.FC<TierAnnotationsProps> = ({ rows, kind }) 
             </span>
           ) : (
             // In brackets (UI-13), real elements with no colour of their own: the brackets and the
-            // digit all take the row's gold. Each bracket is 2 px from the digit by a margin, not a
+            // digit all take the row's gold ink. Each bracket is 2 px from the digit by a margin, not a
             // space; nothing at all, brackets included, where the digit is missing
             digit !== null && (
               <span>
