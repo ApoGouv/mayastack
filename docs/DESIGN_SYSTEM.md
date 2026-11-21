@@ -55,21 +55,21 @@ Each token is available as a Tailwind colour (`bg-surface`, `text-fg`, `border-l
 - Use `line-strong` for any boundary that identifies a control. `line` is for decoration.
 - Disabled controls use `fg-disabled`. WCAG exempts inactive components from contrast requirements, so the disabled state must also be exposed through `disabled` or `aria-disabled`.
 
-**Viewer aids (since UI-13 and UI-10).** These screen-only elements use theme tokens, not the numeral's glyph colour:
+**Viewer aids (since UI-13 and UI-10).** These screen-only elements use theme tokens, or, for the tier annotation labels since the annotation-label contrast correction (PR #33), inks derived from them, not the numeral's glyph colour:
 
 | Element | Colour roles |
 |---|---|
 | Glyph key (under the stage) | Glyphs `accent-fg`, one colour for all three; labels `fg-muted`, on the card's `surface` |
-| Tier annotations, start gutter | Powers of 20 in `fg-subtle` |
-| Tier annotations, end gutter (Number mode) | Base-20 digits and their brackets in `accent-fg` |
+| Tier annotations, start gutter | Powers of 20 in the gutter's power ink: `fg-subtle` of the polarity that suits the gutter, adjusted where needed to reach 4.5:1 (section 5). Without a gutter colour, the theme's `fg-subtle` |
+| Tier annotations, end gutter (Number mode) | Base-20 digits and their brackets in the gutter's digit ink: `accent-fg` of the polarity that suits the gutter, adjusted where needed to reach 4.5:1 (section 5). Without a gutter colour, the theme's `accent-fg` |
 | Annotation gutters' background | The paper's colour as shown: the user's background composited over the theme's `canvas`, made opaque, so the gutters and the paper read as one sheet. `canvas` where no colour is given |
 
-The annotation labels are therefore drawn over a colour the user chooses, not over a theme surface (section 5).
+The annotation labels are therefore drawn over a colour the user chooses, not over a theme surface, and take their inks from that colour (section 5).
 
 **Material colours (UI-15; approved design, not implemented).** A material is the pair of the numeral's background and glyph colours, which belong to the exported artwork, not to the interface theme (section 11, exceptions 1 and 2):
 
 - **Opaque only:** preset and custom material colours are fully opaque, with no alpha or opacity control; translucent settings are not preserved. Colours stay saved in the existing JSON RGBA format under the existing keys, written with `a: 1`; the material model may use opaque RGB internally, converted at the persistence boundary, with no new storage format or migration.
-- **Pair-level fallback:** the background and glyph colours are one pair. A complete, valid, opaque saved pair is kept. If one colour is saved and the other is missing, or either saved colour is invalid or translucent, the complete Limestone pair is used, never a saved colour mixed with a default, and a non-blocking, user-visible notice says that the saved material was unsupported and Limestone has been selected. Users with no saved colours receive Limestone without a notice. The current application still falls back per colour; the exact rules are in [the roadmap](plans/ui-redesign-roadmap.md) (UI-15).
+- **Pair-level fallback:** the background and glyph colours are one pair. A complete, valid, opaque saved pair is kept. If one colour is saved and the other is missing, or either saved colour is invalid or translucent, the complete Limestone pair is used, never a saved colour mixed with a default, and a non-blocking, user-visible notice says that the saved material was unsupported and Limestone has been selected. After initialization, both saved colour entries are cleared, so the notice does not recur on later loads, provided the storage operations succeed. Its dismissal is not remembered: there is no persistent dismissal mechanism. Users with no saved colours receive Limestone without a notice. The current application still falls back per colour; the exact rules are in [the roadmap](plans/ui-redesign-roadmap.md) (UI-15).
 - **Theme-independent:** one catalogue serves both themes. Changing the theme never changes the selected material, its colours or their saved values.
 - **Presets:** Limestone (the default for users without saved colours), Dark Stela, Obsidian Basalt and Weathered Limestone; their colours and contrast are in section 5.
 - **Tiles:** each preset is a compact rectangular tile split diagonally from lower left to upper right, drawn with CSS: the upper-left triangle in the material's glyph colour, the lower-right triangle in its background colour, inside a visible border. The selected tile has an accent ring and a check indicator, so selection does not rely on colour alone. The Custom tile is a separate button (section 9).
@@ -102,9 +102,9 @@ Ratios for the main pairs, calculated from the values in `src/index.css` (light 
 
 `e2e/design-foundation.e2e.ts` re-checks a deliberate set of contrast-critical pairs from the browser's computed values in both themes. It also measures the colours as applied to the components ("design system on the components"): element contrast, the gold controls' borders, focus rings and the themed widgets. When a token changes, update the values in `src/index.css`, run that test, and update this table.
 
-**Tier annotation labels: contrast defect confirmed, correction planned.** The ratios above are between theme tokens. The annotation labels (`fg-subtle` and `accent-fg`, section 4) are drawn over the annotation gutters, whose background is the user's paper colour, not a theme surface, so the table does not cover them.
+**Tier annotation labels: contrast defect confirmed, then corrected (PR #33).** The ratios above are between theme tokens. The annotation labels (section 4) are drawn over the annotation gutters, whose background is the user's paper colour, not a theme surface, so the table does not cover them.
 
-Measured in the browser on 2026-11-20, as the check brought forward from UI-14 (see [the roadmap](plans/ui-redesign-roadmap.md), UI-14's entry):
+Measured in the browser on 2026-11-20, before the correction, as the check brought forward from UI-14 (see [the roadmap](plans/ui-redesign-roadmap.md), UI-14's entry), when the labels used the theme's `fg-subtle` and `accent-fg`:
 
 - **Method:** Chromium (Playwright) at 1280 × 800 on the production build. The labels' computed `color` was compared with their gutter's computed `background-color`. Five cases were cross-checked against painted pixels, which matched exactly.
 - **Threshold:** the labels are 12 px normal text (10 px at 25%), so it is 4.5:1.
@@ -121,9 +121,16 @@ Ratios are given as power / digit; values below 4.5:1 are in bold:
 | Black `#000000` | **3.49 / 3.26** | 7.56 / 12.10 |
 | Mid grey `#777777` | **1.34 / 1.44** | **1.61 / 2.58** |
 
-The defect exists today: the default white paper fails in the dark theme. It is not limited to combinations where the theme and the paper have opposite polarity, because Weathered Limestone also fails in the light theme. No single theme-token colour can pass on every paper.
+Before the correction, the default white paper failed in the dark theme. The defect was not limited to combinations where the theme and the paper have opposite polarity, because Weathered Limestone also failed in the light theme. No single theme-token colour can pass on every paper.
 
-A separate correction was approved on 2026-11-21. It derives the label colours from the gutter's shown colour, independently of the theme, so that both labels reach at least 4.5:1 on every opaque background. It is not part of UI-15. **It is not implemented yet: the label colours above are unchanged.** Not measured: other browsers, forced-colours mode, and translucent backgrounds.
+**The correction (approved on 2026-11-21, implemented and merged in PR #33, merge `eadc357`).** It is separate from UI-15. The label inks are derived from the gutter's shown, opaque colour (`getAnnotationLabelColors` in `src/utils/guideColors.ts`), so the same paper gives the same inks in either theme:
+
+- Each label starts from its preferred ink, the `fg-subtle` (powers) or `accent-fg` (digits) value of the polarity that suits the gutter, and keeps it where it already reaches 4.5:1.
+- Otherwise the ink is moved toward black or white by the least amount that reaches 4.5:1, then rounded to whole channels toward that extreme. Both labels reach at least 4.5:1 on every opaque gutter colour.
+- The gutters carry the inks as the `--annotation-power-ink` and `--annotation-digit-ink` custom properties. Without them, the labels keep the theme's tokens.
+- The inks never reach the numeral's SVG, so exports are unchanged. The tier guides and the renderer are unchanged too.
+
+Not measured: other browsers and forced-colours mode. With a translucent paper, the gutter's shown colour, and so the inks, depend on the theme's `canvas` behind it. UI-14's final pass re-checks the labels against the shipped presets in both themes.
 
 **Material contrast (UI-15; approved design, not implemented).** These rules cover the contrast between a material's background and glyph colours only, not the interface, and make no claim of whole-application WCAG conformance:
 
@@ -211,7 +218,7 @@ Applied to the existing components (UI-03):
 - **Draft state:** the dialog edits a draft. The applied viewer does not change while the draft is edited; Cancel discards every draft change, and Apply is the only action that updates the selected background and glyph pair, and only when the pair meets the custom minimum (section 5).
 - **Contents:** a labelled background colour picker and a labelled glyph colour picker (react-colorful, opaque only), a labelled hex input for exact entry, a live preview of the draft, the contrast ratio with its pass or fail explanation, and Apply and Cancel. Invalid hex input leaves the draft colour unchanged and shows a visible validation error; it is never silently coerced.
 - **Hex input:** the field keeps invalid text while the user edits, never strips or coerces characters into a different valid colour, and changes the draft colour only once a complete, valid hex value is entered. react-colorful's `HexColorInput` strips non-hex characters and resets invalid text on blur, so it must not be assumed suitable; the component is chosen in implementation (S5).
-- **Preview:** the existing renderer with the draft colours, at 100% scale, in a capped, scrollable area. It is not the export source (it does not receive the viewer's `exportRef`) and has no grid, even while the main viewer's Show Grid is on; how the renderer suppresses it (for example an optional grid-visibility prop) is defined in S4, and the preview never changes the main viewer's grid setting. The exported SVG's IDs and markup are unchanged, and no unique grid-pattern IDs are introduced.
+- **Preview:** the existing renderer with the draft colours, passed through optional background and glyph colour props on `MayanRenderer` that fall back to the context's values when absent, at a fixed 100% scale, in a capped, scrollable area. It is not the export source (it does not receive the viewer's `exportRef`). Its grid is always suppressed, even while the main viewer's Show Grid is on, so the page never holds a second grid pattern with the same ID; how the renderer suppresses it (for example an optional grid-visibility prop) is defined in S4, and the preview never changes the main viewer's grid setting. The exported SVG's IDs and markup and the export mechanism are unchanged, and no unique grid-pattern IDs are introduced.
 
 ## 10. Typography
 
