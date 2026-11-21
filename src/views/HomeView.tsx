@@ -22,7 +22,7 @@ import GlyphKey from '@components/GlyphKey';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { getNumeralSize, getTierCount, type NumeralLayout } from '@utils/tierGuides';
 import { getTierAnnotationRows } from '@utils/tierAnnotations';
-import { getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
+import { getAnnotationLabelColors, getGuideColors, VIEWER_BACKDROP } from '@utils/guideColors';
 import { rgbaToCss } from '@utils/colors';
 
 type DigitGroup = { label: string; digits: number[] };
@@ -113,6 +113,12 @@ export default function HomeView() {
     () => getGuideColors(backgroundColor, VIEWER_BACKDROP[resolvedTheme]),
     [backgroundColor, resolvedTheme]
   );
+  // The tier annotation labels' colours, for the gutters' colour (the paper's as shown), legible
+  // on it whatever the theme
+  const annotationInks = useMemo(() => {
+    const { power, digit } = getAnnotationLabelColors(guideColors.background);
+    return { power: rgbaToCss({ ...power, a: 1 }), digit: rgbaToCss({ ...digit, a: 1 }) };
+  }, [guideColors.background]);
   const digitGroups = useMemo(() => mayanData?.digitGroups.map((g) => g.digits) ?? [], [mayanData]);
   // The numeral's size in SVG units, shown at 1 CSS px per unit at 100% zoom
   const numeralSize = getNumeralSize(digitGroups, numeralLayout);
@@ -212,6 +218,8 @@ export default function HomeView() {
                   // shows it, opaque (a translucent background over the theme's canvas), which
                   // the guides' colours already follow, so the gutters and the paper are one sheet
                   annotationBackground={rgbaToCss({ ...guideColors.background, a: 1 })}
+                  // The annotation labels' colours on that background, at least 4.5:1
+                  annotationInks={annotationInks}
                   label={mayanData.label}
                   resetKey={mayanData.key}
                   scrollerRef={viewerScrollerRef}

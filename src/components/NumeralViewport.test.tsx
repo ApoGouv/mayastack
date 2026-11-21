@@ -2632,3 +2632,76 @@ describe('NumeralViewport: annotation gutters moving with the zoom animation (UI
     }
   });
 });
+
+/**
+ * The annotation labels' inks (the contrast correction after UI-11): the gutters carry the
+ * colours they are given as custom properties, which the labels inside inherit
+ * (TierAnnotations); without them, the labels keep the theme's tokens, their fallbacks.
+ */
+describe('NumeralViewport: annotation label inks', () => {
+  const INKS = { power: 'rgba(82, 76, 62, 1)', digit: 'rgba(93, 74, 0, 1)' };
+  const PAPER = 'rgba(199, 188, 159, 1)';
+
+  function renderWithInks(props: { annotationInks?: { power: string; digit: string }; annotationBackground?: string }) {
+    render(
+      <NumeralViewport
+        numeralWidth={350}
+        numeralHeight={160}
+        background={BACKGROUND}
+        label={LABEL}
+        annotationsStart={<span data-testid="start-label">20</span>}
+        annotationsEnd={<span data-testid="end-label">[7]</span>}
+        {...props}
+      >
+        <svg width={350} height={160} viewBox="0 0 350 160" data-testid="numeral" />
+      </NumeralViewport>
+    );
+    const viewer = screen.getByRole('group', { name: 'Numeral viewer' });
+    const gutters = [...viewer.querySelectorAll<HTMLElement>('[data-numeral-annotations]')];
+    return { viewer, gutters };
+  }
+
+  it('gives both gutters the inks as custom properties, beside their background', () => {
+    const { gutters } = renderWithInks({ annotationInks: INKS, annotationBackground: PAPER });
+    expect(gutters.map((g) => g.dataset.numeralAnnotations)).toEqual(['start', 'end']);
+    for (const gutter of gutters) {
+      expect(gutter.style.getPropertyValue('--annotation-power-ink')).toBe(INKS.power);
+      expect(gutter.style.getPropertyValue('--annotation-digit-ink')).toBe(INKS.digit);
+      expect(gutter.style.backgroundColor).toBe(PAPER);
+    }
+    // The labels are inside the gutters, so they inherit the properties
+    expect(gutters[0].contains(screen.getByTestId('start-label'))).toBe(true);
+    expect(gutters[1].contains(screen.getByTestId('end-label'))).toBe(true);
+  });
+
+  it('sets no ink properties without inks, so the labels keep the theme’s tokens', () => {
+    for (const props of [{}, { annotationBackground: PAPER }]) {
+      const { gutters } = renderWithInks(props);
+      for (const gutter of gutters) {
+        expect(gutter.style.getPropertyValue('--annotation-power-ink')).toBe('');
+        expect(gutter.style.getPropertyValue('--annotation-digit-ink')).toBe('');
+      }
+      cleanup();
+    }
+    // Neither colour nor inks: no inline style at all, the gutters' `canvas` as before
+    const { gutters } = renderWithInks({});
+    for (const gutter of gutters) expect(gutter.getAttribute('style')).toBeNull();
+  });
+
+  it('gives inks without a background, keeping the gutters’ `canvas`', () => {
+    const { gutters } = renderWithInks({ annotationInks: INKS });
+    for (const gutter of gutters) {
+      expect(gutter.style.backgroundColor).toBe('');
+      expect(gutter.className.split(' ')).toContain('bg-canvas');
+      expect(gutter.style.getPropertyValue('--annotation-power-ink')).toBe(INKS.power);
+    }
+  });
+
+  it('puts the inks on the gutters only: never on the paper or the numeral, so never in an export', () => {
+    const { viewer } = renderWithInks({ annotationInks: INKS, annotationBackground: PAPER });
+    const paper = viewer.querySelector<HTMLElement>('[data-numeral-paper]')!;
+    expect(paper.style.getPropertyValue('--annotation-power-ink')).toBe('');
+    expect(paper.style.getPropertyValue('--annotation-digit-ink')).toBe('');
+    expect(screen.getByTestId('numeral').outerHTML).not.toMatch(/annotation/);
+  });
+});

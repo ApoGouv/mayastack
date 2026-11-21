@@ -3994,3 +3994,170 @@ test.describe('paper side bleed under the annotation gutters (UI-13)', () => {
     expect(narrow.boxShadow).toBe(plain);
   });
 });
+
+/**
+ * The annotation labels' contrast (the correction after UI-11): the labels take inks chosen for
+ * their gutter's colour, the paper's as shown, at least 4.5:1 (SC 1.4.3, 12 px normal text) for
+ * the powers and the digits alike, whatever the theme. Measured as the browser renders them: each
+ * label's computed colour against its gutter's computed background.
+ */
+test.describe('annotation label contrast', () => {
+  // 19 × 20⁴ + 0 × 20³ + 19 × 20² + 1 × 20 + 0: 5 tiers, powers and digits, zero included
+  const FIVE_TIERS = '3047620';
+
+  // The representative papers: the current default, UI-15's four presets, and two custom colours
+  const PAPERS = [
+    ['White (the current default)', { r: 0xff, g: 0xff, b: 0xff }],
+    ['Limestone', { r: 0xfa, g: 0xf8, b: 0xf5 }],
+    ['Weathered Limestone', { r: 0xc7, g: 0xbc, b: 0x9f }],
+    ['Dark Stela', { r: 0x1d, g: 0x20, b: 0x26 }],
+    ['Obsidian Basalt', { r: 0x09, g: 0x0b, b: 0x0e }],
+    ['Black', { r: 0x00, g: 0x00, b: 0x00 }],
+    ['Mid grey', { r: 0x77, g: 0x77, b: 0x77 }],
+  ] as const;
+
+  // The labels' preferred inks (ANNOTATION_LABEL_INKS in src/utils/guideColors.ts): the light
+  // theme's fg-subtle and accent-fg over light papers, the dark theme's over dark ones
+  const PREFERRED_INKS = {
+    light: { 'fg-subtle': 'rgb(107, 98, 80)', 'accent-fg': 'rgb(115, 92, 0)' },
+    dark: { 'fg-subtle': 'rgb(165, 154, 132)', 'accent-fg': 'rgb(229, 193, 88)' },
+  } as const;
+
+  type Rgb = { r: number; g: number; b: number };
+  const parse = (css: string) => {
+    const [r, g, b, a = 1] = css.match(/[\d.]+/g)!.map(Number);
+    return { r, g, b, a };
+  };
+  /** WCAG 2.x contrast ratio of two opaque colours */
+  const contrast = (x: Rgb, y: Rgb) => {
+    const lum = ({ r, g, b }: Rgb) =>
+      [r, g, b]
+        .map((v) => v / 255)
+        .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+    const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  test('match the theme tokens the label inks start from, in both themes', async ({ page }) => {
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((theme) => localStorage.setItem('mayastack:theme', theme), theme);
+      await page.reload();
+      const tokens = await page.evaluate(() =>
+        Object.fromEntries(
+          ['fg-subtle', 'accent-fg'].map((token) => {
+            const probe = document.createElement('span');
+            probe.style.color = `var(--color-${token})`;
+            document.body.append(probe);
+            const colour = getComputedStyle(probe).color;
+            probe.remove();
+            return [token, colour];
+          })
+        )
+      );
+      expect(tokens, theme).toEqual(PREFERRED_INKS[theme]);
+    }
+  });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`reach 4.5:1 for powers and digits on every representative paper in the ${theme} theme`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const report: string[] = [];
+      for (const [name, paper] of PAPERS) {
+        await page.evaluate(
+          ({ theme, paper }) => {
+            localStorage.setItem('mayastack:theme', theme);
+            localStorage.setItem('mayastack:showTierAnnotations', 'true');
+            localStorage.setItem('mayastack:backgroundColor', JSON.stringify({ ...paper, a: 1 }));
+          },
+          { theme, paper }
+        );
+        await page.reload();
+        await showNumber(page, FIVE_TIERS);
+        await expect(page.locator('[data-numeral-annotations="start"] [data-tier-annotation]')).toHaveCount(5);
+        await expect(page.locator('[data-numeral-annotations="end"] [data-tier-annotation]')).toHaveCount(5);
+
+        const measured = await page.evaluate(() => {
+          const opacity = (el: Element | null) => {
+            let o = 1;
+            for (let e = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+            return o;
+          };
+          return (['start', 'end'] as const).map((side) => {
+            const gutter = document.querySelector<HTMLElement>(`[data-numeral-annotations="${side}"]`)!;
+            // Every visible piece of text: each row's label and, for digits, its brackets
+            const labels = [...gutter.querySelectorAll<HTMLElement>('[data-tier-annotation] span')];
+            // Each row (one digit annotation in the end gutter): its own colour and its brackets'
+            const rows = [...gutter.querySelectorAll<HTMLElement>('[data-tier-annotation]')].map((row) => ({
+              text: row.textContent,
+              colour: getComputedStyle(row).color,
+              brackets: [...row.querySelectorAll<HTMLElement>('[data-tier-annotation-bracket]')].map((b) => ({
+                text: b.textContent,
+                colour: getComputedStyle(b).color,
+              })),
+            }));
+            return {
+              side,
+              display: getComputedStyle(gutter).display,
+              background: getComputedStyle(gutter).backgroundColor,
+              colours: [...new Set(labels.map((el) => getComputedStyle(el).color))],
+              count: labels.length,
+              opacity: Math.min(...labels.map(opacity)),
+              rows,
+            };
+          });
+        });
+
+        // The digit annotations (Number mode, end gutter): five rows, each digit in exactly two
+        // brackets, both rendered in their digit annotation's own computed colour
+        const digitRows = measured.find((m) => m.side === 'end')!.rows;
+        expect(digitRows.map((row) => row.text), `${theme}, ${name}`).toEqual(['[0]', '[1]', '[19]', '[0]', '[19]']);
+        for (const row of digitRows) {
+          const label = `${theme}, ${name}, digit ${row.text}`;
+          expect(row.brackets.map((b) => b.text), label).toEqual(['[', ']']);
+          for (const bracket of row.brackets) expect(bracket.colour, label).toBe(row.colour);
+        }
+
+        for (const { side, display, background, colours, count, opacity } of measured) {
+          const label = `${theme}, ${name}, ${side}`;
+          expect(display, label).toBe('flex');
+          expect(count, label).toBeGreaterThan(0);
+          const bg = parse(background);
+          // The gutter is opaque and is the paper's colour, which the labels are drawn on
+          expect(bg, label).toEqual({ ...paper, a: 1 });
+          expect(opacity, label).toBe(1);
+          // One colour per gutter, the same for every row, digits and their brackets alike
+          expect(colours, label).toHaveLength(1);
+          const fg = parse(colours[0]);
+          expect(fg.a, label).toBe(1);
+          const ratio = contrast(fg, bg);
+          report.push(`${label}: ${colours[0]} on ${background} = ${ratio.toFixed(2)}`);
+          expect(ratio, label).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      test.info().annotations.push({ type: 'contrast', description: report.join('\n') });
+    });
+  }
+
+  test('use the same inks for a paper in both themes: the paper decides, not the theme', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const inks: Record<string, string[]> = {};
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((theme) => {
+        localStorage.setItem('mayastack:theme', theme);
+        localStorage.setItem('mayastack:showTierAnnotations', 'true');
+        localStorage.removeItem('mayastack:backgroundColor');
+      }, theme);
+      await page.reload();
+      await showNumber(page, FIVE_TIERS);
+      inks[theme] = await page.evaluate(() =>
+        ['start', 'end'].map((side) =>
+          getComputedStyle(document.querySelector(`[data-numeral-annotations="${side}"] [data-tier-annotation]`)!).color
+        )
+      );
+    }
+    // The default white paper takes the light theme's tokens in the dark theme too
+    expect(inks.light).toEqual([PREFERRED_INKS.light['fg-subtle'], PREFERRED_INKS.light['accent-fg']]);
+    expect(inks.dark).toEqual(inks.light);
+  });
+});

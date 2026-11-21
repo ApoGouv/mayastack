@@ -75,6 +75,15 @@ const linear = (channel: number) => {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 };
 
+/**
+ * Which inks suit a background of the given relative luminance: dark ones where black contrasts
+ * with it at least as much as white does, light ones elsewhere. Black's and white's contrasts with
+ * any colour multiply to 21, so the extreme of the chosen tone always reaches at least √21 ≈ 4.58.
+ */
+export function inkTone(luminance: number): 'dark' | 'light' {
+  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? 'dark' : 'light';
+}
+
 /** The relative luminance of an opaque colour (WCAG 2.x), from 0 for black to 1 for white */
 export function relativeLuminance(color: RgbColor): number {
   assertRgb(color, 'colour');
@@ -141,9 +150,8 @@ export interface GuideColors {
  */
 export function getGuideColors(background: RgbaColor, backdrop: RgbColor): GuideColors {
   const shown = compositeOver(background, backdrop);
-  const luminance = relativeLuminance(shown);
   // Dark inks where black contrasts with the background at least as much as white does
-  const tone = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? 'dark' : 'light';
+  const tone = inkTone(relativeLuminance(shown));
 
   const cardInk = PLACE_TIER_CARD_INKS[tone];
   const cardAlpha = lowestAlpha(cardInk, shown, [shown], PLACE_TIER_CARD_CONTRAST);
@@ -164,4 +172,85 @@ export function getGuideColors(background: RgbaColor, backdrop: RgbColor): Guide
     cardHover: { ...cardInk, a: hoverAlpha },
     cardHoverShadow: PLACE_TIER_CARD_HOVER_SHADOWS[tone],
   };
+}
+
+/**
+ * The tier annotation labels' least contrast with their gutter: WCAG 2.x SC 1.4.3 for normal text
+ * (the labels are 12 px, 10 px at 25% zoom, at normal weight)
+ */
+export const ANNOTATION_LABEL_CONTRAST = 4.5;
+
+/**
+ * The labels' preferred inks, the design system's text tokens of the polarity that suits the
+ * paper (`src/index.css`): over a light paper, the light theme's `fg-subtle` (powers) and
+ * `accent-fg` (digits); over a dark paper, the dark theme's. A browser test checks these values.
+ */
+export const ANNOTATION_LABEL_INKS = {
+  dark: { power: { r: 0x6b, g: 0x62, b: 0x50 }, digit: { r: 0x73, g: 0x5c, b: 0x00 } },
+  light: { power: { r: 0xa5, g: 0x9a, b: 0x84 }, digit: { r: 0xe5, g: 0xc1, b: 0x58 } },
+} as const;
+
+/** The tier annotation labels' colours for one gutter colour */
+export interface AnnotationLabelColors {
+  /** Which inks were used: dark ones over a light gutter, light ones over a dark one */
+  tone: 'dark' | 'light';
+  /** The powers of 20, in the start gutter */
+  power: RgbColor;
+  /** The base-20 digits and their brackets, in the end gutter */
+  digit: RgbColor;
+}
+
+const BLACK: RgbColor = { r: 0, g: 0, b: 0 };
+const WHITE: RgbColor = { r: 255, g: 255, b: 255 };
+
+/**
+ * The tier annotation labels' colours for the colour their gutters show, independently of the
+ * theme: the gutters take the paper's colour, which the user chooses, so the theme's text colours
+ * alone cannot be legible on every paper.
+ *
+ * Each label is chosen on its own, so the powers stay neutral and the digits gold where the
+ * contrast allows. A label keeps its preferred ink (ANNOTATION_LABEL_INKS) where that already
+ * reaches ANNOTATION_LABEL_CONTRAST on the tone's side of the gutter (darker than a light gutter,
+ * lighter than a dark one). Otherwise it is mixed towards black (dark tone) or white (light tone)
+ * by the least amount that reaches it, then rounded to whole channels towards that extreme, and
+ * moved further by whole steps if rounding ever leaves it short. The extreme itself always reaches
+ * at least √21 ≈ 4.58 (inkTone), so every opaque gutter gets two labels of at least 4.5:1. The
+ * same gutter colour always gives the same colours.
+ *
+ * @param shown - The opaque colour the gutters show: getGuideColors' `background`
+ * @throws RangeError for a channel outside 0 to 255
+ */
+export function getAnnotationLabelColors(shown: RgbColor): AnnotationLabelColors {
+  const luminance = relativeLuminance(shown);
+  const tone = inkTone(luminance);
+  const extreme = tone === 'dark' ? BLACK : WHITE;
+
+  // At least the target, on the tone's side of the gutter
+  const reaches = (color: RgbColor) =>
+    (tone === 'dark' ? relativeLuminance(color) <= luminance : relativeLuminance(color) >= luminance) &&
+    contrastRatio(color, shown) >= ANNOTATION_LABEL_CONTRAST;
+
+  const pick = (ink: RgbColor): RgbColor => {
+    if (reaches(ink)) return { ...ink };
+    // Mixing towards the extreme moves every channel, and so the luminance, steadily towards it:
+    // whether the mix reaches the target changes once, so a bisection finds the least amount
+    let [low, high] = [0, 1];
+    for (let i = 0; i < 30; i++) {
+      const middle = (low + high) / 2;
+      if (reaches(compositeOver({ ...extreme, a: middle }, ink))) high = middle;
+      else low = middle;
+    }
+    const mixed = compositeOver({ ...extreme, a: high }, ink);
+    // Whole channels, rounded towards the extreme, so the rendered colour never falls short
+    const round = tone === 'dark' ? Math.floor : Math.ceil;
+    const step = tone === 'dark' ? -1 : 1;
+    let color = { r: round(mixed.r), g: round(mixed.g), b: round(mixed.b) };
+    while (!reaches(color)) {
+      const move = (c: number) => Math.min(255, Math.max(0, c + step));
+      color = { r: move(color.r), g: move(color.g), b: move(color.b) };
+    }
+    return color;
+  };
+
+  return { tone, power: pick(ANNOTATION_LABEL_INKS[tone].power), digit: pick(ANNOTATION_LABEL_INKS[tone].digit) };
 }

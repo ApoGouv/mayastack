@@ -308,6 +308,19 @@ interface NumeralViewportProps {
    * `background`). Without it, the gutters are `canvas`.
    */
   annotationBackground?: string;
+  /**
+   * The annotation labels' colours on that background, as CSS colours: the powers' and the
+   * digits' (getAnnotationLabelColors). Both gutters carry them as the `--annotation-power-ink`
+   * and `--annotation-digit-ink` custom properties, which the labels inside take; without them,
+   * the labels keep the theme's text tokens.
+   */
+  annotationInks?: AnnotationInks;
+}
+
+/** The annotation labels' colours, as CSS colours (see `annotationInks`) */
+export interface AnnotationInks {
+  power: string;
+  digit: string;
 }
 
 /**
@@ -362,7 +375,9 @@ const gutterColour = (annotationBackground: string | undefined) => annotationBac
  * - Opaque, above the numeral (`z-10`), so the numeral scrolls under it: the paper's colour as
  *   shown (`annotationBackground`, inline, the same in both gutters), or `canvas` without it. It
  *   is drawn moving with the paper while a zoom animates (below), so it never changes colour or
- *   clears for a zoom. It is hidden
+ *   clears for a zoom. It carries the labels' inks for that colour (`annotationInks`) as the
+ *   `--annotation-power-ink` and `--annotation-digit-ink` custom properties, inherited by the
+ *   labels (TierAnnotations); without them, the labels keep the theme's tokens. It is hidden
  *   (`display: none`) below a stage width of 31rem (496 px at the default font size), as a
  *   container query against the scroller, which is a container while there are gutters. The
  *   width queried is the scroller's content box: its client width, without its 1 px borders and
@@ -396,29 +411,37 @@ const AnnotationGutter: React.FC<{
   compact: boolean;
   /** The paper's colour as shown, opaque (see `annotationBackground`), or none for `canvas` */
   background?: string;
+  /** The labels' colours on that background (see `annotationInks`), or none for the theme's */
+  inks?: AnnotationInks;
   children?: React.ReactNode;
-}> = ({ side, height, compact, background, children }) => (
-  <div
-    aria-hidden="true"
-    data-numeral-annotations={side}
-    className={`hidden @min-[31rem]:flex sticky z-10 w-12 shrink-0 bg-canvas pointer-events-none select-none ${
-      side === 'start' ? 'left-0' : 'right-0'
-    }`}
-    style={background ? { backgroundColor: background } : undefined}
-  >
-    <div className="m-auto w-full py-3">
-      <div
-        data-numeral-annotations-box
-        className={`relative w-full in-data-[zooming]:invisible in-data-[zooming]:opacity-0 motion-safe:transition-opacity motion-safe:duration-150${
-          compact ? ' [&_[data-tier-annotation]]:text-[10px]' : ''
-        }`}
-        style={{ height: `${height}px` }}
-      >
-        {children}
+}> = ({ side, height, compact, background, inks, children }) => {
+  const style = {
+    ...(background ? { backgroundColor: background } : {}),
+    ...(inks ? { '--annotation-power-ink': inks.power, '--annotation-digit-ink': inks.digit } : {}),
+  } as React.CSSProperties;
+  return (
+    <div
+      aria-hidden="true"
+      data-numeral-annotations={side}
+      className={`hidden @min-[31rem]:flex sticky z-10 w-12 shrink-0 bg-canvas pointer-events-none select-none ${
+        side === 'start' ? 'left-0' : 'right-0'
+      }`}
+      style={background || inks ? style : undefined}
+    >
+      <div className="m-auto w-full py-3">
+        <div
+          data-numeral-annotations-box
+          className={`relative w-full in-data-[zooming]:invisible in-data-[zooming]:opacity-0 motion-safe:transition-opacity motion-safe:duration-150${
+            compact ? ' [&_[data-tier-annotation]]:text-[10px]' : ''
+          }`}
+          style={{ height: `${height}px` }}
+        >
+          {children}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 /**
  * A bounded, natively scrolling viewport for a numeral.
@@ -466,6 +489,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
   annotationsEnd,
   numeralHeight,
   annotationBackground,
+  annotationInks,
 }) => {
   const ownScrollerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = givenScrollerRef ?? ownScrollerRef;
@@ -773,6 +797,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
                 height={gutterHeight}
                 compact={compactAnnotations}
                 background={annotationBackground}
+                inks={annotationInks}
               >
                 {annotationsStart}
               </AnnotationGutter>
@@ -821,6 +846,7 @@ const NumeralViewport: React.FC<NumeralViewportProps> = ({
                 height={gutterHeight}
                 compact={compactAnnotations}
                 background={annotationBackground}
+                inks={annotationInks}
               >
                 {annotationsEnd}
               </AnnotationGutter>
